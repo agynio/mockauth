@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ClientType {
+  PUBLIC
+  CONFIDENTIAL
+}
+
+enum RedirectUriType {
+  EXACT
+  HOST_WILDCARD
+  PATH_SUFFIX
+}
+
+enum KeyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TokenEndpointAuthMethod {
+  client_secret_basic
+  client_secret_post
+  none
+}
+
+model Tenant {
+  id                String              @id @default(cuid())
+  slug              String              @unique
+  name              String
+  status            TenantStatus        @default(ACTIVE)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  memberships       TenantMembership[]
+  clients           Client[]
+  keys              TenantKey[]
+  mockUsers         MockUser[]
+  authorizationCode AuthorizationCode[]
+  accessTokens      AccessToken[]
+  mockSessions      MockSession[]
+}
+
+model AdminUser {
+  id          String            @id @default(cuid())
+  logtoSub    String?           @unique
+  email       String?           @unique
+  name        String?
+  image       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  memberships TenantMembership[]
+  accounts    Account[]
+  sessions    Session[]
+  @@map("User")
+}
+
+model TenantMembership {
+  id         String       @id @default(cuid())
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId   String
+  adminUser  AdminUser    @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUserId String
+  role       MembershipRole @default(MEMBER)
+  createdAt  DateTime     @default(now())
+  @@unique([tenantId, adminUserId])
+}
+
+model Client {
+  id                       String                   @id @default(cuid())
+  tenant                   Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId                 String
+  name                     String
+  clientId                 String
+  clientSecretHash         String?
+  clientType               ClientType               @default(CONFIDENTIAL)
+  allowedScopes            String[]                 @default(["openid", "profile", "email"])
+  allowedGrantTypes        String[]                 @default(["authorization_code"])
+  allowedResponseTypes     String[]                 @default(["code"])
+  pkceRequired             Boolean                  @default(true)
+  tokenEndpointAuthMethod  TokenEndpointAuthMethod  @default(client_secret_basic)
+  redirectUris             RedirectUri[]
+  authorizationCodes       AuthorizationCode[]
+  accessTokens             AccessToken[]
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  @@unique([tenantId, clientId])
+}
+
+model RedirectUri {
+  id        String          @id @default(cuid())
+  client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String
+  uri       String
+  type      RedirectUriType @default(EXACT)
+  enabled   Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  @@unique([clientId, uri])
+}
+
+model TenantKey {
+  id                   String     @id @default(cuid())
+  tenant               Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId             String
+  kid                  String
+  kty                  String
+  alg                  String
+  use                  String     @default("sig")
+  status               KeyStatus  @default(ACTIVE)
+  publicJwk            Json
+  privateJwkEncrypted  String
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  @@unique([tenantId, kid])
+  @@index([tenantId, status])
+}
+
+model MockUser {
+  id            String            @id @default(cuid())
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId      String
+  username      String
+  displayName   String?
+  email         String?
+  claims        Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  sessions      MockSession[]
+  codes         AuthorizationCode[]
+  accessTokens  AccessToken[]
+  @@unique([tenantId, username])
+}
+
+model MockSession {
+  id               String   @id @default(cuid())
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId         String
+  user             MockUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  sessionTokenHash String   @unique
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+}
+
+model AuthorizationCode {
+  id                 String      @id @default(cuid())
+  tenant             Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId           String
+  client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId           String
+  user               MockUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+  codeHash           String      @unique
+  redirectUri        String
+  scope              String
+  nonce              String?
+  state              String?
+  codeChallenge      String
+  codeChallengeMethod String     @default("S256")
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime    @default(now())
+  @@index([tenantId, clientId])
+}
+
+model AccessToken {
+  id         String   @id @default(cuid())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId   String
+  user       MockUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  jti        String   @unique
+  scope      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model Account {
+  id                String    @id @default(cuid())
+  user              AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?   @db.Text
+  access_token      String?   @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?   @db.Text
+  session_state     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  sessionToken String    @unique
+  user         AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  expires      DateTime
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String    @unique
+  expires    DateTime
+  createdAt  DateTime  @default(now())
+  @@unique([identifier, token])
+}
