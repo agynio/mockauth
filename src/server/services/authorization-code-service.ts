@@ -1,6 +1,6 @@
 import { addMinutes } from "date-fns";
 
-import type { Prisma } from "@/generated/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { generateOpaqueToken, hashOpaqueToken } from "@/server/crypto/opaque-token";
 import { DomainError } from "@/server/errors";

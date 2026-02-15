@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
 import { rotateKey } from "@/server/services/key-service";

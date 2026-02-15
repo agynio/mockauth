@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
-import { Prisma } from "@/generated/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { CreateClientForm, CreateMockUserForm, CreateTenantForm, RotateKeyForm, AddRedirectForm, SetActiveTenantButton } from "@/app/admin/_components/forms";
 import { authOptions } from "@/server/auth/options";
 import { prisma } from "@/server/db/client";

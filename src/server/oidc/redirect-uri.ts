@@ -1,4 +1,4 @@
-import { RedirectUriType } from "@/generated/prisma";
+import { RedirectUriType } from "@/generated/prisma/client";
 import { DomainError } from "@/server/errors";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);

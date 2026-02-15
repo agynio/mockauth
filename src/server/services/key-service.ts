@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 
-import { KeyStatus, Prisma } from "@/generated/prisma";
+import { KeyStatus, Prisma } from "@/generated/prisma/client";
 import { exportJWK, generateKeyPair, importJWK, type JWK } from "jose";
 
 import { prisma } from "@/server/db/client";

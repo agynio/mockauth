@@ -1,4 +1,4 @@
-import type { MockUser } from "@/generated/prisma";
+import type { MockUser } from "@/generated/prisma/client";
 
 export const claimsForScopes = (user: MockUser, scopes: string[]) => {
   const claims: Record<string, unknown> = {};

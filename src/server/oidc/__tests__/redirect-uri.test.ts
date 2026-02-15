@@ -1,4 +1,4 @@
-import { RedirectUriType } from "@/generated/prisma";
+import { RedirectUriType } from "@/generated/prisma/client";
 import { classifyRedirect, resolveRedirectUri } from "@/server/oidc/redirect-uri";
 
 describe("redirect uri handling", () => {
