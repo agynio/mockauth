@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "noa/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mockauth
+          POSTGRES_PASSWORD: mockauth
+          POSTGRES_DB: mockauth
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mockauth" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres-test:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mockauth
+          POSTGRES_PASSWORD: mockauth
+          POSTGRES_DB: mockauth_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U mockauth" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://mockauth:mockauth@localhost:5432/mockauth
+      TEST_DATABASE_URL: postgresql://mockauth:mockauth@localhost:5433/mockauth_test
+      NEXTAUTH_URL: http://127.0.0.1:3000
+      NEXTAUTH_SECRET: 0123456789abcdef0123456789abcdef
+      LOGTO_ISSUER: https://logto.dev/oidc
+      LOGTO_CLIENT_ID: ci-logto
+      LOGTO_CLIENT_SECRET: ci-logto-secret
+      MOCKAUTH_KEY_ENCRYPTION_SECRET: abcdefghijklmnopqrstuvwxyz123456
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.0
+          cache: pnpm
+      - name: Copy env template
+        run: cp .env.example .env
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prisma generate
+        run: pnpm prisma:generate
+      - name: Apply migrations
+        run: pnpm prisma migrate deploy
+      - name: Seed data
+        run: pnpm prisma:seed
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit & integration tests
+        run: pnpm test
+      - name: Playwright E2E
+        run: pnpm test:e2e
+      - name: Build
+        run: pnpm build
