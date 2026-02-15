@@ -34,11 +34,11 @@ jobs:
       DATABASE_URL: postgresql://mockauth:mockauth@localhost:5432/mockauth
       TEST_DATABASE_URL: postgresql://mockauth:mockauth@localhost:5433/mockauth_test
       NEXTAUTH_URL: http://127.0.0.1:3000
-      NEXTAUTH_SECRET: ci-secret-change-me
+      NEXTAUTH_SECRET: 0123456789abcdef0123456789abcdef
       LOGTO_ISSUER: https://logto.dev/oidc
       LOGTO_CLIENT_ID: ci-logto
       LOGTO_CLIENT_SECRET: ci-logto-secret
-      MOCKAUTH_KEY_ENCRYPTION_SECRET: ci-encryption-secret-32chars
+      MOCKAUTH_KEY_ENCRYPTION_SECRET: abcdefghijklmnopqrstuvwxyz123456
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
