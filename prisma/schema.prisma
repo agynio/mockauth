@@ -31,7 +31,8 @@ enum RedirectUriType {
 
 enum KeyStatus {
   ACTIVE
-  INACTIVE
+  ROTATED
+  REVOKED
 }
 
 enum TokenEndpointAuthMethod {

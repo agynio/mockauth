@@ -49,13 +49,14 @@ export async function POST(request: NextRequest, context: TenantRouteContext) {
     const fallback = new URL(`/t/${tenant.slug}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
     const response = NextResponse.redirect(redirectUrl, 303);
+    const isSecure = currentUrl.protocol === "https:";
     response.cookies.set({
       name: MOCK_SESSION_COOKIE,
       value: token,
       path: `/t/${tenant.slug}`,
       httpOnly: true,
       sameSite: "lax",
-      secure: request.nextUrl.protocol === "https:",
+      secure: isSecure,
       maxAge: 60 * 60 * 12,
     });
     return response;

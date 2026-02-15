@@ -29,7 +29,17 @@ export const ensureActiveKey = async (tenantId: string) => {
   return rotateKey(tenantId);
 };
 
-export const rotateKey = async (tenantId: string) => {
+const runWithTransaction = async <T>(
+  tx: Prisma.TransactionClient | undefined,
+  operation: (client: Prisma.TransactionClient) => Promise<T>,
+) => {
+  if (tx) {
+    return operation(tx);
+  }
+  return prisma.$transaction(operation);
+};
+
+export const rotateKey = async (tenantId: string, tx?: Prisma.TransactionClient) => {
   const { publicKey, privateKey } = await generateKeyPair("RS256", { extractable: true });
   const [publicJwk, privateJwk] = await Promise.all([
     exportJWK(publicKey),
@@ -44,13 +54,13 @@ export const rotateKey = async (tenantId: string) => {
   privateJwk.use = "sig";
   privateJwk.alg = "RS256";
 
-  return prisma.$transaction(async (tx) => {
-    await tx.tenantKey.updateMany({
+  return runWithTransaction(tx, async (client) => {
+    await client.tenantKey.updateMany({
       where: { tenantId, status: KeyStatus.ACTIVE },
-      data: { status: KeyStatus.INACTIVE },
+      data: { status: KeyStatus.ROTATED },
     });
 
-    return tx.tenantKey.create({
+    return client.tenantKey.create({
       data: {
         tenantId,
         kid,
@@ -67,7 +77,7 @@ export const rotateKey = async (tenantId: string) => {
 
 export const getJwks = async (tenantId: string) => {
   const keys = await prisma.tenantKey.findMany({
-    where: { tenantId, status: KeyStatus.ACTIVE },
+    where: { tenantId, status: { in: [KeyStatus.ACTIVE, KeyStatus.ROTATED] } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -76,7 +86,7 @@ export const getJwks = async (tenantId: string) => {
 
 export const getPublicJwkByKid = async (tenantId: string, kid: string) => {
   const record = await prisma.tenantKey.findFirst({
-    where: { tenantId, kid, status: KeyStatus.ACTIVE },
+    where: { tenantId, kid, status: { in: [KeyStatus.ACTIVE, KeyStatus.ROTATED] } },
   });
 
   if (!record) {

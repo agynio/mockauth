@@ -25,14 +25,19 @@ const normalizeUrl = (url: URL) => {
   return url;
 };
 
+const normalizeHostWildcard = (value: string) => {
+  const match = HOST_WILDCARD_REGEX.exec(value);
+  if (!match || !match[1]) {
+    throw new DomainError("Invalid host wildcard redirect", { code: "invalid_redirect_uri" });
+  }
+
+  const path = match.groups?.path ?? "/";
+  return `https://*.${match[1].toLowerCase()}${path}`;
+};
+
 export const classifyRedirect = (value: string): { type: RedirectUriType; normalized: string } => {
   if (value.startsWith("https://*.")) {
-    const match = HOST_WILDCARD_REGEX.exec(value);
-    if (!match) {
-      throw new DomainError("Invalid host wildcard redirect", { code: "invalid_redirect_uri" });
-    }
-
-    return { type: RedirectUriType.HOST_WILDCARD, normalized: value.toLowerCase() };
+    return { type: RedirectUriType.HOST_WILDCARD, normalized: normalizeHostWildcard(value) };
   }
 
   if (value.endsWith("/*")) {

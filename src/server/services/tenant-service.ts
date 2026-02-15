@@ -49,7 +49,7 @@ export const createTenant = async (adminUserId: string, data: { slug: string; na
         role: "OWNER",
       },
     });
-    await rotateKey(tenant.id);
+    await rotateKey(tenant.id, tx);
     return tenant;
   });
 };
