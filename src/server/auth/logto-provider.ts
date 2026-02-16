@@ -22,6 +22,10 @@ export default function LogtoProvider<P extends LogtoProfile>(
     name: "Logto",
     type: "oauth",
     wellKnown: `${issuerUrl}/.well-known/openid-configuration`,
+    client: {
+      token_endpoint_auth_method: "client_secret_post",
+      id_token_signed_response_alg: "ES384",
+    },
     authorization: {
       params: {
         scope: scope ?? "openid profile email",

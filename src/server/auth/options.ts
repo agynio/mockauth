@@ -15,6 +15,9 @@ export const authOptions: NextAuthOptions = {
       scope: "openid profile email",
     }),
   ],
+  pages: {
+    signIn: "/admin/sign-in",
+  },
   session: {
     strategy: "database",
   },

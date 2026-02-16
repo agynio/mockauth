@@ -19,7 +19,7 @@ type DetailedTenant = Prisma.TenantGetPayload<{ include: typeof tenantDetailIncl
 export default async function AdminPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    redirect("/api/auth/signin");
+    redirect("/admin/sign-in");
   }
 
   const memberships = await getTenantMemberships(session.user.id);

@@ -10,4 +10,19 @@
    `curl https://<tunnel>/t/qa/oidc/.well-known/openid-configuration`.
 5. Share the URL in Issue #3 (or the relevant task) and restart `cloudflared` whenever you need a fresh link.
 
+### NextAuth base URL & tunnels
+
+- Leave `NEXTAUTH_URL` unset while tunneling so NextAuth derives callback URLs from `X-Forwarded-Proto/Host`.
+- If you must pin it, set `NEXTAUTH_URL=https://<tunnel>` before starting `pnpm dev`, then restart both `pnpm dev` and
+  `cloudflared` to pick up the change.
+
+### Running Logto admin E2E locally
+
+- Provide the shared credentials via `LOGTO_E2E_USERNAME` and `LOGTO_E2E_PASSWORD` when invoking `pnpm test:e2e` so the
+  new admin login test can complete the Logto form.
+- Example:
+  ```bash
+  LOGTO_E2E_USERNAME=vitaliitest LOGTO_E2E_PASSWORD=b2w6etXc pnpm test:e2e
+  ```
+
 Quick tunnels are best-effort and short-lived; do not treat them as production-ready endpoints.

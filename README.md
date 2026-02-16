@@ -61,6 +61,9 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
   local-only per `.gitignore`).
 - Need to expose your dev server externally? Follow [`docs/cloudflared.md`](docs/cloudflared.md) for the cloudflared
   quick-tunnel workflow.
+- Leave `NEXTAUTH_URL` unset when working through cloudflared so NextAuth derives the callback origin from the tunneled
+  request headers (the default `.env.*` files already enable `AUTH_TRUST_HOST=true`). If you do need an explicit base
+  URL, set it to the current `https://*.trycloudflare.com` value before restarting `pnpm dev` and `cloudflared`.
 
 ## Admin Console
 
