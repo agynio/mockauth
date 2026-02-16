@@ -59,6 +59,8 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
   client ID/secret so NextAuth can talk to the Logto sandbox out of the box.
 - If you create your own Logto tenant, update the `LOGTO_*` env vars (and never commit proprietary secrets; `.env` stays
   local-only per `.gitignore`).
+- Need to expose your dev server externally? Follow [`docs/cloudflared.md`](docs/cloudflared.md) for the cloudflared
+  quick-tunnel workflow.
 
 ## Admin Console
 
