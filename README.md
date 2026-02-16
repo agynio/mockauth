@@ -27,8 +27,9 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
    ```
    (Alternatively use `docker-compose.dev.yml`.)
 
-2. Copy `.env.example` → `.env` and update secrets as needed. For automated tests we use `.env.test` (already checked in)
-   which targets the `mockauth_db-test` database.
+2. Copy `.env.example` → `.env` and update secrets as needed. For local dev you can also use the provided
+   `.env.development`, which is pre-wired to our shared Logto sandbox. Automated tests read from `.env.test`
+   (already checked in) and point at the `mockauth_db-test` database.
 
 3. Install dependencies and run the initial migration + seed:
    ```bash
@@ -49,6 +50,15 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
 | `pnpm test:e2e:dev` | Same as above but keeps a dev server running via `start-server-and-test`. |
 | `pnpm prisma:migrate` | `prisma migrate dev` for the dev database. |
 | `pnpm prisma:seed` | Seeds tenants/clients/mock users for manual testing. |
+
+## Logto dev/test configuration
+
+- `tests/fixtures/logto.dev.config.ts` contains the Logto dev tenant details provided by Rowan. These credentials are for
+  **local development and automated testing only**—never deploy them to production.
+- `.env.development` and `.env.test` already set `LOGTO_ISSUER=https://hdjvaa.logto.app/oidc` along with the matching
+  client ID/secret so NextAuth can talk to the Logto sandbox out of the box.
+- If you create your own Logto tenant, update the `LOGTO_*` env vars (and never commit proprietary secrets; `.env` stays
+  local-only per `.gitignore`).
 
 ## Admin Console
 
