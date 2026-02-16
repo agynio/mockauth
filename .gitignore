@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/logs
+/test-results
 
 # next.js
 /.next/
@@ -34,6 +36,7 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.test
+!.env.development
 
 # vercel
 .vercel
