@@ -15,13 +15,19 @@ export const resolveUrl = (request: RequestWithNextUrl) => {
   const url = cloneUrl(request);
   const headers = request.headers;
   const forwardedProto = headers.get("x-forwarded-proto");
-  const forwardedHost = headers.get("x-forwarded-host") ?? headers.get("host");
+  const forwardedHostHeader = headers.get("x-forwarded-host") ?? headers.get("host");
 
   if (forwardedProto) {
     url.protocol = ensureProtocol(forwardedProto);
   }
-  if (forwardedHost) {
-    url.host = forwardedHost;
+  if (forwardedHostHeader) {
+    const [rawHost] = forwardedHostHeader.split(",");
+    const host = rawHost.trim();
+    url.host = host;
+    const hasExplicitPort = host.includes(":") && !host.endsWith("]");
+    if (!hasExplicitPort) {
+      url.port = "";
+    }
   }
 
   return url;
