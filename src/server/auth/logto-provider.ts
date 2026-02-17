@@ -15,7 +15,7 @@ export interface LogtoProviderOptions<P extends LogtoProfile> extends OAuthUserC
 export default function LogtoProvider<P extends LogtoProfile>(
   options: LogtoProviderOptions<P>,
 ): OAuthConfig<P> {
-  const { issuer, scope, ...rest } = options;
+  const { issuer, scope, client, ...rest } = options;
   const issuerUrl = issuer.replace(/\/$/, "");
   return {
     id: "logto",
@@ -29,6 +29,11 @@ export default function LogtoProvider<P extends LogtoProfile>(
     },
     idToken: true,
     checks: ["pkce", "state"],
+    client: {
+      token_endpoint_auth_method: "client_secret_basic",
+      id_token_signed_response_alg: "ES384",
+      ...client,
+    },
     profile(profile: LogtoProfile) {
       return {
         id: profile.sub,
