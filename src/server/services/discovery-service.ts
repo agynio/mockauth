@@ -2,8 +2,8 @@ import { issuerForTenant } from "@/server/oidc/issuer";
 
 const SUPPORTED_SCOPES = ["openid", "profile", "email"];
 
-export const buildDiscoveryDocument = (origin: string, tenantSlug: string) => {
-  const issuer = issuerForTenant(origin, tenantSlug);
+export const buildDiscoveryDocument = (origin: string, tenantId: string) => {
+  const issuer = issuerForTenant(origin, tenantId);
   return {
     issuer,
     authorization_endpoint: `${issuer}/authorize`,

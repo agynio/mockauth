@@ -9,6 +9,11 @@ const envSchema = z.object({
   LOGTO_CLIENT_ID: z.string().min(1),
   LOGTO_CLIENT_SECRET: z.string().min(1),
   MOCKAUTH_KEY_ENCRYPTION_SECRET: z.string().min(32, "Provide a strong encryption secret for tenant keys"),
+  ENABLE_TEST_ROUTES: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export const env = envSchema.parse({
@@ -20,6 +25,7 @@ export const env = envSchema.parse({
   LOGTO_CLIENT_ID: process.env.LOGTO_CLIENT_ID,
   LOGTO_CLIENT_SECRET: process.env.LOGTO_CLIENT_SECRET,
   MOCKAUTH_KEY_ENCRYPTION_SECRET: process.env.MOCKAUTH_KEY_ENCRYPTION_SECRET,
+  ENABLE_TEST_ROUTES: process.env.ENABLE_TEST_ROUTES,
 });
 
 export const isProd = env.NODE_ENV === "production";

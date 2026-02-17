@@ -4,7 +4,7 @@ import { z } from "zod";
 import { toResponse } from "@/server/errors";
 import { findOrCreateMockUser } from "@/server/services/mock-user-service";
 import { createSession, MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
-import { getActiveTenantBySlug } from "@/server/services/tenant-service";
+import { getActiveTenantById } from "@/server/services/tenant-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { TenantRouteContext } from "@/types/tenant-route";
 
@@ -30,8 +30,8 @@ const sanitizeReturnTo = (value: string | undefined, fallback: URL, currentUrl: 
 };
 
 export async function POST(request: NextRequest, context: TenantRouteContext) {
-  const { tenant: tenantSlug } = await context.params;
-  const tenant = await getActiveTenantBySlug(tenantSlug);
+  const { tenantId } = await context.params;
+  const tenant = await getActiveTenantById(tenantId);
   const currentUrl = resolveUrl(request);
   const form = await request.formData();
   const data = loginSchema.safeParse({
@@ -46,14 +46,14 @@ export async function POST(request: NextRequest, context: TenantRouteContext) {
   try {
     const user = await findOrCreateMockUser(tenant.id, data.data.username);
     const token = await createSession(tenant.id, user.id);
-    const fallback = new URL(`/t/${tenant.slug}/oidc/authorize`, currentUrl.origin);
+    const fallback = new URL(`/t/${tenant.id}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
     const response = NextResponse.redirect(redirectUrl, 303);
     const isSecure = currentUrl.protocol === "https:";
     response.cookies.set({
       name: MOCK_SESSION_COOKIE,
       value: token,
-      path: `/t/${tenant.slug}`,
+      path: `/t/${tenant.id}`,
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure,

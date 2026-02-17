@@ -3,8 +3,8 @@ import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
 import { rotateKey } from "@/server/services/key-service";
 
-export const getActiveTenantBySlug = async (slug: string) => {
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
+export const getActiveTenantById = async (tenantId: string) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant || tenant.status !== "ACTIVE") {
     throw new DomainError("Unknown tenant", { status: 404, code: "tenant_not_found" });
   }
@@ -33,11 +33,10 @@ export const assertTenantMembership = async (adminUserId: string, tenantId: stri
   return membership;
 };
 
-export const createTenant = async (adminUserId: string, data: { slug: string; name: string }) => {
+export const createTenant = async (adminUserId: string, data: { name: string }) => {
   return prisma.$transaction(async (tx) => {
     const tenant = await tx.tenant.create({
       data: {
-        slug: data.slug,
         name: data.name,
       },
     });

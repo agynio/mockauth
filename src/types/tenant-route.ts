@@ -1,3 +1,3 @@
 export type TenantRouteContext = {
-  params: Promise<{ tenant: string }>;
+  params: Promise<{ tenantId: string }>;
 };

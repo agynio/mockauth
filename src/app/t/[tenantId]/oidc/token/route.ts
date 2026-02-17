@@ -44,9 +44,9 @@ export async function POST(request: NextRequest, context: TenantRouteContext) {
     const clientId = basic?.clientId ?? validation.data.client_id;
     const clientSecret = basic?.clientSecret ?? validation.data.client_secret;
 
-    const { tenant } = await context.params;
+    const { tenantId } = await context.params;
     const codeRecord = await consumeAuthorizationCode(validation.data.code);
-    if (codeRecord.tenant.slug !== tenant) {
+    if (codeRecord.tenantId !== tenantId) {
       return Response.json({ error: "invalid_grant" }, { status: 400 });
     }
 

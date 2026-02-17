@@ -8,8 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 const createTenant = async () => {
   return prisma.tenant.create({
     data: {
-      slug: `test-${randomUUID()}`,
-      name: "Key Service Test Tenant",
+      name: `Key Service Test Tenant ${randomUUID()}`,
     },
   });
 };

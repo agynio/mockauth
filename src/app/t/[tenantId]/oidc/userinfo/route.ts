@@ -7,8 +7,8 @@ import type { TenantRouteContext } from "@/types/tenant-route";
 
 export async function GET(request: NextRequest, context: TenantRouteContext) {
   try {
-    const { tenant } = await context.params;
-    const data = await getUserInfo(request.headers.get("authorization"), resolveOrigin(request), tenant);
+    const { tenantId } = await context.params;
+    const data = await getUserInfo(request.headers.get("authorization"), resolveOrigin(request), tenantId);
     return Response.json(data);
   } catch (error) {
     return toResponse(error);

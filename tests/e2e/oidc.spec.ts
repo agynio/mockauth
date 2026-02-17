@@ -12,7 +12,8 @@ import {
   skipSubjectCheck,
 } from "openid-client";
 
-const issuerBase = "http://127.0.0.1:3000/t/qa/oidc";
+const tenantId = "tenant_qa";
+const issuerBase = `http://127.0.0.1:3000/t/${tenantId}/oidc`;
 const redirectUri = "https://client.example.test/callback";
 
 const cookieJar = () => {
@@ -93,4 +94,12 @@ test("completes Authorization Code + PKCE flow", async () => {
   expect(tokenSet.id_token).toBeTruthy();
   const userInfo = await fetchUserInfo(config, tokenSet.access_token!, skipSubjectCheck);
   expect(userInfo.sub).toBeDefined();
+});
+
+test("legacy slug discovery responds with guidance", async () => {
+  const response = await fetch("http://127.0.0.1:3000/t/qa/oidc/.well-known/openid-configuration");
+  expect(response.status).toBe(410);
+  const payload = await response.json();
+  expect(payload.error).toBe("tenant_id_required");
+  expect(payload.adminUrl).toContain("/admin/clients");
 });

@@ -29,11 +29,11 @@ export async function GET(request: NextRequest, context: TenantRouteContext) {
   }
 
   try {
-    const { tenant } = await context.params;
+    const { tenantId } = await context.params;
     const sessionToken = request.cookies.get(MOCK_SESSION_COOKIE)?.value;
     const result = await handleAuthorize(
       {
-        tenantSlug: tenant,
+        tenantId,
         clientId: validation.data.client_id,
         redirectUri: validation.data.redirect_uri,
         responseType: validation.data.response_type,
