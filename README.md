@@ -67,6 +67,14 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
   detailed client pages (copy helpers, redirect management, secret rotation, metadata). Mock login remains
   username-only—no whitelist or user records to manage.
 
+### Breaking Change — Stage 2 (tenantId issuers)
+
+- Tenant slugs are removed. Every OIDC URL now uses the tenant ID (e.g. `tenant_qa`).
+- Copy the tenant ID directly from the Admin sidebar (Active tenant dropdown) and update your relying parties to use
+  issuers like `https://<host>/t/<tenantId>/oidc` and discovery endpoints under the same tenantId path.
+- Legacy discovery requests that still target `/t/<slug>/oidc/.well-known/openid-configuration` respond with `410 Gone`
+  and link back to `/admin/clients`, where tenantId + issuer strings can be copied.
+
 ## OIDC Endpoints
 
 For the seeded tenant `tenant_qa`:
