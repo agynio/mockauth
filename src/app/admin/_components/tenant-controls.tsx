@@ -23,30 +23,33 @@ export function TenantSwitcher({ tenants, activeTenantId }: { tenants: TenantOpt
   const disabled = tenants.length === 0;
 
   return (
-    <form action={formAction} className="space-y-2">
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-        <span>Active tenant</span>
-        {state.error && <span className="text-red-400">{state.error}</span>}
-        {state.success && <span className="text-emerald-400">{state.success}</span>}
-      </div>
-      <div className="flex gap-2">
-        <select
-          name="tenantId"
-          value={currentValue}
-          onChange={(event) => setSelected(event.target.value)}
-          className="flex-1 rounded-md border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled}
-        >
-          {disabled ? <option value="">No tenants available</option> : null}
-          {tenants.map((tenant) => (
-            <option key={tenant.id} value={tenant.id}>
-              {tenant.name}
-            </option>
-          ))}
-        </select>
-        <SubmitButton disabled={!currentValue || disabled} label="Switch" />
-      </div>
-    </form>
+    <div className="space-y-2">
+      <form action={formAction} className="space-y-2">
+        <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+          <span>Active tenant</span>
+          {state.error && <span className="text-red-400">{state.error}</span>}
+          {state.success && <span className="text-emerald-400">{state.success}</span>}
+        </div>
+        <div className="flex gap-2">
+          <select
+            name="tenantId"
+            value={currentValue}
+            onChange={(event) => setSelected(event.target.value)}
+            className="flex-1 rounded-md border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={disabled}
+          >
+            {disabled ? <option value="">No tenants available</option> : null}
+            {tenants.map((tenant) => (
+              <option key={tenant.id} value={tenant.id}>
+                {tenant.name}
+              </option>
+            ))}
+          </select>
+          <SubmitButton disabled={!currentValue || disabled} label="Switch" />
+        </div>
+      </form>
+      <TenantIdCopyRow tenantId={currentValue} disabled={!currentValue || disabled} />
+    </div>
   );
 }
 
@@ -92,5 +95,50 @@ function SubmitButton({ disabled = false, label }: { disabled?: boolean; label: 
     >
       {pending ? "..." : label}
     </button>
+  );
+}
+
+function TenantIdCopyRow({ tenantId, disabled }: { tenantId: string; disabled: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!tenantId || disabled) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(tenantId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.error("Failed to copy tenantId", error);
+    }
+  };
+
+  return (
+    <div className="space-y-1 text-xs">
+      <div className="flex items-center justify-between uppercase tracking-wide text-slate-400">
+        <span>Tenant ID</span>
+        {copied && (
+          <span className="text-emerald-400" data-testid="tenant-id-copy-status">
+            Copied
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-white/10 bg-slate-900/60 px-3 py-1 text-[11px] text-amber-100">
+          {tenantId || "Select a tenant"}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopy}
+          disabled={disabled}
+          data-testid="tenant-id-copy-btn"
+          aria-label="Copy tenant ID"
+          className="rounded-md border border-white/10 px-2 py-1 text-[11px] font-medium text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-500"
+        >
+          Copy
+        </button>
+      </div>
+    </div>
   );
 }

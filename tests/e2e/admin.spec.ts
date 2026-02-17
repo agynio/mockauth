@@ -7,8 +7,26 @@ test.describe("admin console", () => {
   test("creates a client and manages redirects", async ({ page }) => {
     const sessionToken = await createTestSession(page);
     await authenticate(page, sessionToken);
+    await stubClipboard(page);
 
     await page.goto("/admin/clients");
+    await expect(page.getByRole("heading", { name: "QA Sandbox" })).toBeVisible();
+
+    const tenantCopyButton = page.getByTestId("tenant-id-copy-btn");
+    await tenantCopyButton.click();
+    await expect(page.getByTestId("tenant-id-copy-status")).toHaveText("Copied");
+
+    const newTenantName = `Playwright Tenant ${Date.now()}`;
+    const addTenantForm = page.locator("form", { has: page.getByPlaceholder("Acme Corp") });
+    await addTenantForm.getByPlaceholder("Acme Corp").fill(newTenantName);
+    await addTenantForm.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByText(`Tenant ${newTenantName} created`)).toBeVisible();
+    await expect(page.getByRole("heading", { name: newTenantName })).toBeVisible();
+
+    const switchForm = page.locator("form", { has: page.getByText("Active tenant") });
+    await switchForm.locator('select[name="tenantId"]').selectOption({ label: "QA Sandbox" });
+    await switchForm.getByRole("button", { name: "Switch" }).click();
+    await expect(page.getByText("Active tenant updated")).toBeVisible();
     await expect(page.getByRole("heading", { name: "QA Sandbox" })).toBeVisible();
 
     await page.getByRole("link", { name: "Add client" }).click();
@@ -28,6 +46,20 @@ test.describe("admin console", () => {
     await redirectForm.getByRole("button", { name: "Add" }).click();
     await expect(page.getByText("Redirect URI saved")).toBeVisible();
     await expect(page.getByText("https://pw.example.test/alt")).toBeVisible();
+
+    const rotateButton = page.getByRole("button", { name: "Rotate secret" });
+    await rotateButton.click();
+    await expect(page.getByText("Client secret rotated")).toBeVisible();
+    await expect(page.getByText("New client secret")).toBeVisible();
+
+    const copyAllButton = page.getByTestId("oauth-copy-all-btn");
+    await copyAllButton.click();
+    await expect(copyAllButton).toHaveText("Copied");
+
+    const redirectListItem = page.locator("li", { hasText: "https://pw.example.test/alt" });
+    await redirectListItem.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByText("Redirect removed")).toBeVisible();
+    await expect(redirectListItem).toHaveCount(0);
   });
 });
 
@@ -55,4 +87,20 @@ const authenticate = async (page: Page, sessionToken: string) => {
       expires: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
     },
   ]);
+};
+
+const stubClipboard = async (page: Page) => {
+  await page.addInitScript(() => {
+    const writeText = () => Promise.resolve();
+    const stub = { writeText };
+    if (navigator.clipboard) {
+      // @ts-expect-error overriding clipboard for tests
+      navigator.clipboard.writeText = writeText;
+      return;
+    }
+    Object.defineProperty(navigator, "clipboard", {
+      value: stub,
+      configurable: true,
+    });
+  });
 };

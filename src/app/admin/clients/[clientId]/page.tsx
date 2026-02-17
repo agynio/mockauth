@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getServerSession } from "next-auth";
 import { format } from "date-fns";
 
-import { CopyField } from "@/app/admin/_components/copy-field";
+import { CopyBundleButton, CopyField } from "@/app/admin/_components/copy-field";
 import { AddRedirectForm, DeleteRedirectButton, RotateSecretForm, UpdateClientNameForm } from "@/app/admin/clients/[clientId]/client-forms";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
@@ -29,6 +30,19 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     notFound();
   }
 
+  const origin = await resolveRequestOrigin();
+  const urls = buildOidcUrls(origin, activeTenant.id);
+  const parameterItems = [
+    { label: "Tenant ID", value: activeTenant.id },
+    { label: "Issuer", value: urls.issuer },
+    { label: "Discovery (.well-known)", value: urls.discovery },
+    { label: "JWKS", value: urls.jwks },
+    { label: "Authorize endpoint", value: urls.authorize },
+    { label: "Token endpoint", value: urls.token },
+    { label: "Userinfo endpoint", value: urls.userinfo },
+    { label: "Client ID", value: client.clientId },
+  ];
+
   return (
     <div className="space-y-8">
       <div className="space-y-2">
@@ -43,9 +57,22 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/60 p-6">
-          <h2 className="text-lg font-semibold text-white">Credentials</h2>
-          <CopyField label="Client ID" value={client.clientId} />
+        <section className="space-y-5 rounded-2xl border border-white/10 bg-slate-950/60 p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">OAuth parameters</h2>
+              <p className="text-sm text-slate-400">Copy endpoints and IDs for configuring relying parties.</p>
+            </div>
+            <CopyBundleButton
+              items={parameterItems.map((item) => ({ label: item.label, value: item.value }))}
+              label="Copy all"
+            />
+          </div>
+          <div className="space-y-3">
+            {parameterItems.map((item) => (
+              <CopyField key={item.label} label={item.label} value={item.value} />
+            ))}
+          </div>
           {client.clientType === "CONFIDENTIAL" ? (
             <div className="rounded-xl border border-amber-300/40 bg-amber-300/5 p-4">
               <RotateSecretForm clientId={client.id} />
@@ -102,3 +129,35 @@ const MetadataRow = ({ label, value }: { label: string; value: string }) => (
     <span className="text-white">{value}</span>
   </div>
 );
+
+const resolveRequestOrigin = async () => {
+  const headerList = await headers();
+  const forwardedHost = headerList.get("x-forwarded-host") ?? headerList.get("host");
+  const proto = headerList.get("x-forwarded-proto") ?? "https";
+  if (forwardedHost) {
+    const host = forwardedHost.split(",")[0]?.trim();
+    if (host) {
+      return `${proto}://${host}`;
+    }
+  }
+
+  const fallback = process.env.NEXTAUTH_URL;
+  if (fallback) {
+    try {
+      return new URL(fallback).origin;
+    } catch {}
+  }
+  return "http://localhost:3000";
+};
+
+const buildOidcUrls = (origin: string, tenantId: string) => {
+  const base = `${origin}/t/${tenantId}/oidc`;
+  return {
+    issuer: base,
+    discovery: `${base}/.well-known/openid-configuration`,
+    jwks: `${base}/jwks.json`,
+    authorize: `${base}/authorize`,
+    token: `${base}/token`,
+    userinfo: `${base}/userinfo`,
+  };
+};

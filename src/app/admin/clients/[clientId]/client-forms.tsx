@@ -50,6 +50,7 @@ export function RotateSecretForm({ clientId }: { clientId: string }) {
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="clientId" value={clientId} />
       {state.error && <p className="text-xs text-red-400">{state.error}</p>}
+      {state.success && <p className="text-xs text-emerald-400">{state.success}</p>}
       {state.data?.clientSecret && (
         <CopyField
           label="New client secret"
@@ -93,13 +94,13 @@ export function AddRedirectForm({ clientId }: { clientId: string }) {
 }
 
 export function DeleteRedirectButton({ redirectId }: { redirectId: string }) {
-  const deleteAction = async (formData: FormData) => {
-    await deleteRedirectUriAction(defaultState, formData);
-  };
+  const [state, formAction] = useFormState(deleteRedirectUriAction, defaultState);
   return (
-    <form action={deleteAction}>
+    <form action={formAction} className="space-y-1 text-right">
       <input type="hidden" name="redirectId" value={redirectId} />
       <DeleteButton />
+      {state.error && <p className="text-[11px] text-red-400">{state.error}</p>}
+      {state.success && <p className="text-[11px] text-emerald-400">{state.success}</p>}
     </form>
   );
 }
