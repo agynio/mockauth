@@ -6,21 +6,23 @@ import { createSession, clearSession } from "@/server/services/mock-session-serv
 import { issueTokensFromCode } from "@/server/services/token-service";
 import { getUserInfo } from "@/server/services/userinfo-service";
 
+const DEFAULT_TENANT_ID = "tenant_qa";
+
 describe("OIDC flow", () => {
-  let tenantSlug: string;
+  let tenantId: string;
   let sessionToken: string;
   let codeVerifier: string;
 
   beforeAll(async () => {
-    const tenant = await prisma.tenant.findFirstOrThrow({ where: { slug: "qa" }, include: { mockUsers: true } });
-    tenantSlug = tenant.slug;
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { id: DEFAULT_TENANT_ID }, include: { mockUsers: true } });
+    tenantId = tenant.id;
     const user = tenant.mockUsers[0];
     sessionToken = await createSession(tenant.id, user.id);
     codeVerifier = "verifier-1234567890123456789012345678901234567890";
   });
 
   afterAll(async () => {
-    const tenant = await prisma.tenant.findFirst({ where: { slug: tenantSlug } });
+    const tenant = await prisma.tenant.findFirst({ where: { id: tenantId } });
     if (tenant) {
       await clearSession(tenant.id, sessionToken);
     }
@@ -30,7 +32,7 @@ describe("OIDC flow", () => {
     const challenge = computeS256Challenge(codeVerifier);
     const authorize = await handleAuthorize(
       {
-        tenantSlug,
+        tenantId,
         clientId: "qa-client",
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
@@ -41,7 +43,7 @@ describe("OIDC flow", () => {
         sessionToken,
       },
       "https://mockauth.test",
-      "https://mockauth.test/t/qa/oidc/authorize?client_id=qa-client",
+      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/oidc/authorize?client_id=qa-client`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -61,7 +63,7 @@ describe("OIDC flow", () => {
     expect(tokenResponse.access_token).toBeTruthy();
     expect(tokenResponse.id_token).toBeTruthy();
 
-    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", tenantSlug);
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", tenantId);
     expect(userinfo.sub).toBeDefined();
   });
 });

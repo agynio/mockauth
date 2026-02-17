@@ -1,41 +1,34 @@
 'use server';
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 
-import { authOptions } from "@/server/auth/options";
 import { prisma } from "@/server/db/client";
-import { addRedirectUri, createClient } from "@/server/services/client-service";
+import { authOptions } from "@/server/auth/options";
+import { addRedirectUri, createClient, rotateClientSecret, updateClientName } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
-import { findOrCreateMockUser } from "@/server/services/mock-user-service";
+import { setAdminActiveTenantCookie } from "@/server/services/admin-tenant-context";
 import { createTenant, assertTenantMembership } from "@/server/services/tenant-service";
 
 const tenantSchema = z.object({
   name: z.string().min(2),
-  slug: z.string().regex(/^[a-z0-9-]+$/),
 });
 
 const clientSchema = z.object({
-  tenantId: z.string().cuid(),
+  tenantId: z.string().min(1),
   name: z.string().min(2),
   type: z.enum(["PUBLIC", "CONFIDENTIAL"]),
 });
 
-const redirectSchema = z.object({
-  clientId: z.string().cuid(),
-  uri: z.string().min(1),
-});
+const keySchema = z.object({ tenantId: z.string().min(1) });
 
-const mockUserSchema = z.object({
-  tenantId: z.string().cuid(),
-  username: z.string().min(1),
-});
+const setTenantSchema = z.object({ tenantId: z.string().min(1) });
 
-const keySchema = z.object({ tenantId: z.string().cuid() });
-
-const setTenantSchema = z.object({ slug: z.string().min(1) });
+const rotateSecretSchema = z.object({ clientId: z.string().min(1) });
+const redirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
+const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
+const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
 
 const requireSession = async () => {
   const session = await getServerSession(authOptions);
@@ -43,6 +36,31 @@ const requireSession = async () => {
     throw new Error("Unauthorized");
   }
   return session.user.id;
+};
+
+const parseRedirectEntries = (value: FormDataEntryValue | null) => {
+  if (!value) {
+    return [];
+  }
+  return value
+    .toString()
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+};
+
+const clientPath = (clientId: string) => `/admin/clients/${clientId}`;
+
+const getClientForAdmin = async (clientId: string, adminId: string) => {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true, tenantId: true, clientType: true },
+  });
+  if (!client) {
+    return null;
+  }
+  await assertTenantMembership(adminId, client.tenantId);
+  return client;
 };
 
 export type ActionState<T = undefined> = {
@@ -59,12 +77,11 @@ export const createTenantAction = async (
     const adminId = await requireSession();
     const parsed = tenantSchema.parse({
       name: formData.get("name"),
-      slug: formData.get("slug"),
     });
     const tenant = await createTenant(adminId, parsed);
-    const cookieStore = await cookies();
-    cookieStore.set("admin_active_tenant", tenant.slug, { path: "/" });
-    revalidatePath("/admin");
+    await setAdminActiveTenantCookie(tenant.id);
+    revalidatePath("/admin", "layout");
+    revalidatePath("/admin/clients");
     return { success: `Tenant ${tenant.name} created` };
   } catch (error) {
     console.error(error);
@@ -78,17 +95,14 @@ export const setActiveTenantAction = async (
 ): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = setTenantSchema.parse({ slug: formData.get("slug") });
-    const tenant = await prisma.tenant.findUnique({ where: { slug: parsed.slug } });
-    if (!tenant) {
-      return { error: "Tenant not found" };
-    }
-    await assertTenantMembership(adminId, tenant.id);
-    const cookieStore = await cookies();
-    cookieStore.set("admin_active_tenant", parsed.slug, { path: "/" });
-    revalidatePath("/admin");
+    const parsed = setTenantSchema.parse({ tenantId: formData.get("tenantId") });
+    await assertTenantMembership(adminId, parsed.tenantId);
+    await setAdminActiveTenantCookie(parsed.tenantId);
+    revalidatePath("/admin", "layout");
+    revalidatePath("/admin/clients");
     return { success: "Active tenant updated" };
-  } catch {
+  } catch (error) {
+    console.error(error);
     return { error: "Unable to set tenant" };
   }
 };
@@ -105,11 +119,15 @@ export const createClientAction = async (
       type: formData.get("type"),
     });
     await assertTenantMembership(adminId, parsed.tenantId);
+    const redirectEntries = parseRedirectEntries(formData.get("redirects"));
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
       clientType: parsed.type,
+      redirectUris: redirectEntries,
     });
-    revalidatePath("/admin");
+    revalidatePath("/admin", "layout");
+    revalidatePath("/admin/clients");
+    revalidatePath(clientPath(client.id));
     return {
       success: "Client created",
       data: { clientId: client.clientId, clientSecret: clientSecret ?? undefined },
@@ -117,6 +135,46 @@ export const createClientAction = async (
   } catch (error) {
     console.error(error);
     return { error: "Failed to create client" };
+  }
+};
+
+export const rotateKeyAction = async (
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = keySchema.parse({ tenantId: formData.get("tenantId") });
+    await assertTenantMembership(adminId, parsed.tenantId);
+    await rotateKey(parsed.tenantId);
+    revalidatePath("/admin", "layout");
+    return { success: "Signing key rotated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to rotate key" };
+  }
+};
+
+export const rotateClientSecretAction = async (
+  _prev: ActionState<{ clientSecret: string }>,
+  formData: FormData,
+): Promise<ActionState<{ clientSecret: string }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = rotateSecretSchema.parse({ clientId: formData.get("clientId") });
+    const client = await getClientForAdmin(parsed.clientId, adminId);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    if (client.clientType !== "CONFIDENTIAL") {
+      return { error: "Public clients do not use secrets" };
+    }
+    const clientSecret = await rotateClientSecret(client.id);
+    revalidatePath(clientPath(client.id));
+    return { success: "Client secret rotated", data: { clientSecret } };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to rotate secret" };
   }
 };
 
@@ -130,13 +188,12 @@ export const addRedirectUriAction = async (
       clientId: formData.get("clientId"),
       uri: formData.get("uri"),
     });
-    const client = await prisma.client.findUnique({ where: { id: parsed.clientId } });
+    const client = await getClientForAdmin(parsed.clientId, adminId);
     if (!client) {
       return { error: "Client not found" };
     }
-    await assertTenantMembership(adminId, client.tenantId);
-    await addRedirectUri(parsed.clientId, parsed.uri);
-    revalidatePath("/admin");
+    await addRedirectUri(client.id, parsed.uri);
+    revalidatePath(clientPath(client.id));
     return { success: "Redirect URI saved" };
   } catch (error) {
     console.error(error);
@@ -144,39 +201,50 @@ export const addRedirectUriAction = async (
   }
 };
 
-export const rotateKeyAction = async (
+export const updateClientNameAction = async (
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = keySchema.parse({ tenantId: formData.get("tenantId") });
-    await assertTenantMembership(adminId, parsed.tenantId);
-    await rotateKey(parsed.tenantId);
-    revalidatePath("/admin");
-    return { success: "Signing key rotated" };
+    const parsed = updateClientSchema.parse({
+      clientId: formData.get("clientId"),
+      name: formData.get("name"),
+    });
+    const client = await getClientForAdmin(parsed.clientId, adminId);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    await updateClientName(client.id, parsed.name);
+    revalidatePath(clientPath(client.id));
+    revalidatePath("/admin/clients");
+    return { success: "Client updated" };
   } catch (error) {
     console.error(error);
-    return { error: "Unable to rotate key" };
+    return { error: "Unable to update client" };
   }
 };
 
-export const createMockUserAction = async (
+export const deleteRedirectUriAction = async (
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = mockUserSchema.parse({
-      tenantId: formData.get("tenantId"),
-      username: formData.get("username"),
+    const parsed = deleteRedirectSchema.parse({ redirectId: formData.get("redirectId") });
+    const redirect = await prisma.redirectUri.findUnique({
+      where: { id: parsed.redirectId },
+      select: { id: true, clientId: true, client: { select: { tenantId: true } } },
     });
-    await assertTenantMembership(adminId, parsed.tenantId);
-    await findOrCreateMockUser(parsed.tenantId, parsed.username);
-    revalidatePath("/admin");
-    return { success: "Mock user ready" };
+    if (!redirect) {
+      return { error: "Redirect not found" };
+    }
+    await assertTenantMembership(adminId, redirect.client.tenantId);
+    await prisma.redirectUri.delete({ where: { id: redirect.id } });
+    revalidatePath(clientPath(redirect.clientId));
+    return { success: "Redirect removed" };
   } catch (error) {
     console.error(error);
-    return { error: "Unable to create user" };
+    return { error: "Unable to remove redirect" };
   }
 };

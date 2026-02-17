@@ -43,7 +43,6 @@ enum TokenEndpointAuthMethod {
 
 model Tenant {
   id                String              @id @default(cuid())
-  slug              String              @unique
   name              String
   status            TenantStatus        @default(ACTIVE)
   createdAt         DateTime            @default(now())

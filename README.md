@@ -63,23 +63,24 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
 ## Admin Console
 
 - Accessible at `/admin` and protected via NextAuth + Logto. Provide `LOGTO_*` env vars to point at your Logto instance.
-- After signing in, create a tenant, register clients, add redirect URIs (exact, host wildcard, or path suffix wildcard),
-  rotate keys, and manage mock users.
+- The Stage 2 UI introduces a sidebar with tenant switching, per-tenant client lists, a focused create form, and
+  detailed client pages (copy helpers, redirect management, secret rotation, metadata). Mock login remains
+  username-only—no whitelist or user records to manage.
 
 ## OIDC Endpoints
 
-For tenant `qa`:
+For the seeded tenant `tenant_qa`:
 
 | Endpoint | Path |
 | --- | --- |
-| Issuer | `http(s)://<host>/t/qa/oidc` |
-| Discovery | `/t/qa/oidc/.well-known/openid-configuration` |
-| JWKS | `/t/qa/oidc/jwks.json` (alias `/t/qa/.well-known/jwks.json`) |
-| Authorize | `/t/qa/oidc/authorize` (Authorization Code + PKCE S256 only) |
-| Token | `/t/qa/oidc/token` |
-| UserInfo | `/t/qa/oidc/userinfo` |
-- Username-only login happens under `/t/qa/oidc/login` and stores a dedicated mock-user session cookie (separate from
-  NextAuth).
+| Issuer | `http(s)://<host>/t/tenant_qa/oidc` |
+| Discovery | `/t/tenant_qa/oidc/.well-known/openid-configuration` |
+| JWKS | `/t/tenant_qa/oidc/jwks.json` (alias `/t/tenant_qa/.well-known/jwks.json`) |
+| Authorize | `/t/tenant_qa/oidc/authorize` (Authorization Code + PKCE S256 only) |
+| Token | `/t/tenant_qa/oidc/token` |
+| UserInfo | `/t/tenant_qa/oidc/userinfo` |
+- Username-only login lives at `/t/<tenantId>/oidc/login` and stores a tenant-scoped mock-user session cookie (separate
+  from NextAuth).
 
 ## CI
 

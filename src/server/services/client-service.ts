@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { hashSecret } from "@/server/crypto/hash";
 import { generateOpaqueToken } from "@/server/crypto/opaque-token";
@@ -19,7 +20,10 @@ export const getClientForTenant = async (tenantId: string, clientId: string) => 
   return client;
 };
 
-export const createClient = async (tenantId: string, data: { name: string; clientType: "PUBLIC" | "CONFIDENTIAL" }) => {
+export const createClient = async (
+  tenantId: string,
+  data: { name: string; clientType: "PUBLIC" | "CONFIDENTIAL"; redirectUris?: string[] },
+) => {
   const clientId = `client_${nanoid(16)}`;
   let clientSecret: string | null = null;
   let clientSecretHash: string | null = null;
@@ -29,15 +33,26 @@ export const createClient = async (tenantId: string, data: { name: string; clien
     clientSecretHash = await hashSecret(clientSecret);
   }
 
-  const client = await prisma.client.create({
-    data: {
-      name: data.name,
-      tenantId,
-      clientId,
-      clientType: data.clientType,
-      clientSecretHash,
-      tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
-    },
+  const client = await prisma.$transaction(async (tx) => {
+    const created = await tx.client.create({
+      data: {
+        name: data.name,
+        tenantId,
+        clientId,
+        clientType: data.clientType,
+        clientSecretHash,
+        tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
+      },
+    });
+
+    if (data.redirectUris?.length) {
+      for (const raw of data.redirectUris) {
+        const { normalized, type } = classifyRedirect(raw);
+        await tx.redirectUri.create({ data: { clientId: created.id, uri: normalized, type } });
+      }
+    }
+
+    return created;
   });
 
   return { client, clientSecret };
@@ -59,10 +74,66 @@ export const addRedirectUri = async (clientId: string, value: string) => {
   });
 };
 
-export const listClients = async (tenantId: string) => {
-  return prisma.client.findMany({
-    where: { tenantId },
-    include: { redirectUris: true },
-    orderBy: { createdAt: "desc" },
+const DEFAULT_PAGE_SIZE = 10;
+
+export const listClients = async (
+  tenantId: string,
+  options?: { search?: string; page?: number; pageSize?: number },
+) => {
+  const pageSize = Math.max(1, options?.pageSize ?? DEFAULT_PAGE_SIZE);
+  const page = Math.max(1, options?.page ?? 1);
+  const searchValue = options?.search?.trim();
+  const searchFilter: Prisma.StringFilter<"Client"> | null = searchValue
+    ? { contains: searchValue, mode: "insensitive" as Prisma.QueryMode }
+    : null;
+  const where: Prisma.ClientWhereInput = {
+    tenantId,
+    ...(searchFilter
+      ? {
+          OR: [{ name: searchFilter }, { clientId: searchFilter }],
+        }
+      : {}),
+  };
+
+  const [clients, total] = await prisma.$transaction([
+    prisma.client.findMany({
+      where,
+      include: { _count: { select: { redirectUris: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.client.count({ where }),
+  ]);
+
+  return { clients, total, page, pageSize };
+};
+
+export const getClientByIdForTenant = async (tenantId: string, clientInternalId: string) => {
+  const client = await prisma.client.findFirst({
+    where: { id: clientInternalId, tenantId },
+    include: { redirectUris: { orderBy: { createdAt: "asc" } }, tenant: true },
   });
+
+  if (!client) {
+    throw new DomainError("Client not found", { status: 404 });
+  }
+
+  return client;
+};
+
+export const rotateClientSecret = async (clientId: string) => {
+  const secret = generateOpaqueToken(24);
+  const clientSecretHash = await hashSecret(secret);
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { clientSecretHash },
+  });
+
+  return secret;
+};
+
+export const updateClientName = async (clientId: string, name: string) => {
+  return prisma.client.update({ where: { id: clientId }, data: { name } });
 };

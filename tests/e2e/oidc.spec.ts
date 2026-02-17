@@ -12,7 +12,8 @@ import {
   skipSubjectCheck,
 } from "openid-client";
 
-const issuerBase = "http://127.0.0.1:3000/t/qa/oidc";
+const tenantId = "tenant_qa";
+const issuerBase = `http://127.0.0.1:3000/t/${tenantId}/oidc`;
 const redirectUri = "https://client.example.test/callback";
 
 const cookieJar = () => {

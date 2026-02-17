@@ -4,7 +4,7 @@ import type { TenantRouteContext } from "@/types/tenant-route";
 
 export async function GET(request: Request, context: TenantRouteContext) {
   const url = new URL(request.url);
-  const { tenant } = await context.params;
-  const doc = buildDiscoveryDocument(resolveOrigin(request), tenant);
+  const { tenantId } = await context.params;
+  const doc = buildDiscoveryDocument(resolveOrigin(request), tenantId);
   return Response.json(doc);
 }

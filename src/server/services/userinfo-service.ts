@@ -5,7 +5,7 @@ import { DomainError } from "@/server/errors";
 import { claimsForScopes } from "@/server/oidc/claims";
 import { issuerForTenant } from "@/server/oidc/issuer";
 import { getPublicJwkByKid } from "@/server/services/key-service";
-import { getActiveTenantBySlug } from "@/server/services/tenant-service";
+import { getActiveTenantById } from "@/server/services/tenant-service";
 
 const parseBearer = (header?: string | null) => {
   if (!header) {
@@ -20,7 +20,7 @@ const parseBearer = (header?: string | null) => {
   return token;
 };
 
-const extractTenantSlug = (iss: string) => {
+const extractTenantId = (iss: string) => {
   const url = new URL(iss);
   const segments = url.pathname.split("/").filter(Boolean);
   if (segments.length < 3 || segments[0] !== "t" || segments[2] !== "oidc") {
@@ -32,7 +32,7 @@ const extractTenantSlug = (iss: string) => {
 export const getUserInfo = async (
   authHeader: string | null | undefined,
   origin: string,
-  expectedTenantSlug: string,
+  expectedTenantId: string,
 ) => {
   const token = parseBearer(authHeader ?? undefined);
   const decoded = decodeJwt(token);
@@ -40,11 +40,11 @@ export const getUserInfo = async (
     throw new DomainError("Token missing issuer", { status: 400, code: "invalid_token" });
   }
 
-  const tenantSlug = extractTenantSlug(decoded.iss);
-  if (tenantSlug !== expectedTenantSlug) {
+  const tenantId = extractTenantId(decoded.iss);
+  if (tenantId !== expectedTenantId) {
     throw new DomainError("Invalid issuer", { status: 400, code: "invalid_token" });
   }
-  const tenant = await getActiveTenantBySlug(tenantSlug);
+  const tenant = await getActiveTenantById(tenantId);
 
   const header = decodeProtectedHeader(token);
   if (!header.kid) {
@@ -53,7 +53,7 @@ export const getUserInfo = async (
 
   const keyJwk = await getPublicJwkByKid(tenant.id, header.kid);
   const key = await importJWK(keyJwk, "RS256");
-  const issuer = issuerForTenant(origin, tenant.slug);
+  const issuer = issuerForTenant(origin, tenant.id);
   const { payload } = await jwtVerify(token, key, { issuer });
 
   const user = await prisma.mockUser.findUnique({ where: { id: payload.sub as string } });

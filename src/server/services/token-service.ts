@@ -70,7 +70,7 @@ export const issueTokensFromCode = async (params: {
   const signingKey = await importJWK(privateJwk, "RS256");
 
   const now = Math.floor(Date.now() / 1000);
-  const issuer = issuerForTenant(origin, code.tenant.slug);
+  const issuer = issuerForTenant(origin, code.tenantId);
   const scopes = code.scope.split(" ").filter(Boolean);
   const idToken = await new SignJWT({
     ...claimsForScopes(code.user, scopes),

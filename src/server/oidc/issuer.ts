@@ -1,3 +1,3 @@
-export const issuerForTenant = (origin: string, tenantSlug: string) => {
-  return `${origin}/t/${tenantSlug}/oidc`;
+export const issuerForTenant = (origin: string, tenantId: string) => {
+  return `${origin}/t/${tenantId}/oidc`;
 };

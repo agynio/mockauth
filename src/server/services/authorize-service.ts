@@ -4,10 +4,10 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createAuthorizationCode } from "@/server/services/authorization-code-service";
 import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
-import { getActiveTenantBySlug } from "@/server/services/tenant-service";
+import { getActiveTenantById } from "@/server/services/tenant-service";
 
 type AuthorizeParams = {
-  tenantSlug: string;
+  tenantId: string;
   clientId: string;
   redirectUri: string;
   responseType: string;
@@ -40,7 +40,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     throw new DomainError("Only PKCE S256 is supported", { status: 400, code: "invalid_request" });
   }
 
-  const tenant = await getActiveTenantBySlug(params.tenantSlug);
+  const tenant = await getActiveTenantById(params.tenantId);
   const client = await getClientForTenant(tenant.id, params.clientId);
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
 
@@ -52,7 +52,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   if (shouldLogin) {
     return {
       type: "login" as const,
-      redirectTo: `/t/${tenant.slug}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
+      redirectTo: `/t/${tenant.id}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
     };
   }
 
