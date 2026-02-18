@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+
+import { authenticate, createTestSession, stubClipboard } from "./helpers/admin";
 
 const tenantId = "tenant_qa";
 const tenantDisplayName = "QA Sandbox";
@@ -139,44 +140,3 @@ test.describe("admin console", () => {
     await page.waitForURL("**/api/auth/signin**");
   });
 });
-
-const createTestSession = async (page: Page) => {
-  const response = await page.request.post("/api/test/session", {
-    data: { tenantId },
-  });
-  if (!response.ok()) {
-    throw new Error(`Failed to create test session: ${response.status()}`);
-  }
-  const body = await response.json();
-  return body.sessionToken as string;
-};
-
-const authenticate = async (page: Page, sessionToken: string) => {
-  await page.context().addCookies([
-    {
-      name: "next-auth.session-token",
-      value: sessionToken,
-      domain: "127.0.0.1",
-      path: "/",
-      httpOnly: true,
-      sameSite: "Lax",
-      secure: false,
-      expires: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
-    },
-  ]);
-};
-
-const stubClipboard = async (page: Page) => {
-  await page.addInitScript(() => {
-    const writeText = () => Promise.resolve();
-    const stub = { writeText };
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText = writeText;
-      return;
-    }
-    Object.defineProperty(navigator, "clipboard", {
-      value: stub,
-      configurable: true,
-    });
-  });
-};
