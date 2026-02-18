@@ -1,4 +1,4 @@
-'use server';
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
@@ -9,22 +9,21 @@ import { authOptions } from "@/server/auth/options";
 import { addRedirectUri, createClient, rotateClientSecret, updateClientName } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
 import { setAdminActiveTenantCookie } from "@/server/services/admin-tenant-context";
-import { createTenant, assertTenantMembership } from "@/server/services/tenant-service";
+import { assertTenantMembership, createTenant } from "@/server/services/tenant-service";
 
 const tenantSchema = z.object({
-  name: z.string().min(2),
+  name: z.string().min(2, "Tenant name must include at least two characters"),
 });
 
 const clientSchema = z.object({
   tenantId: z.string().min(1),
   name: z.string().min(2),
   type: z.enum(["PUBLIC", "CONFIDENTIAL"]),
+  redirects: z.array(z.string().min(1)).optional(),
 });
 
 const keySchema = z.object({ tenantId: z.string().min(1) });
-
 const setTenantSchema = z.object({ tenantId: z.string().min(1) });
-
 const rotateSecretSchema = z.object({ clientId: z.string().min(1) });
 const redirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
@@ -36,17 +35,6 @@ const requireSession = async () => {
     throw new Error("Unauthorized");
   }
   return session.user.id;
-};
-
-const parseRedirectEntries = (value: FormDataEntryValue | null) => {
-  if (!value) {
-    return [];
-  }
-  return value
-    .toString()
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
 };
 
 const clientPath = (clientId: string) => `/admin/clients/${clientId}`;
@@ -69,15 +57,10 @@ export type ActionState<T = undefined> = {
   data?: T;
 };
 
-export const createTenantAction = async (
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> => {
+export const createTenantAction = async (input: z.infer<typeof tenantSchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = tenantSchema.parse({
-      name: formData.get("name"),
-    });
+    const parsed = tenantSchema.parse(input);
     const tenant = await createTenant(adminId, parsed);
     await setAdminActiveTenantCookie(tenant.id);
     revalidatePath("/admin", "layout");
@@ -89,13 +72,10 @@ export const createTenantAction = async (
   }
 };
 
-export const setActiveTenantAction = async (
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> => {
+export const setActiveTenantAction = async (input: z.infer<typeof setTenantSchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = setTenantSchema.parse({ tenantId: formData.get("tenantId") });
+    const parsed = setTenantSchema.parse(input);
     await assertTenantMembership(adminId, parsed.tenantId);
     await setAdminActiveTenantCookie(parsed.tenantId);
     revalidatePath("/admin", "layout");
@@ -108,18 +88,13 @@ export const setActiveTenantAction = async (
 };
 
 export const createClientAction = async (
-  _prev: ActionState<{ clientId: string; clientSecret?: string }> ,
-  formData: FormData,
+  input: z.infer<typeof clientSchema>,
 ): Promise<ActionState<{ clientId: string; clientSecret?: string }>> => {
   try {
     const adminId = await requireSession();
-    const parsed = clientSchema.parse({
-      tenantId: formData.get("tenantId"),
-      name: formData.get("name"),
-      type: formData.get("type"),
-    });
+    const parsed = clientSchema.parse(input);
     await assertTenantMembership(adminId, parsed.tenantId);
-    const redirectEntries = parseRedirectEntries(formData.get("redirects"));
+    const redirectEntries = parsed.redirects?.filter(Boolean);
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
       clientType: parsed.type,
@@ -138,13 +113,10 @@ export const createClientAction = async (
   }
 };
 
-export const rotateKeyAction = async (
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> => {
+export const rotateKeyAction = async (input: z.infer<typeof keySchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = keySchema.parse({ tenantId: formData.get("tenantId") });
+    const parsed = keySchema.parse(input);
     await assertTenantMembership(adminId, parsed.tenantId);
     await rotateKey(parsed.tenantId);
     revalidatePath("/admin", "layout");
@@ -156,12 +128,11 @@ export const rotateKeyAction = async (
 };
 
 export const rotateClientSecretAction = async (
-  _prev: ActionState<{ clientSecret: string }>,
-  formData: FormData,
+  input: z.infer<typeof rotateSecretSchema>,
 ): Promise<ActionState<{ clientSecret: string }>> => {
   try {
     const adminId = await requireSession();
-    const parsed = rotateSecretSchema.parse({ clientId: formData.get("clientId") });
+    const parsed = rotateSecretSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId);
     if (!client) {
       return { error: "Client not found" };
@@ -178,16 +149,10 @@ export const rotateClientSecretAction = async (
   }
 };
 
-export const addRedirectUriAction = async (
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> => {
+export const addRedirectUriAction = async (input: z.infer<typeof redirectSchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = redirectSchema.parse({
-      clientId: formData.get("clientId"),
-      uri: formData.get("uri"),
-    });
+    const parsed = redirectSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId);
     if (!client) {
       return { error: "Client not found" };
@@ -201,16 +166,10 @@ export const addRedirectUriAction = async (
   }
 };
 
-export const updateClientNameAction = async (
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> => {
+export const updateClientNameAction = async (input: z.infer<typeof updateClientSchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = updateClientSchema.parse({
-      clientId: formData.get("clientId"),
-      name: formData.get("name"),
-    });
+    const parsed = updateClientSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId);
     if (!client) {
       return { error: "Client not found" };
@@ -225,13 +184,10 @@ export const updateClientNameAction = async (
   }
 };
 
-export const deleteRedirectUriAction = async (
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> => {
+export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedirectSchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = deleteRedirectSchema.parse({ redirectId: formData.get("redirectId") });
+    const parsed = deleteRedirectSchema.parse(input);
     const redirect = await prisma.redirectUri.findUnique({
       where: { id: parsed.redirectId },
       select: { id: true, clientId: true, client: { select: { tenantId: true } } },

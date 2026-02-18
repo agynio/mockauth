@@ -1,144 +1,184 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useState, useTransition } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 
-import type { ActionState } from "@/app/admin/actions";
 import { createTenantAction, setActiveTenantAction } from "@/app/admin/actions";
+import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 
 type TenantOption = {
   id: string;
   name: string;
 };
 
-const initialState: ActionState = {};
+const tenantFormSchema = z.object({
+  name: z.string().min(2, "Tenant name must include at least two characters"),
+});
 
-export function TenantSwitcher({ tenants, activeTenantId }: { tenants: TenantOption[]; activeTenantId: string | null }) {
-  const [state, formAction] = useFormState(setActiveTenantAction, initialState);
-  const [selected, setSelected] = useState<string>("");
+type TenantFormValues = z.infer<typeof tenantFormSchema>;
 
-  const fallback = activeTenantId ?? tenants[0]?.id ?? "";
-  const hasSelected = tenants.some((tenant) => tenant.id === selected);
-  const currentValue = hasSelected ? selected : fallback;
-  const disabled = tenants.length === 0;
+export function TenantSwitcher({
+  tenants,
+  activeTenantId,
+  onAddTenant,
+}: {
+  tenants: TenantOption[];
+  activeTenantId: string | null;
+  onAddTenant: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const { toast } = useToast();
+  const [optimisticTenantId, setOptimisticTenantId] = useState<string | null>(null);
 
-  return (
-    <div className="space-y-2">
-      <form action={formAction} className="space-y-2">
-        <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-          <span>Active tenant</span>
-          {state.error && <span className="text-red-400">{state.error}</span>}
-          {state.success && <span className="text-emerald-400">{state.success}</span>}
-        </div>
-        <div className="flex gap-2">
-          <select
-            name="tenantId"
-            value={currentValue}
-            onChange={(event) => setSelected(event.target.value)}
-            className="flex-1 rounded-md border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={disabled}
-          >
-            {disabled ? <option value="">No tenants available</option> : null}
-            {tenants.map((tenant) => (
-              <option key={tenant.id} value={tenant.id}>
-                {tenant.name}
-              </option>
-            ))}
-          </select>
-          <SubmitButton disabled={!currentValue || disabled} label="Switch" />
-        </div>
-      </form>
-      <TenantIdCopyRow tenantId={currentValue} disabled={!currentValue || disabled} />
-    </div>
-  );
-}
+  const fallbackTenantId = tenants[0]?.id ?? "";
+  const selectedTenantId = optimisticTenantId ?? activeTenantId ?? fallbackTenantId;
+  const activeTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
 
-export function CreateTenantForm() {
-  const [state, formAction] = useFormState(createTenantAction, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
-
-  useEffect(() => {
-    if (state.success) {
-      formRef.current?.reset();
-    }
-  }, [state.success]);
-
-  return (
-    <form ref={formRef} action={formAction} className="space-y-2">
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-        <span>Add tenant</span>
-        {state.error && <span className="text-red-400">{state.error}</span>}
-        {state.success && <span className="text-emerald-400">{state.success}</span>}
-      </div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          name="name"
-          required
-          minLength={2}
-          placeholder="Acme Corp"
-          className="flex-1 rounded-md border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-        />
-        <SubmitButton disabled={false} label="Add" />
-      </div>
-    </form>
-  );
-}
-
-function SubmitButton({ disabled = false, label }: { disabled?: boolean; label: string }) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={disabled || pending}
-      className="rounded-md bg-amber-400/90 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-    >
-      {pending ? "..." : label}
-    </button>
-  );
-}
-
-function TenantIdCopyRow({ tenantId, disabled }: { tenantId: string; disabled: boolean }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    if (!tenantId || disabled) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(tenantId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch (error) {
-      console.error("Failed to copy tenantId", error);
-    }
+  const handleSelect = (tenantId: string) => {
+    setOptimisticTenantId(tenantId);
+    startTransition(async () => {
+      const result = await setActiveTenantAction({ tenantId });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to set tenant", description: result.error });
+        setOptimisticTenantId(null);
+        return;
+      }
+      toast({ title: "Active tenant updated", description: `Switched to ${tenants.find((t) => t.id === tenantId)?.name ?? tenantId}` });
+      setOptimisticTenantId(null);
+      setOpen(false);
+    });
   };
 
   return (
-    <div className="space-y-1 text-xs">
-      <div className="flex items-center justify-between uppercase tracking-wide text-slate-400">
-        <span>Tenant ID</span>
-        {copied && (
-          <span className="text-emerald-400" data-testid="tenant-id-copy-status">
-            Copied
-          </span>
-        )}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs font-semibold uppercase text-muted-foreground">
+        <span>Active tenant</span>
+        {pending && <Loader2 className="h-3 w-3 animate-spin" />}
       </div>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-white/10 bg-slate-900/60 px-3 py-1 text-[11px] text-amber-100">
-          {tenantId || "Select a tenant"}
-        </code>
-        <button
-          type="button"
-          onClick={handleCopy}
-          disabled={disabled}
-          data-testid="tenant-id-copy-btn"
-          aria-label="Copy tenant ID"
-          className="rounded-md border border-white/10 px-2 py-1 text-[11px] font-medium text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-500"
-        >
-          Copy
-        </button>
-      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            aria-label="Select tenant"
+            data-testid="tenant-switcher"
+            className="w-full justify-between"
+            disabled={tenants.length === 0}
+          >
+            <div className="flex flex-col text-left">
+              <span className="font-semibold">
+                {activeTenant ? activeTenant.name : tenants.length === 0 ? "No tenants" : "Select tenant"}
+              </span>
+              {activeTenant ? <span className="text-xs text-muted-foreground">{activeTenant.id}</span> : null}
+            </div>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search tenants..." />
+            <CommandEmpty>
+              {tenants.length === 0 ? "No tenants yet. Create one to get started." : "No tenants match your search."}
+            </CommandEmpty>
+            <CommandList>
+              <CommandGroup heading="Tenants">
+                {tenants.map((tenant) => (
+                  <CommandItem
+                    key={tenant.id}
+                    value={tenant.id}
+                    onSelect={(value) => handleSelect(value)}
+                    className="flex flex-col items-start"
+                  >
+                    <span className="text-sm font-medium">{tenant.name}</span>
+                    <span className="text-xs text-muted-foreground">{tenant.id}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+              <CommandGroup heading="Actions">
+                <CommandItem
+                  onSelect={() => {
+                    setOpen(false);
+                    onAddTenant();
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add tenant
+                </CommandItem>
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
+  );
+}
+
+export function CreateTenantDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const form = useForm<TenantFormValues>({
+    resolver: zodResolver(tenantFormSchema),
+    defaultValues: { name: "" },
+  });
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+
+  const handleSubmit = (values: TenantFormValues) => {
+    startTransition(async () => {
+      const result = await createTenantAction(values);
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to create tenant", description: result.error });
+        return;
+      }
+      toast({ title: "Tenant created", description: result.success ?? "Tenant added" });
+      form.reset();
+      onOpenChange(false);
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add tenant</DialogTitle>
+          <DialogDescription>Provide a descriptive name so your team can identify the tenant quickly.</DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tenant name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Acme Corp QA" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type="submit" disabled={pending} className="w-full sm:w-auto">
+                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create tenant"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }

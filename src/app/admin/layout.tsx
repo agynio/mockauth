@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
-import { AdminSidebar } from "@/app/admin/_components/sidebar";
+import { AdminShell } from "@/app/admin/_components/admin-shell";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 
@@ -24,11 +24,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   }));
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-white">
-      <AdminSidebar user={user} tenants={tenantSummaries} activeTenantId={tenantContext.activeTenant?.id ?? null} />
-      <main className="flex-1 overflow-y-auto bg-slate-950/70">
-        <div className="mx-auto w-full max-w-5xl px-10 py-10">{children}</div>
-      </main>
-    </div>
+    <AdminShell user={user} tenants={tenantSummaries} activeTenantId={tenantContext.activeTenant?.id ?? null}>
+      {children}
+    </AdminShell>
   );
 }

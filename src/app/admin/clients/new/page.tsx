@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
+import { NewClientForm } from "@/app/admin/clients/new/client-form";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
-import { NewClientForm } from "@/app/admin/clients/new/client-form";
 
 export default async function NewClientPage() {
   const session = await getServerSession(authOptions);
@@ -16,28 +18,41 @@ export default async function NewClientPage() {
 
   if (!activeTenant) {
     return (
-      <div className="space-y-4 rounded-2xl border border-dashed border-white/10 bg-slate-900/40 p-10 text-center">
-        <h1 className="text-2xl font-semibold text-white">Select a tenant</h1>
-        <p className="text-sm text-slate-400">Use the sidebar to create or activate a tenant before creating clients.</p>
-        <Link href="/admin/clients" className="inline-flex items-center justify-center rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
-          Back to clients list
-        </Link>
-      </div>
+      <Card className="border-dashed">
+        <CardHeader className="text-center">
+          <CardTitle>Select a tenant</CardTitle>
+          <CardDescription>Use the sidebar to create or activate a tenant before registering clients.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          <Button variant="outline" asChild>
+            <Link href="/admin/clients">Back to clients</Link>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <Link href="/admin/clients" className="text-sm text-slate-400 hover:text-amber-200">
-          ← Back to clients
-        </Link>
-        <h1 className="text-3xl font-semibold text-white">New client</h1>
-        <p className="text-sm text-slate-400">Tenant: {activeTenant.name}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm uppercase tracking-wide text-muted-foreground">Tenant · {activeTenant.name}</p>
+          <h1 className="text-3xl font-semibold tracking-tight">New client</h1>
+          <p className="text-sm text-muted-foreground">Provision OAuth credentials for relying parties.</p>
+        </div>
+        <Button variant="ghost" asChild>
+          <Link href="/admin/clients">Back to list</Link>
+        </Button>
       </div>
-      <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-6 shadow-lg shadow-slate-950/50">
-        <NewClientForm tenantId={activeTenant.id} />
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Client configuration</CardTitle>
+          <CardDescription>Define metadata and redirects. Secrets are displayed once after creation.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NewClientForm tenantId={activeTenant.id} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Check, Copy } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Props = {
   label: string;
@@ -22,25 +26,25 @@ export function CopyField({ label, value, description }: Props) {
   };
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
         <span>{label}</span>
-        {copied && <span className="text-emerald-400">Copied</span>}
+        <span
+          aria-live="polite"
+          className={cn("text-primary transition-opacity", copied ? "opacity-100" : "opacity-0")}
+        >
+          Copied
+        </span>
       </div>
       <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-amber-100">
+        <code className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm text-foreground/80">
           {value}
         </code>
-        <button
-          type="button"
-          onClick={handleCopy}
-          aria-label={`Copy ${label}`}
-          className="rounded-md border border-white/10 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
-        >
-          Copy
-        </button>
+        <Button type="button" variant="outline" size="icon" onClick={handleCopy} aria-label={`Copy ${label}`}>
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+        </Button>
       </div>
-      {description && <p className="text-xs text-slate-500">{description}</p>}
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
     </div>
   );
 }
@@ -70,15 +74,15 @@ export function CopyBundleButton({ items, label = "Copy all" }: { items: BundleI
   };
 
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
       onClick={handleCopy}
       disabled={!payload}
       aria-label="Copy all OAuth parameters"
       data-testid="oauth-copy-all-btn"
-      className="rounded-md border border-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-500"
     >
       {copied ? "Copied" : label}
-    </button>
+    </Button>
   );
 }
