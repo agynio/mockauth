@@ -13,7 +13,8 @@ test.describe("admin console", () => {
     await expect(page.getByRole("heading", { name: "OAuth clients" })).toBeVisible();
 
     const newTenantName = `Playwright Tenant ${Date.now()}`;
-    await page.getByTestId("add-tenant-btn").click();
+    await page.getByTestId("tenant-switcher").click();
+    await page.getByTestId("tenant-option-add").click();
     const dialog = page.getByRole("dialog", { name: "Add tenant" });
     await dialog.getByLabel("Tenant name").fill(newTenantName);
     await dialog.getByRole("button", { name: "Create tenant" }).click();
@@ -23,13 +24,15 @@ test.describe("admin console", () => {
     await expect(page.getByText(`Tenant · ${newTenantName}`)).toBeVisible();
 
     await page.getByTestId("tenant-switcher").click();
-    await page.getByRole("option", { name: /QA Sandbox/i }).press("Enter");
+    await page.getByRole("option", { name: /QA Sandbox/i }).click();
     await expect(page.getByRole("region", { name: /Notifications/i }).getByRole("status").first()).toContainText("Active tenant updated");
     await expect.poll(async () => {
       const cookies = await page.context().cookies();
       return cookies.find((cookie) => cookie.name === "admin_active_tenant")?.value;
     }, { timeout: 10_000 }).toBe(tenantId);
-    await page.goto("/admin/clients");
+    await page.getByTestId("tenant-switcher").click();
+    await expect(page.getByTestId("tenant-option-tenant_qa")).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Escape");
 
     await page.getByRole("link", { name: "Add client" }).click();
     await page.getByLabel("Client name").fill("Playwright Client");
@@ -48,16 +51,38 @@ test.describe("admin console", () => {
     await expect(page.getByText("https://pw.example.test/alt")).toBeVisible();
 
     await page.getByRole("button", { name: "Rotate secret" }).click();
-    await expect(page.getByText("Client secret rotated")).toBeVisible();
-    await expect(page.getByText("New client secret")).toBeVisible();
+    await expect(page.getByText(/^Client secret rotated$/)).toBeVisible();
+    await expect(page.getByText(/^New client secret$/)).toBeVisible();
 
-    const copyAllButton = page.getByTestId("oauth-copy-all-btn");
-    await copyAllButton.click();
-    await expect(copyAllButton).toHaveText("Copied");
+    const requiredSection = page.getByTestId("oauth-required");
+    await expect(requiredSection.getByText(/^Required$/)).toBeVisible();
+    await expect(requiredSection.getByText(/^Client ID$/)).toBeVisible();
+    const optionalSection = page.getByTestId("oauth-optional");
+    await expect(optionalSection.getByText(/^JWKS$/)).toBeVisible();
+
+    const copyRequiredButton = page.getByTestId("oauth-copy-required-btn");
+    await copyRequiredButton.click();
+    await expect(copyRequiredButton).toHaveText("Copied");
 
     const redirectRow = page.getByRole("row", { name: /https:\/\/pw\.example\.test\/alt/ });
     await redirectRow.getByRole("button", { name: "Remove" }).click();
     await expect(redirectRow).toHaveCount(0);
+
+    await page.getByRole("link", { name: "← Back to clients" }).click();
+    const searchInput = page.getByTestId("clients-search-input");
+    await searchInput.fill("Playwright Client");
+    await expect(page).toHaveURL(/q=Playwright%20Client/);
+    await expect(page.getByRole("row", { name: /Playwright Client/ })).toBeVisible();
+
+    await searchInput.fill("Totally Missing");
+    await expect(page).toHaveURL(/q=Totally%20Missing/);
+    await expect(page.getByText(/No clients match/i)).toBeVisible();
+
+    await searchInput.fill("");
+    await expect(page).toHaveURL(/\/admin\/clients$/);
+
+    await page.getByTestId("logout-button").click();
+    await page.waitForURL("**/api/auth/signin**");
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 import { SidebarNav } from "@/app/admin/_components/sidebar-nav";
 import { TenantSwitcher } from "@/app/admin/_components/tenant-controls";
@@ -32,6 +33,10 @@ const NAV_ITEMS = [
 ];
 
 export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Props) {
+  const handleLogout = () => {
+    void signOut({ callbackUrl: "/api/auth/signin" });
+  };
+
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="border-b px-6 py-5">
@@ -63,7 +68,18 @@ export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Pro
         </div>
       </ScrollArea>
       <div className="border-t px-4 py-5">
-        <UserBadge user={user} />
+        <div className="flex items-center justify-between gap-3">
+          <UserBadge user={user} />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
+        </div>
       </div>
     </div>
   );

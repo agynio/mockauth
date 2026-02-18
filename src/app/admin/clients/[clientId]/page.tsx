@@ -36,15 +36,17 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, activeTenant.id);
-  const parameterItems = [
-    { label: "Tenant ID", value: activeTenant.id },
+  const requiredParameters = [
     { label: "Issuer", value: urls.issuer },
     { label: "Discovery (.well-known)", value: urls.discovery },
-    { label: "JWKS", value: urls.jwks },
     { label: "Authorize endpoint", value: urls.authorize },
     { label: "Token endpoint", value: urls.token },
-    { label: "Userinfo endpoint", value: urls.userinfo },
     { label: "Client ID", value: client.clientId },
+  ];
+  const optionalParameters = [
+    { label: "JWKS", value: urls.jwks },
+    { label: "Userinfo endpoint", value: urls.userinfo },
+    { label: "Tenant ID", value: activeTenant.id },
   ];
 
   return (
@@ -67,24 +69,54 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>OAuth parameters</CardTitle>
-              <CardDescription>Copy issuer metadata for relying parties.</CardDescription>
-            </div>
-            <CopyBundleButton items={parameterItems} label="Copy all" />
+          <CardHeader>
+            <CardTitle>OAuth parameters</CardTitle>
+            <CardDescription>Copy issuer metadata for relying parties.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {parameterItems.map((item) => (
-                <CopyField key={item.label} label={item.label} value={item.value} />
-              ))}
-            </div>
-            {client.clientType === "CONFIDENTIAL" ? (
-              <RotateSecretForm clientId={client.id} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
-            )}
+          <CardContent className="space-y-8">
+            <section className="space-y-4" data-testid="oauth-required">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Required</p>
+                  <p className="text-xs text-muted-foreground">Include these in every integration.</p>
+                </div>
+                <CopyBundleButton
+                  items={requiredParameters}
+                  label="Copy bundle"
+                  ariaLabel="Copy required OAuth parameters"
+                  testId="oauth-copy-required-btn"
+                />
+              </div>
+              <div className="space-y-3">
+                {requiredParameters.map((item) => (
+                  <CopyField key={item.label} label={item.label} value={item.value} />
+                ))}
+                {client.clientType === "CONFIDENTIAL" ? (
+                  <RotateSecretForm clientId={client.id} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
+                )}
+              </div>
+            </section>
+            <section className="space-y-4" data-testid="oauth-optional">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Optional</p>
+                  <p className="text-xs text-muted-foreground">Provide when the RP needs additional context.</p>
+                </div>
+                <CopyBundleButton
+                  items={optionalParameters}
+                  label="Copy bundle"
+                  ariaLabel="Copy optional OAuth parameters"
+                  testId="oauth-copy-optional-btn"
+                />
+              </div>
+              <div className="space-y-3">
+                {optionalParameters.map((item) => (
+                  <CopyField key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            </section>
           </CardContent>
         </Card>
 
