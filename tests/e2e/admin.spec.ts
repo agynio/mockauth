@@ -58,13 +58,18 @@ test.describe("admin console", () => {
       .getByTestId("oauth-required")
       .locator("[data-field-label]")
       .evaluateAll((nodes) => nodes.map((node) => node?.getAttribute("data-field-label") ?? ""));
-    expect(requiredLabels).toEqual(["Client ID", "Issuer", "Authorization endpoint", "Token endpoint"]);
+    expect(requiredLabels).toEqual(["Tenant ID", "Client ID", "Issuer", "Authorization endpoint", "Token endpoint"]);
 
     const optionalLabels = await page
       .getByTestId("oauth-optional")
       .locator("[data-field-label]")
       .evaluateAll((nodes) => nodes.map((node) => node?.getAttribute("data-field-label") ?? ""));
     expect(optionalLabels).toEqual(["Discovery (.well-known)", "JWKS", "Userinfo"]);
+
+    const tenantIdField = page.getByTestId("oauth-field-tenant-id");
+    await expect(tenantIdField).toContainText("Tenant ID");
+    await tenantIdField.getByRole("button", { name: "Copy Tenant ID" }).click();
+    await expect(tenantIdField.getByText("Copied")).toBeVisible();
 
     await page.getByLabel("Redirect URI").fill("https://pw.example.test/alt");
     await page.getByRole("button", { name: /^Add$/ }).click();
