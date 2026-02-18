@@ -3,10 +3,10 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { formatDistanceToNow } from "date-fns";
 
+import { ClientSearchInput } from "@/app/admin/clients/client-search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
@@ -43,31 +43,22 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm uppercase tracking-wide text-muted-foreground">Tenant · {activeTenant.name}</p>
           <h1 className="text-3xl font-semibold tracking-tight">OAuth clients</h1>
           <p className="text-sm text-muted-foreground">Manage relying parties and their credentials.</p>
         </div>
-        <Button asChild>
-          <Link href="/admin/clients/new">Add client</Link>
-        </Button>
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
+          <div className="w-full sm:max-w-xs lg:w-72">
+            <ClientSearchInput initialQuery={query} />
+            <p className="mt-1 text-xs text-muted-foreground">Filters apply automatically.</p>
+          </div>
+          <Button asChild>
+            <Link href="/admin/clients/new">Add client</Link>
+          </Button>
+        </div>
       </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Search</CardTitle>
-          <CardDescription>Filter by client name or identifier.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 md:grid-cols-[1fr_auto]" action="/admin/clients">
-            <Input type="text" name="q" defaultValue={query} placeholder="Search by name or client_id" />
-            <Button type="submit" variant="outline">
-              Apply filters
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

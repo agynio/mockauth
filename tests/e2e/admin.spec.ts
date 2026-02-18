@@ -81,6 +81,26 @@ test.describe("admin console", () => {
     await searchInput.fill("");
     await expect(page).toHaveURL(/\/admin\/clients$/);
 
+    const paginationClients = Array.from({ length: 12 }, (_, index) => `Pagination Client ${index + 1}`);
+    await page.request.post("/api/test/clients", {
+      data: { tenantId, names: paginationClients },
+    });
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "OAuth clients" })).toBeVisible();
+
+    await page.getByRole("link", { name: "Next →" }).click();
+    await expect(page).toHaveURL(/page=2/);
+
+    await searchInput.fill("Pagination Client 11");
+    await expect(page).toHaveURL(/q=Pagination%20Client%2011/);
+    await expect(page).not.toHaveURL(/page=/);
+    await expect(page.getByRole("row", { name: /Pagination Client 11/ })).toBeVisible();
+
+    await searchInput.fill("");
+    await expect(page).toHaveURL(/\/admin\/clients$/);
+    await page.getByRole("link", { name: "Next →" }).click();
+    await expect(page).toHaveURL(/page=2/);
+
     await page.getByTestId("logout-button").click();
     await page.waitForURL("**/api/auth/signin**");
   });
