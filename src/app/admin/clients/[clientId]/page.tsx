@@ -37,16 +37,15 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, activeTenant.id);
   const requiredParameters = [
-    { label: "Issuer", value: urls.issuer },
-    { label: "Discovery (.well-known)", value: urls.discovery },
-    { label: "Authorize endpoint", value: urls.authorize },
-    { label: "Token endpoint", value: urls.token },
     { label: "Client ID", value: client.clientId },
+    { label: "Issuer", value: urls.issuer },
+    { label: "Authorization endpoint", value: urls.authorize },
+    { label: "Token endpoint", value: urls.token },
   ];
   const optionalParameters = [
+    { label: "Discovery (.well-known)", value: urls.discovery },
     { label: "JWKS", value: urls.jwks },
-    { label: "Userinfo endpoint", value: urls.userinfo },
-    { label: "Tenant ID", value: activeTenant.id },
+    { label: "Userinfo", value: urls.userinfo },
   ];
 
   return (
@@ -67,7 +66,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>OAuth parameters</CardTitle>
@@ -94,7 +93,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                 {client.clientType === "CONFIDENTIAL" ? (
                   <RotateSecretForm clientId={client.id} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
+                  <p className="text-xs text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
                 )}
               </div>
             </section>
@@ -102,7 +101,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Optional</p>
-                  <p className="text-xs text-muted-foreground">Provide when the RP needs additional context.</p>
+                  <p className="text-xs text-muted-foreground">Provide when the relying party needs extra context.</p>
                 </div>
                 <CopyBundleButton
                   items={optionalParameters}

@@ -10,9 +10,10 @@ type Props = {
   label: string;
   value: string;
   description?: string;
+  testId?: string;
 };
 
-export function CopyField({ label, value, description }: Props) {
+export function CopyField({ label, value, description, testId }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -26,7 +27,7 @@ export function CopyField({ label, value, description }: Props) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-testid={testId} data-field-label={label}>
       <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
         <span>{label}</span>
         <span
@@ -54,7 +55,7 @@ type BundleItem = { label: string; value: string };
 export function CopyBundleButton({
   items,
   label = "Copy all",
-  testId,
+  testId = "oauth-copy-all-btn",
   ariaLabel,
 }: {
   items: BundleItem[];
