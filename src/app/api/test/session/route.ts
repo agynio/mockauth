@@ -7,6 +7,10 @@ import { env, isProd } from "@/server/env";
 
 type Body = {
   tenantId?: string;
+  email?: string;
+  name?: string;
+  role?: "OWNER" | "WRITER" | "READER";
+  assignMembership?: boolean;
 };
 
 const DEFAULT_TENANT_ID = "tenant_qa";
@@ -19,20 +23,27 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as Body;
   const tenantId = payload.tenantId ?? DEFAULT_TENANT_ID;
 
+  const email = payload.email?.toLowerCase() || "pw-admin@example.test";
+  const name = payload.name ?? "Playwright Admin";
+
   const admin = await prisma.adminUser.upsert({
-    where: { email: "pw-admin@example.test" },
-    update: {},
+    where: { email },
+    update: { name },
     create: {
-      email: "pw-admin@example.test",
-      name: "Playwright Admin",
+      email,
+      name,
     },
   });
 
-  await prisma.tenantMembership.upsert({
-    where: { tenantId_adminUserId: { tenantId, adminUserId: admin.id } },
-    update: {},
-    create: { tenantId, adminUserId: admin.id, role: "OWNER" },
-  });
+  const shouldAssignMembership = payload.assignMembership ?? true;
+  if (shouldAssignMembership) {
+    const requestedRole = payload.role && ["OWNER", "WRITER", "READER"].includes(payload.role) ? payload.role : "OWNER";
+    await prisma.tenantMembership.upsert({
+      where: { tenantId_adminUserId: { tenantId, adminUserId: admin.id } },
+      update: { role: requestedRole },
+      create: { tenantId, adminUserId: admin.id, role: requestedRole },
+    });
+  }
 
   const sessionToken = randomUUID();
   await prisma.session.create({

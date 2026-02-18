@@ -14,7 +14,7 @@ export default async function NewClientPage() {
     redirect("/api/auth/signin");
   }
 
-  const { activeTenant } = await getAdminTenantContext(session.user.id);
+  const { activeTenant, activeMembership } = await getAdminTenantContext(session.user.id);
 
   if (!activeTenant) {
     return (
@@ -22,6 +22,23 @@ export default async function NewClientPage() {
         <CardHeader className="text-center">
           <CardTitle>Select a tenant</CardTitle>
           <CardDescription>Use the sidebar to create or activate a tenant before registering clients.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          <Button variant="outline" asChild>
+            <Link href="/admin/clients">Back to clients</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const role = activeMembership?.role ?? "READER";
+  if (role === "READER") {
+    return (
+      <Card className="border-destructive/30">
+        <CardHeader className="text-center">
+          <CardTitle>Read-only access</CardTitle>
+          <CardDescription>You need writer or owner privileges to create clients.</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
           <Button variant="outline" asChild>

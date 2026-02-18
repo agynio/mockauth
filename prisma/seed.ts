@@ -1,12 +1,15 @@
 import { hashSecret } from "@/server/crypto/hash";
-import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import { prisma } from "@/server/db/client";
+import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import { ensureActiveKey } from "@/server/services/key-service";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 const DEFAULT_TENANT_NAME = "QA Sandbox";
 const DEFAULT_CLIENT_ID = "qa-client";
 const DEFAULT_CLIENT_SECRET = "qa-secret";
+const OWNER_EMAIL = "owner@example.test";
+const WRITER_EMAIL = "writer@example.test";
+const READER_EMAIL = "reader@example.test";
 
 async function main() {
   const tenant = await prisma.tenant.upsert({
@@ -40,6 +43,42 @@ async function main() {
     where: { tenantId_username: { tenantId: tenant.id, username: "demo" } },
     update: {},
     create: { tenantId: tenant.id, username: "demo", displayName: "Demo User" },
+  });
+
+  const [owner, writer, reader] = await Promise.all([
+    prisma.adminUser.upsert({
+      where: { email: OWNER_EMAIL },
+      update: {},
+      create: { email: OWNER_EMAIL, name: "QA Owner" },
+    }),
+    prisma.adminUser.upsert({
+      where: { email: WRITER_EMAIL },
+      update: {},
+      create: { email: WRITER_EMAIL, name: "QA Writer" },
+    }),
+    prisma.adminUser.upsert({
+      where: { email: READER_EMAIL },
+      update: {},
+      create: { email: READER_EMAIL, name: "QA Reader" },
+    }),
+  ]);
+
+  await prisma.tenantMembership.upsert({
+    where: { tenantId_adminUserId: { tenantId: tenant.id, adminUserId: owner.id } },
+    update: { role: "OWNER" },
+    create: { tenantId: tenant.id, adminUserId: owner.id, role: "OWNER" },
+  });
+
+  await prisma.tenantMembership.upsert({
+    where: { tenantId_adminUserId: { tenantId: tenant.id, adminUserId: writer.id } },
+    update: { role: "WRITER" },
+    create: { tenantId: tenant.id, adminUserId: writer.id, role: "WRITER" },
+  });
+
+  await prisma.tenantMembership.upsert({
+    where: { tenantId_adminUserId: { tenantId: tenant.id, adminUserId: reader.id } },
+    update: { role: "READER" },
+    create: { tenantId: tenant.id, adminUserId: reader.id, role: "READER" },
   });
 }
 

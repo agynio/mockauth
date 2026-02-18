@@ -2,9 +2,23 @@ import type { Page } from "@playwright/test";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 
-export const createTestSession = async (page: Page, tenantId: string = DEFAULT_TENANT_ID) => {
+type SessionOptions = {
+  tenantId?: string;
+  email?: string;
+  name?: string;
+  role?: "OWNER" | "WRITER" | "READER";
+  assignMembership?: boolean;
+};
+
+export const createTestSession = async (page: Page, options: SessionOptions = {}) => {
   const response = await page.request.post("/api/test/session", {
-    data: { tenantId },
+    data: {
+      tenantId: options.tenantId ?? DEFAULT_TENANT_ID,
+      email: options.email,
+      name: options.name,
+      role: options.role,
+      assignMembership: options.assignMembership,
+    },
   });
   if (!response.ok()) {
     throw new Error(`Failed to create test session: ${response.status()}`);
@@ -30,7 +44,12 @@ export const authenticate = async (page: Page, sessionToken: string) => {
 
 export const stubClipboard = async (page: Page) => {
   await page.addInitScript(() => {
-    const writeText = () => Promise.resolve();
+    const store: { value: string } = { value: "" };
+    const writeText = (text: string) => {
+      store.value = text;
+      (window as typeof window & { __mockClipboard?: string }).__mockClipboard = text;
+      return Promise.resolve();
+    };
     const stub = { writeText };
     if (navigator.clipboard) {
       navigator.clipboard.writeText = writeText;

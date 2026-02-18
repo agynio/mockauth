@@ -8,7 +8,7 @@ import { rotateKeyAction } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
-export const RotateKeyButton = ({ tenantId }: { tenantId: string }) => {
+export const RotateKeyButton = ({ tenantId, canRotate }: { tenantId: string; canRotate: boolean }) => {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -26,8 +26,14 @@ export const RotateKeyButton = ({ tenantId }: { tenantId: string }) => {
   };
 
   return (
-    <Button type="button" variant="secondary" onClick={handleRotate} disabled={pending} className="mt-4">
-      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Rotate signing key"}
+    <Button
+      type="button"
+      variant="secondary"
+      onClick={handleRotate}
+      disabled={pending || !canRotate}
+      className="mt-4"
+    >
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : canRotate ? "Rotate signing key" : "Owner access required"}
     </Button>
   );
 };
