@@ -3,6 +3,11 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { formatDistanceToNow } from "date-fns";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { listClients } from "@/server/services/client-service";
@@ -38,90 +43,112 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-sm uppercase tracking-wider text-slate-400">Tenant</p>
-        <h1 className="text-3xl font-semibold text-white">{activeTenant.name}</h1>
-        <p className="text-sm text-slate-400">Manage OAuth clients scoped to this tenant.</p>
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm uppercase tracking-wide text-muted-foreground">Tenant · {activeTenant.name}</p>
+          <h1 className="text-3xl font-semibold tracking-tight">OAuth clients</h1>
+          <p className="text-sm text-muted-foreground">Manage relying parties and their credentials.</p>
+        </div>
+        <Button asChild>
+          <Link href="/admin/clients/new">Add client</Link>
+        </Button>
       </header>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-slate-950/40 p-6 shadow-lg shadow-slate-950/50 lg:flex-row lg:items-center">
-        <form className="flex w-full flex-1 gap-3" action="/admin/clients">
-          <input
-            type="text"
-            name="q"
-            defaultValue={query}
-            placeholder="Search by name or client_id"
-            className="flex-1 rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-sm text-white placeholder:text-slate-500"
-          />
-          <button type="submit" className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
-            Search
-          </button>
-        </form>
-        <Link
-          href="/admin/clients/new"
-          className="inline-flex items-center justify-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-300"
-        >
-          Add client
-        </Link>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Search</CardTitle>
+          <CardDescription>Filter by client name or identifier.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-4 md:grid-cols-[1fr_auto]" action="/admin/clients">
+            <Input type="text" name="q" defaultValue={query} placeholder="Search by name or client_id" />
+            <Button type="submit" variant="outline">
+              Apply filters
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-      <section className="space-y-4">
-        {result.clients.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/40 p-10 text-center text-slate-400">
-            {query ? (
-              <p>
-                No clients match <span className="text-white">“{query}”</span>.
-              </p>
-            ) : (
-              <p>No clients yet. Create one to start an OIDC flow.</p>
-            )}
-          </div>
-        ) : (
-          <ul className="grid gap-4 md:grid-cols-2">
-            {result.clients.map((client) => (
-              <li key={client.id} className="rounded-2xl border border-white/5 bg-slate-900/40 p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-lg font-semibold text-white">{client.name}</p>
-                    <p className="text-xs font-mono text-slate-400">{client.clientId}</p>
-                  </div>
-                  <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs uppercase tracking-wide text-amber-200">
-                    {client.clientType.toLowerCase()}
-                  </span>
-                </div>
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                  <span>
-                    {client._count.redirectUris} redirect URI{client._count.redirectUris === 1 ? "" : "s"}
-                  </span>
-                  <span>
-                    Updated {formatDistanceToNow(client.updatedAt, { addSuffix: true })}
-                  </span>
-                </div>
-                <Link
-                  href={`/admin/clients/${client.id}`}
-                  className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-amber-300 hover:text-amber-200"
-                >
-                  View details
-                  <span aria-hidden>→</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Clients</CardTitle>
+          <CardDescription>
+            {result.clients.length === 0
+              ? "No clients yet. Create one to begin an OIDC flow."
+              : `${result.total} total · showing ${result.clients.length}`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {result.clients.length === 0 ? (
+            <EmptyClientsState hasQuery={Boolean(query)} query={query} />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead className="hidden sm:table-cell">Type</TableHead>
+                  <TableHead className="hidden md:table-cell">Redirects</TableHead>
+                  <TableHead className="hidden md:table-cell">Updated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {result.clients.map((client) => (
+                  <TableRow key={client.id}>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <p className="font-medium">{client.name}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{client.clientId}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
+                        {client.clientType.toLowerCase()}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {client._count.redirectUris} redirect URI{client._count.redirectUris === 1 ? "" : "s"}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {formatDistanceToNow(client.updatedAt, { addSuffix: true })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/admin/clients/${client.id}`}>Details →</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      {totalPages > 1 && (
-        <PaginationControls query={query} page={page} totalPages={totalPages} />
-      )}
+      {totalPages > 1 ? <PaginationControls query={query} page={page} totalPages={totalPages} /> : null}
     </div>
   );
 }
 
-const NoTenantState = () => (
-  <div className="space-y-4 rounded-2xl border border-dashed border-white/10 bg-slate-900/40 p-10 text-center">
-    <h2 className="text-2xl font-semibold text-white">No tenants yet</h2>
-    <p className="text-sm text-slate-400">Add a tenant from the sidebar to begin managing clients.</p>
+const EmptyClientsState = ({ hasQuery, query }: { hasQuery: boolean; query: string }) => (
+  <div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+    {hasQuery ? (
+      <p>
+        No clients match <span className="font-semibold">“{query}”</span>.
+      </p>
+    ) : (
+      <p>No clients yet. Create one to start an OIDC flow.</p>
+    )}
   </div>
+);
+
+const NoTenantState = () => (
+  <Card className="border-dashed">
+    <CardHeader className="text-center">
+      <CardTitle>No tenants yet</CardTitle>
+      <CardDescription>Create or activate a tenant from the sidebar to manage clients.</CardDescription>
+    </CardHeader>
+  </Card>
 );
 
 const PaginationControls = ({ query, page, totalPages }: { query: string; page: number; totalPages: number }) => {
@@ -131,24 +158,28 @@ const PaginationControls = ({ query, page, totalPages }: { query: string; page: 
   const nextHref = nextDisabled ? "#" : buildPageLink(query, page + 1);
 
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3 text-sm text-white">
-      <a
-        href={prevHref}
-        aria-disabled={prevDisabled}
-        className={`rounded-lg px-3 py-2 ${prevDisabled ? "pointer-events-none text-slate-500" : "hover:text-amber-200"}`}
-      >
-        ← Previous
-      </a>
-      <span className="text-xs uppercase tracking-wide text-slate-400">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3">
+      {prevDisabled ? (
+        <Button variant="outline" disabled>
+          ← Previous
+        </Button>
+      ) : (
+        <Button asChild variant="outline">
+          <Link href={prevHref}>← Previous</Link>
+        </Button>
+      )}
+      <span className="text-sm text-muted-foreground">
         Page {page} / {totalPages}
       </span>
-      <a
-        href={nextHref}
-        aria-disabled={nextDisabled}
-        className={`rounded-lg px-3 py-2 ${nextDisabled ? "pointer-events-none text-slate-500" : "hover:text-amber-200"}`}
-      >
-        Next →
-      </a>
+      {nextDisabled ? (
+        <Button variant="outline" disabled>
+          Next →
+        </Button>
+      ) : (
+        <Button asChild variant="outline">
+          <Link href={nextHref}>Next →</Link>
+        </Button>
+      )}
     </div>
   );
 };

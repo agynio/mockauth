@@ -1,14 +1,18 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { getServerSession } from "next-auth";
 import { format } from "date-fns";
 
 import { CopyBundleButton, CopyField } from "@/app/admin/_components/copy-field";
 import { AddRedirectForm, DeleteRedirectButton, RotateSecretForm, UpdateClientNameForm } from "@/app/admin/clients/[clientId]/client-forms";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
+import { getRequestOrigin } from "@/server/utils/request-origin";
 
 type PageParams = Promise<{ clientId: string }>;
 
@@ -30,7 +34,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     notFound();
   }
 
-  const origin = await resolveRequestOrigin();
+  const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, activeTenant.id);
   const parameterItems = [
     { label: "Tenant ID", value: activeTenant.id },
@@ -45,110 +49,108 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <Link href="/admin/clients" className="text-sm text-slate-400 hover:text-amber-200">
-          ← Back to clients
-        </Link>
-        <p className="text-xs uppercase tracking-wide text-slate-400">Tenant: {activeTenant.name}</p>
-        <UpdateClientNameForm clientId={client.id} initialName={client.name} />
-        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-wide text-white">
-          {client.clientType.toLowerCase()}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-3">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/admin/clients">← Back to clients</Link>
+          </Button>
+          <UpdateClientNameForm clientId={client.id} initialName={client.name} />
+          <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
+            {client.clientType.toLowerCase()}
+          </Badge>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <p className="font-semibold text-foreground">{activeTenant.name}</p>
+          <p className="font-mono text-xs">{activeTenant.id}</p>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-5 rounded-2xl border border-white/10 bg-slate-950/60 p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">OAuth parameters</h2>
-              <p className="text-sm text-slate-400">Copy endpoints and IDs for configuring relying parties.</p>
+              <CardTitle>OAuth parameters</CardTitle>
+              <CardDescription>Copy issuer metadata for relying parties.</CardDescription>
             </div>
-            <CopyBundleButton
-              items={parameterItems.map((item) => ({ label: item.label, value: item.value }))}
-              label="Copy all"
-            />
-          </div>
-          <div className="space-y-3">
-            {parameterItems.map((item) => (
-              <CopyField key={item.label} label={item.label} value={item.value} />
-            ))}
-          </div>
-          {client.clientType === "CONFIDENTIAL" ? (
-            <div className="rounded-xl border border-amber-300/40 bg-amber-300/5 p-4">
+            <CopyBundleButton items={parameterItems} label="Copy all" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              {parameterItems.map((item) => (
+                <CopyField key={item.label} label={item.label} value={item.value} />
+              ))}
+            </div>
+            {client.clientType === "CONFIDENTIAL" ? (
               <RotateSecretForm clientId={client.id} />
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">Public clients rely on PKCE and do not store secrets.</p>
-          )}
-        </section>
+            ) : (
+              <p className="text-sm text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
+            )}
+          </CardContent>
+        </Card>
 
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/60 p-6">
-          <h2 className="text-lg font-semibold text-white">Metadata</h2>
-          <dl className="grid gap-3 text-sm text-slate-300">
-            <MetadataRow label="Created at" value={format(client.createdAt, "PPPp")} />
-            <MetadataRow label="Updated" value={format(client.updatedAt, "PPPp")} />
-            <MetadataRow label="Grant types" value={client.allowedGrantTypes.join(", ")} />
-            <MetadataRow label="Response types" value={client.allowedResponseTypes.join(", ")} />
-            <MetadataRow label="Token endpoint auth" value={client.tokenEndpointAuthMethod} />
-            <MetadataRow label="PKCE required" value={client.pkceRequired ? "Yes" : "No"} />
-          </dl>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Metadata</CardTitle>
+            <CardDescription>Review grant configuration for audits.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-3 text-sm text-muted-foreground">
+              <MetadataRow label="Created" value={format(client.createdAt, "PPPp")} />
+              <MetadataRow label="Updated" value={format(client.updatedAt, "PPPp")} />
+              <MetadataRow label="Grant types" value={client.allowedGrantTypes.join(", ")} />
+              <MetadataRow label="Response types" value={client.allowedResponseTypes.join(", ")} />
+              <MetadataRow label="Token auth" value={client.tokenEndpointAuthMethod} />
+              <MetadataRow label="PKCE required" value={client.pkceRequired ? "Yes" : "No"} />
+            </dl>
+          </CardContent>
+        </Card>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/60 p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Redirect URIs</h2>
-            <p className="text-sm text-slate-400">Whitelist trusted callback URLs. Wildcards follow Mockauth rules.</p>
-          </div>
-        </div>
-        <AddRedirectForm clientId={client.id} />
-        {client.redirectUris.length === 0 ? (
-          <p className="text-sm text-slate-400">No redirect URIs configured yet.</p>
-        ) : (
-          <ul className="space-y-3">
-            {client.redirectUris.map((uri) => (
-              <li key={uri.id} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-slate-900/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-mono text-sm text-white">{uri.uri}</p>
-                  <p className="text-xs uppercase tracking-wide text-slate-400">{uri.type.toLowerCase()}</p>
-                </div>
-                <DeleteRedirectButton redirectId={uri.id} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Redirect URIs</CardTitle>
+          <CardDescription>Whitelist trusted callback URLs. Wildcards follow Mockauth rules.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <AddRedirectForm clientId={client.id} />
+          {client.redirectUris.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No redirect URIs configured yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>URI</TableHead>
+                  <TableHead className="hidden sm:table-cell">Type</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {client.redirectUris.map((uri) => (
+                  <TableRow key={uri.id}>
+                    <TableCell>
+                      <p className="font-mono text-sm">{uri.uri}</p>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-xs uppercase text-muted-foreground">{uri.type.toLowerCase()}</TableCell>
+                    <TableCell className="text-right">
+                      <DeleteRedirectButton redirectId={uri.id} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 const MetadataRow = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex items-center justify-between">
-    <span className="text-slate-500">{label}</span>
-    <span className="text-white">{value}</span>
+  <div className="flex items-center justify-between gap-4">
+    <span>{label}</span>
+    <span className="text-foreground">{value}</span>
   </div>
 );
-
-const resolveRequestOrigin = async () => {
-  const headerList = await headers();
-  const forwardedHost = headerList.get("x-forwarded-host") ?? headerList.get("host");
-  const proto = headerList.get("x-forwarded-proto") ?? "https";
-  if (forwardedHost) {
-    const host = forwardedHost.split(",")[0]?.trim();
-    if (host) {
-      return `${proto}://${host}`;
-    }
-  }
-
-  const fallback = process.env.NEXTAUTH_URL;
-  if (fallback) {
-    try {
-      return new URL(fallback).origin;
-    } catch {}
-  }
-  return "http://localhost:3000";
-};
 
 const buildOidcUrls = (origin: string, tenantId: string) => {
   const base = `${origin}/t/${tenantId}/oidc`;
