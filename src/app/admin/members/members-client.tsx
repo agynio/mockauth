@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import { Copy, Loader2, Trash2, UserPlus, XCircle } from "lucide-react";
 
@@ -15,7 +16,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -27,7 +27,6 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,12 +83,37 @@ type MembersClientProps = {
 };
 
 type InviteTokenMap = Record<string, string>;
+const INVITE_TOKEN_STORAGE_KEY = "mockauth:inviteTokens";
+
+const readInviteTokens = (): InviteTokenMap => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.sessionStorage.getItem(INVITE_TOKEN_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as InviteTokenMap) : {};
+  } catch {
+    return {};
+  }
+};
+
+const persistInviteTokens = (tokens: InviteTokenMap) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(INVITE_TOKEN_STORAGE_KEY, JSON.stringify(tokens));
+  } catch {
+    // ignore storage write errors
+  }
+};
 
 export function MembersClient({ tenantId, tenantName, viewerId, viewerRole, members, invites }: MembersClientProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [inviteTokens, setInviteTokens] = useState<InviteTokenMap>({});
+  const [inviteTokens, setInviteTokens] = useState<InviteTokenMap>(() => readInviteTokens());
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -105,6 +129,7 @@ export function MembersClient({ tenantId, tenantName, viewerId, viewerRole, memb
         toast({ variant: "destructive", title: "Unable to update member", description: response.error });
       } else {
         toast({ title: "Member updated" });
+        router.refresh();
       }
       setPendingMemberId(null);
     });
@@ -118,13 +143,19 @@ export function MembersClient({ tenantId, tenantName, viewerId, viewerRole, memb
         toast({ variant: "destructive", title: "Unable to remove member", description: response.error });
       } else {
         toast({ title: "Member removed" });
+        router.refresh();
       }
       setRemovingId(null);
     });
   };
 
   const handleInviteCreated = (inviteId: string, token: string) => {
-    setInviteTokens((prev) => ({ ...prev, [inviteId]: token }));
+    setInviteTokens((prev) => {
+      const next = { ...prev, [inviteId]: token };
+      persistInviteTokens(next);
+      return next;
+    });
+    router.refresh();
   };
 
   const handleCopyInvite = async (inviteId: string) => {
@@ -147,6 +178,13 @@ export function MembersClient({ tenantId, tenantName, viewerId, viewerRole, memb
         toast({ variant: "destructive", title: "Unable to revoke invite", description: response.error });
       } else {
         toast({ title: "Invite revoked" });
+        setInviteTokens((prev) => {
+          const next = { ...prev };
+          delete next[inviteId];
+          persistInviteTokens(next);
+          return next;
+        });
+        router.refresh();
       }
       setRevokeId(null);
     });
@@ -332,7 +370,6 @@ const InviteDialog = ({ tenantId, onInviteCreated }: { tenantId: string; onInvit
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<"WRITER" | "READER">("WRITER");
   const [expiresIn, setExpiresIn] = useState<InviteExpiryOption>("24");
-  const [result, setResult] = useState<{ inviteId: string; token: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const submit = () => {
@@ -342,17 +379,26 @@ const InviteDialog = ({ tenantId, onInviteCreated }: { tenantId: string; onInvit
         toast({ variant: "destructive", title: "Unable to create invite", description: response.error });
         return;
       }
+
+      const inviteLink = typeof window !== "undefined"
+        ? `${window.location.origin}/admin/invite/${response.data.inviteId}?token=${response.data.token}`
+        : "";
+
+      if (inviteLink) {
+        await navigator.clipboard.writeText(inviteLink).catch(() => undefined);
+      }
+
+      toast({ title: "Invite ready", description: inviteLink ? "Link copied to clipboard." : "Copy the link from the invites list." });
       onInviteCreated(response.data.inviteId, response.data.token);
-      setResult(response.data);
+      close();
     });
   };
 
   const close = () => {
     setOpen(false);
-    setResult(null);
+    setRole("WRITER");
+    setExpiresIn("24");
   };
-
-  const inviteLink = result ? `${typeof window !== "undefined" ? window.location.origin : ""}/admin/invite/${result.inviteId}?token=${result.token}` : "";
 
   return (
     <Dialog open={open} onOpenChange={(value) => (value ? setOpen(true) : close())}>
@@ -366,63 +412,40 @@ const InviteDialog = ({ tenantId, onInviteCreated }: { tenantId: string; onInvit
           <DialogTitle>Invite a collaborator</DialogTitle>
           <DialogDescription>Select a role and expiration for the invite link.</DialogDescription>
         </DialogHeader>
-        {result ? (
-          <div className="space-y-4">
-            <Alert>
-              <AlertTitle>Share this link</AlertTitle>
-              <AlertDescription>It will only be shown once. Copy it before closing.</AlertDescription>
-            </Alert>
-            <div className="flex items-center gap-2">
-              <Input value={inviteLink} readOnly data-testid="invite-link" />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigator.clipboard.writeText(inviteLink)}
-                data-testid="invite-copy-inline"
-              >
-                <Copy className="mr-2 h-4 w-4" /> Copy
-              </Button>
-            </div>
-            <DialogFooter>
-              <Button onClick={close}>Done</Button>
-            </DialogFooter>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Role</label>
+            <Select value={role} onValueChange={(value) => setRole(value as "WRITER" | "READER")}>
+              <SelectTrigger aria-label="Invite role">
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="WRITER">Writer</SelectItem>
+                <SelectItem value="READER">Reader</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Role</label>
-              <Select value={role} onValueChange={(value) => setRole(value as "WRITER" | "READER")}> 
-                <SelectTrigger aria-label="Invite role">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="WRITER">Writer</SelectItem>
-                  <SelectItem value="READER">Reader</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Expiration</label>
-              <Select value={expiresIn} onValueChange={(value) => setExpiresIn(value as InviteExpiryOption)}>
-                <SelectTrigger aria-label="Invite expiration">
-                  <SelectValue placeholder="Select duration" />
-                </SelectTrigger>
-                <SelectContent>
-                  {inviteExpiryOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option === "1" ? "1 hour" : option === "24" ? "24 hours" : "7 days"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button onClick={submit} disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create invite
-              </Button>
-            </DialogFooter>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Expiration</label>
+            <Select value={expiresIn} onValueChange={(value) => setExpiresIn(value as InviteExpiryOption)}>
+              <SelectTrigger aria-label="Invite expiration">
+                <SelectValue placeholder="Select duration" />
+              </SelectTrigger>
+              <SelectContent>
+                {inviteExpiryOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option === "1" ? "1 hour" : option === "24" ? "24 hours" : "7 days"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+          <DialogFooter>
+            <Button onClick={submit} disabled={isPending}>
+              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create invite
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
