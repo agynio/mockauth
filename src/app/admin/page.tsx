@@ -43,6 +43,7 @@ export default async function AdminPage() {
   const lastUpdated = clientSnapshot.clients[0]?.updatedAt;
   const issuer = `${origin}/t/${activeTenant.id}/oidc`;
 
+  const viewerRole = tenantContext.activeMembership?.role ?? "READER";
   const stats = [
     { label: "Tenants", value: tenantContext.memberships.length, helper: "total linked to this admin" },
     { label: "Clients", value: clientSnapshot.total, helper: `${activeTenant.name}` },
@@ -70,6 +71,10 @@ export default async function AdminPage() {
           <div>
             <p className="text-xs uppercase text-muted-foreground">Issuer</p>
             <p className="font-mono text-xs">{issuer}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-muted-foreground">Your role</p>
+            <p className="text-sm font-semibold capitalize">{viewerRole.toLowerCase()}</p>
           </div>
         </CardContent>
       </Card>
@@ -108,7 +113,7 @@ export default async function AdminPage() {
             ) : (
               <p className="text-sm text-muted-foreground">No active signing key found.</p>
             )}
-            <RotateKeyButton tenantId={activeTenant.id} />
+            <RotateKeyButton tenantId={activeTenant.id} canRotate={viewerRole === "OWNER"} />
           </CardContent>
         </Card>
 

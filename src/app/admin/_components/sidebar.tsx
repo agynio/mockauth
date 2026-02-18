@@ -29,7 +29,7 @@ type Props = {
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", description: "Tenant keys and SSO stats" },
   { href: "/admin/clients", label: "Clients", description: "Manage OAuth clients" },
-  { href: "/admin/logs", label: "Logs", description: "Audit log (soon)" },
+  { href: "/admin/members", label: "Members", description: "Collaborate with your team" },
 ];
 
 export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Props) {

@@ -27,11 +27,14 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
   const pageParam = typeof resolved?.page === "string" ? Number.parseInt(resolved.page, 10) : 1;
   const page = Number.isNaN(pageParam) ? 1 : Math.max(1, pageParam);
 
-  const { activeTenant } = await getAdminTenantContext(session.user.id);
+  const { activeTenant, activeMembership } = await getAdminTenantContext(session.user.id);
 
   if (!activeTenant) {
     return <NoTenantState />;
   }
+
+  const viewerRole = activeMembership?.role ?? "READER";
+  const canManageClients = viewerRole === "OWNER" || viewerRole === "WRITER";
 
   const result = await listClients(activeTenant.id, {
     search: query || undefined,
@@ -48,15 +51,22 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
           <p className="text-sm uppercase tracking-wide text-muted-foreground">Tenant · {activeTenant.name}</p>
           <h1 className="text-3xl font-semibold tracking-tight">OAuth clients</h1>
           <p className="text-sm text-muted-foreground">Manage relying parties and their credentials.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Your role: {viewerRole.toLowerCase()}.</p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
           <div className="w-full sm:max-w-xs lg:w-72">
             <ClientSearchInput initialQuery={query} />
             <p className="mt-1 text-xs text-muted-foreground">Filters apply automatically.</p>
           </div>
-          <Button asChild>
-            <Link href="/admin/clients/new">Add client</Link>
-          </Button>
+          {canManageClients ? (
+            <Button asChild>
+              <Link href="/admin/clients/new">Add client</Link>
+            </Button>
+          ) : (
+            <Button variant="outline" disabled>
+              Read-only access
+            </Button>
+          )}
         </div>
       </header>
 

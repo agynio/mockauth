@@ -18,11 +18,20 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
 const redirectSchema = z.object({ uri: z.string().url("Enter a valid URL") });
 
-export function UpdateClientNameForm({ clientId, initialName }: { clientId: string; initialName: string }) {
+export function UpdateClientNameForm({
+  clientId,
+  initialName,
+  canEdit,
+}: {
+  clientId: string;
+  initialName: string;
+  canEdit: boolean;
+}) {
   const router = useRouter();
   const form = useForm<z.infer<typeof nameSchema>>({ resolver: zodResolver(nameSchema), defaultValues: { name: initialName } });
   const [pending, startTransition] = useTransition();
@@ -54,25 +63,39 @@ export function UpdateClientNameForm({ clientId, initialName }: { clientId: stri
             <FormItem className="space-y-1">
               <FormLabel className="text-xs text-muted-foreground">Client name</FormLabel>
               <FormControl>
-                <Input {...field} />
+                <Input {...field} disabled={!canEdit || pending} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={pending} className="self-end">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
-        </Button>
+        {canEdit ? (
+          <Button type="submit" disabled={pending} className="self-end">
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled className="self-end">
+            Read-only
+          </Button>
+        )}
       </form>
     </Form>
   );
 }
 
-export function RotateSecretForm({ clientId }: { clientId: string }) {
+export function RotateSecretForm({ clientId, canRotate }: { clientId: string; canRotate: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const { toast } = useToast();
+
+  if (!canRotate) {
+    return (
+      <Alert>
+        <AlertDescription>Client secrets can only be rotated by owners or writers.</AlertDescription>
+      </Alert>
+    );
+  }
 
   const rotate = () => {
     startTransition(async () => {
@@ -105,7 +128,7 @@ export function RotateSecretForm({ clientId }: { clientId: string }) {
   );
 }
 
-export function AddRedirectForm({ clientId }: { clientId: string }) {
+export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
   const router = useRouter();
   const form = useForm<z.infer<typeof redirectSchema>>({ resolver: zodResolver(redirectSchema), defaultValues: { uri: "" } });
   const [pending, startTransition] = useTransition();
@@ -134,13 +157,13 @@ export function AddRedirectForm({ clientId }: { clientId: string }) {
             <FormItem>
               <FormLabel>Redirect URI</FormLabel>
               <FormControl>
-                <Input placeholder="https://app.example.com/callback" {...field} />
+                <Input placeholder="https://app.example.com/callback" {...field} disabled={!canEdit || pending} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={pending} className="self-end">
+        <Button type="submit" disabled={!canEdit || pending} className="self-end">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
         </Button>
       </form>
@@ -148,7 +171,7 @@ export function AddRedirectForm({ clientId }: { clientId: string }) {
   );
 }
 
-export function DeleteRedirectButton({ redirectId }: { redirectId: string }) {
+export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -166,7 +189,14 @@ export function DeleteRedirectButton({ redirectId }: { redirectId: string }) {
   };
 
   return (
-    <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={handleDelete} disabled={pending}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="text-destructive"
+      onClick={handleDelete}
+      disabled={pending || !canEdit}
+    >
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       {!pending && <span className="ml-1 text-sm">Remove</span>}
     </Button>

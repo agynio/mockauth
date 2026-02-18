@@ -1,7 +1,25 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { MembershipRole, Prisma, TenantMembership } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
 import { rotateKey } from "@/server/services/key-service";
+
+const ROLE_RANK: Record<MembershipRole, number> = {
+  OWNER: 3,
+  WRITER: 2,
+  READER: 1,
+};
+
+export const isOwnerRole = (role: MembershipRole): boolean => role === "OWNER";
+
+export const ensureMembershipRole = (role: MembershipRole, allowedRoles: MembershipRole[]) => {
+  if (!allowedRoles.includes(role)) {
+    throw new DomainError("You do not have permission to perform this action", { status: 403, code: "forbidden" });
+  }
+};
+
+export const maxRole = (left: MembershipRole, right: MembershipRole): MembershipRole => {
+  return ROLE_RANK[left] >= ROLE_RANK[right] ? left : right;
+};
 
 export const getActiveTenantById = async (tenantId: string) => {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -21,7 +39,7 @@ export const getTenantMemberships = async (adminUserId: string): Promise<Members
   });
 };
 
-export const assertTenantMembership = async (adminUserId: string, tenantId: string) => {
+export const assertTenantMembership = async (adminUserId: string, tenantId: string): Promise<TenantMembership> => {
   const membership = await prisma.tenantMembership.findUnique({
     where: { tenantId_adminUserId: { tenantId, adminUserId } },
   });
@@ -30,6 +48,16 @@ export const assertTenantMembership = async (adminUserId: string, tenantId: stri
     throw new DomainError("You are not a member of this tenant", { status: 403 });
   }
 
+  return membership;
+};
+
+export const assertTenantRole = async (
+  adminUserId: string,
+  tenantId: string,
+  allowedRoles: MembershipRole[],
+): Promise<TenantMembership> => {
+  const membership = await assertTenantMembership(adminUserId, tenantId);
+  ensureMembershipRole(membership.role, allowedRoles);
   return membership;
 };
 

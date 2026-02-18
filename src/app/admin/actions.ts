@@ -4,12 +4,26 @@ import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 
+import { addHours } from "date-fns";
+
+import type { MembershipRole } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { authOptions } from "@/server/auth/options";
-import { addRedirectUri, createClient, rotateClientSecret, updateClientName } from "@/server/services/client-service";
+import {
+  addRedirectUri,
+  createClient,
+  rotateClientSecret,
+  updateClientName,
+} from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
 import { setAdminActiveTenantCookie } from "@/server/services/admin-tenant-context";
-import { assertTenantMembership, createTenant } from "@/server/services/tenant-service";
+import {
+  assertTenantMembership,
+  assertTenantRole,
+  ensureMembershipRole,
+  createTenant,
+} from "@/server/services/tenant-service";
+import { createInvite, removeMember, revokeInvite, updateMemberRole } from "@/server/services/membership-service";
 
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
@@ -28,6 +42,20 @@ const rotateSecretSchema = z.object({ clientId: z.string().min(1) });
 const redirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
+const membershipRoleSchema = z.enum(["OWNER", "WRITER", "READER"]);
+const inviteRoleSchema = z.enum(["WRITER", "READER"]);
+const updateMemberRoleSchema = z.object({
+  tenantId: z.string().min(1),
+  membershipId: z.string().min(1),
+  role: membershipRoleSchema,
+});
+const removeMemberSchema = z.object({ tenantId: z.string().min(1), membershipId: z.string().min(1) });
+const createInviteSchema = z.object({
+  tenantId: z.string().min(1),
+  role: inviteRoleSchema,
+  expiresInHours: z.enum(["1", "24", "168"]),
+});
+const revokeInviteSchema = z.object({ tenantId: z.string().min(1), inviteId: z.string().min(1) });
 
 const requireSession = async () => {
   const session = await getServerSession(authOptions);
@@ -39,7 +67,7 @@ const requireSession = async () => {
 
 const clientPath = (clientId: string) => `/admin/clients/${clientId}`;
 
-const getClientForAdmin = async (clientId: string, adminId: string) => {
+const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles?: MembershipRole[]) => {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     select: { id: true, tenantId: true, clientType: true },
@@ -47,7 +75,10 @@ const getClientForAdmin = async (clientId: string, adminId: string) => {
   if (!client) {
     return null;
   }
-  await assertTenantMembership(adminId, client.tenantId);
+  const membership = await assertTenantMembership(adminId, client.tenantId);
+  if (allowedRoles) {
+    ensureMembershipRole(membership.role, allowedRoles);
+  }
   return client;
 };
 
@@ -65,7 +96,8 @@ export const createTenantAction = async (input: z.infer<typeof tenantSchema>): P
     await setAdminActiveTenantCookie(tenant.id);
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
-    return { success: `Tenant ${tenant.name} created` };
+    revalidatePath("/admin/members");
+    return { success: "Tenant created" };
   } catch (error) {
     console.error(error);
     return { error: "Failed to create tenant" };
@@ -80,6 +112,7 @@ export const setActiveTenantAction = async (input: z.infer<typeof setTenantSchem
     await setAdminActiveTenantCookie(parsed.tenantId);
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
+    revalidatePath("/admin/members");
     return { success: "Active tenant updated" };
   } catch (error) {
     console.error(error);
@@ -93,7 +126,8 @@ export const createClientAction = async (
   try {
     const adminId = await requireSession();
     const parsed = clientSchema.parse(input);
-    await assertTenantMembership(adminId, parsed.tenantId);
+    const membership = await assertTenantMembership(adminId, parsed.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
     const redirectEntries = parsed.redirects?.filter(Boolean);
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
@@ -117,7 +151,7 @@ export const rotateKeyAction = async (input: z.infer<typeof keySchema>): Promise
   try {
     const adminId = await requireSession();
     const parsed = keySchema.parse(input);
-    await assertTenantMembership(adminId, parsed.tenantId);
+    await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
     await rotateKey(parsed.tenantId);
     revalidatePath("/admin", "layout");
     return { success: "Signing key rotated" };
@@ -133,7 +167,7 @@ export const rotateClientSecretAction = async (
   try {
     const adminId = await requireSession();
     const parsed = rotateSecretSchema.parse(input);
-    const client = await getClientForAdmin(parsed.clientId, adminId);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {
       return { error: "Client not found" };
     }
@@ -153,7 +187,7 @@ export const addRedirectUriAction = async (input: z.infer<typeof redirectSchema>
   try {
     const adminId = await requireSession();
     const parsed = redirectSchema.parse(input);
-    const client = await getClientForAdmin(parsed.clientId, adminId);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {
       return { error: "Client not found" };
     }
@@ -170,7 +204,7 @@ export const updateClientNameAction = async (input: z.infer<typeof updateClientS
   try {
     const adminId = await requireSession();
     const parsed = updateClientSchema.parse(input);
-    const client = await getClientForAdmin(parsed.clientId, adminId);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {
       return { error: "Client not found" };
     }
@@ -195,12 +229,78 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
     if (!redirect) {
       return { error: "Redirect not found" };
     }
-    await assertTenantMembership(adminId, redirect.client.tenantId);
+    const membership = await assertTenantMembership(adminId, redirect.client.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
     await prisma.redirectUri.delete({ where: { id: redirect.id } });
     revalidatePath(clientPath(redirect.clientId));
     return { success: "Redirect removed" };
   } catch (error) {
     console.error(error);
     return { error: "Unable to remove redirect" };
+  }
+};
+
+export const updateMemberRoleAction = async (input: z.infer<typeof updateMemberRoleSchema>): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateMemberRoleSchema.parse(input);
+    await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
+    await updateMemberRole(parsed.tenantId, parsed.membershipId, parsed.role);
+    revalidatePath("/admin/members");
+    return { success: "Member updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update member" };
+  }
+};
+
+export const removeMemberAction = async (input: z.infer<typeof removeMemberSchema>): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = removeMemberSchema.parse(input);
+    await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
+    await removeMember(parsed.tenantId, parsed.membershipId);
+    revalidatePath("/admin/members");
+    return { success: "Member removed" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to remove member" };
+  }
+};
+
+export const createInviteAction = async (
+  input: z.infer<typeof createInviteSchema>,
+): Promise<ActionState<{ inviteId: string; token: string }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = createInviteSchema.parse(input);
+    await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
+    const expiresIn = Number(parsed.expiresInHours);
+    const expiresAt = addHours(new Date(), expiresIn);
+    const { invite, token } = await createInvite({
+      tenantId: parsed.tenantId,
+      role: parsed.role,
+      createdByUserId: adminId,
+      expiresAt,
+    });
+    revalidatePath("/admin/members");
+    return { success: "Invite created", data: { inviteId: invite.id, token } };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to create invite" };
+  }
+};
+
+export const revokeInviteAction = async (input: z.infer<typeof revokeInviteSchema>): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = revokeInviteSchema.parse(input);
+    await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
+    await revokeInvite(parsed.tenantId, parsed.inviteId);
+    revalidatePath("/admin/members");
+    return { success: "Invite revoked" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to revoke invite" };
   }
 };

@@ -23,7 +23,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   }
 
   const { clientId } = await params;
-  const { activeTenant } = await getAdminTenantContext(session.user.id);
+  const { activeTenant, activeMembership } = await getAdminTenantContext(session.user.id);
 
   if (!activeTenant) {
     redirect("/admin/clients");
@@ -33,6 +33,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   if (!client) {
     notFound();
   }
+
+  const viewerRole = activeMembership?.role ?? "READER";
+  const canManageClients = viewerRole === "OWNER" || viewerRole === "WRITER";
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, activeTenant.id);
@@ -58,7 +61,8 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           <Button asChild variant="ghost" size="sm">
             <Link href="/admin/clients">← Back to clients</Link>
           </Button>
-          <UpdateClientNameForm clientId={client.id} initialName={client.name} />
+          <UpdateClientNameForm clientId={client.id} initialName={client.name} canEdit={canManageClients} />
+          {!canManageClients && <p className="text-xs text-muted-foreground">Read-only access.</p>}
           <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
             {client.clientType.toLowerCase()}
           </Badge>
@@ -98,7 +102,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                   testId={requiredFields[0].testId}
                 />
                 {client.clientType === "CONFIDENTIAL" ? (
-                  <RotateSecretForm clientId={client.id} />
+                  <RotateSecretForm clientId={client.id} canRotate={canManageClients} />
                 ) : (
                   <p className="text-xs text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
                 )}
@@ -153,7 +157,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           <CardDescription>Whitelist trusted callback URLs. Wildcards follow Mockauth rules.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <AddRedirectForm clientId={client.id} />
+          <AddRedirectForm clientId={client.id} canEdit={canManageClients} />
           {client.redirectUris.length === 0 ? (
             <p className="text-sm text-muted-foreground">No redirect URIs configured yet.</p>
           ) : (
@@ -173,7 +177,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-xs uppercase text-muted-foreground">{uri.type.toLowerCase()}</TableCell>
                     <TableCell className="text-right">
-                      <DeleteRedirectButton redirectId={uri.id} />
+                      <DeleteRedirectButton redirectId={uri.id} canEdit={canManageClients} />
                     </TableCell>
                   </TableRow>
                 ))}
