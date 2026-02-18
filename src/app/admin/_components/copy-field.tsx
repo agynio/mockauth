@@ -51,7 +51,17 @@ export function CopyField({ label, value, description }: Props) {
 
 type BundleItem = { label: string; value: string };
 
-export function CopyBundleButton({ items, label = "Copy all" }: { items: BundleItem[]; label?: string }) {
+export function CopyBundleButton({
+  items,
+  label = "Copy all",
+  testId,
+  ariaLabel,
+}: {
+  items: BundleItem[];
+  label?: string;
+  testId?: string;
+  ariaLabel?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const payload = useMemo(() => {
     return items
@@ -79,8 +89,8 @@ export function CopyBundleButton({ items, label = "Copy all" }: { items: BundleI
       variant="outline"
       onClick={handleCopy}
       disabled={!payload}
-      aria-label="Copy all OAuth parameters"
-      data-testid="oauth-copy-all-btn"
+      aria-label={ariaLabel ?? label}
+      data-testid={testId}
     >
       {copied ? "Copied" : label}
     </Button>

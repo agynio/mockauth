@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Menu } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,9 @@ type AdminShellProps = {
 
 export function AdminShell({ children, user, tenants, activeTenantId }: AdminShellProps) {
   const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
+  const handleLogout = () => {
+    void signOut({ callbackUrl: "/api/auth/signin" });
+  };
 
   return (
     <div className="flex min-h-screen bg-muted/20">
@@ -60,6 +64,27 @@ export function AdminShell({ children, user, tenants, activeTenantId }: AdminShe
             </div>
             <div className="ml-auto flex items-center gap-2">
               <ModeToggle />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={handleLogout}
+                aria-label="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="hidden md:inline-flex"
+                onClick={handleLogout}
+                data-testid="logout-button"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </Button>
             </div>
           </div>
         </header>

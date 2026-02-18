@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { createTenantAction, setActiveTenantAction } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -39,6 +38,7 @@ export function TenantSwitcher({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
   const [optimisticTenantId, setOptimisticTenantId] = useState<string | null>(null);
@@ -46,6 +46,13 @@ export function TenantSwitcher({
   const fallbackTenantId = tenants[0]?.id ?? "";
   const selectedTenantId = optimisticTenantId ?? activeTenantId ?? fallbackTenantId;
   const activeTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
+  const filteredTenants = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      return tenants;
+    }
+    return tenants.filter((tenant) => tenant.name.toLowerCase().includes(query) || tenant.id.toLowerCase().includes(query));
+  }, [search, tenants]);
 
   const handleSelect = (tenantId: string) => {
     setOptimisticTenantId(tenantId);
@@ -90,41 +97,63 @@ export function TenantSwitcher({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Search tenants..." />
-            <CommandEmpty>
-              {tenants.length === 0 ? "No tenants yet. Create one to get started." : "No tenants match your search."}
-            </CommandEmpty>
-            <CommandList>
-              <CommandGroup heading="Tenants">
-                {tenants.map((tenant) => (
-                  <CommandItem
-                    key={tenant.id}
-                    value={tenant.id}
-                    onSelect={(value) => handleSelect(value)}
-                    className="flex flex-col items-start"
-                  >
-                    <span className="text-sm font-medium">{tenant.name}</span>
-                    <span className="text-xs text-muted-foreground">{tenant.id}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-              <CommandSeparator />
-              <CommandGroup heading="Actions">
-                <CommandItem
-                  onSelect={() => {
-                    setOpen(false);
-                    onAddTenant();
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add tenant
-                </CommandItem>
-              </CommandGroup>
-            </CommandList>
-          </Command>
+        <PopoverContent className="w-[320px] space-y-3 p-3" align="start" sideOffset={8}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search tenants..."
+              className="pl-10"
+              data-testid="tenant-search"
+            />
+          </div>
+          <div className="rounded-md border">
+            {filteredTenants.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground">
+                {tenants.length === 0 ? "No tenants yet. Create one to get started." : "No tenants match your search."}
+              </div>
+            ) : (
+              <div className="max-h-60 divide-y overflow-y-auto" role="listbox" aria-label="Tenants">
+                {filteredTenants.map((tenant) => {
+                  const selected = tenant.id === selectedTenantId;
+                  return (
+                    <button
+                      key={tenant.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => handleSelect(tenant.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-muted",
+                        selected && "bg-muted text-foreground",
+                      )}
+                      data-testid={`tenant-option-${tenant.id}`}
+                    >
+                      <span className="flex flex-col">
+                        <span className="font-medium">{tenant.name}</span>
+                        <span className="text-xs text-muted-foreground">{tenant.id}</span>
+                      </span>
+                      {selected ? <Check className="h-4 w-4" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-center gap-2"
+            onClick={() => {
+              setOpen(false);
+              onAddTenant();
+            }}
+            data-testid="tenant-option-add"
+          >
+            <Plus className="h-4 w-4" />
+            Add tenant
+          </Button>
         </PopoverContent>
       </Popover>
     </div>
