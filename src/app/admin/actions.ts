@@ -78,6 +78,12 @@ export const setActiveTenantAction = async (input: z.infer<typeof setTenantSchem
     const parsed = setTenantSchema.parse(input);
     await assertTenantMembership(adminId, parsed.tenantId);
     await setAdminActiveTenantCookie(parsed.tenantId);
+    if (process.env.NODE_ENV !== "test") {
+      console.info("[tenant-switch] setActiveTenantAction", {
+        adminId,
+        tenantId: parsed.tenantId,
+      });
+    }
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     return { success: "Active tenant updated" };
