@@ -28,13 +28,14 @@ test.describe("tenant switching", () => {
     await switchTenant(page, seed.tenantAId, seed.tenantAName);
     await expectClientsVisible(page, seed.clientsA.map((client) => client.name));
     await expectClientsHidden(page, seed.clientsB.map((client) => client.name));
+    await expectTenantCookie(page, seed.tenantAId);
+    await expectActiveTenant(page, seed.tenantAId);
 
     await switchTenant(page, seed.tenantBId, seed.tenantBName);
     await expectClientsVisible(page, seed.clientsB.map((client) => client.name));
     await expectClientsHidden(page, seed.clientsA.map((client) => client.name));
-
-    const activeTenantId = await getActiveTenantId(page);
-    expect(activeTenantId).toBe(seed.tenantBId);
+    await expectTenantCookie(page, seed.tenantBId);
+    await expectActiveTenant(page, seed.tenantBId);
   });
 });
 
@@ -75,8 +76,8 @@ const expectClientsHidden = async (page: Page, clientNames: string[]) => {
   }
 };
 
-const getActiveTenantId = async (page: Page) => {
-  return page.evaluate<string | null>(async () => {
+const expectActiveTenant = async (page: Page, tenantId: string) => {
+  const activeTenantId = await page.evaluate<string | null>(async () => {
     const response = await fetch("/admin/api/test/active-tenant", {
       credentials: "include",
     });
@@ -86,6 +87,14 @@ const getActiveTenantId = async (page: Page) => {
     const payload = (await response.json()) as { activeTenantId: string | null };
     return payload.activeTenantId;
   });
+  expect(activeTenantId).toBe(tenantId);
+};
+
+const expectTenantCookie = async (page: Page, tenantId: string) => {
+  await expect.poll(async () => {
+    const cookies = await page.context().cookies();
+    return cookies.find((cookie) => cookie.name === "admin_active_tenant")?.value ?? null;
+  }, { timeout: 10_000 }).toBe(tenantId);
 };
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -18,7 +18,10 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
   return (
     <ul className="space-y-1.5">
       {items.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isRootPath = item.href === "/admin";
+        const isActive = isRootPath
+          ? pathname === item.href
+          : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <li key={item.href}>
             <Link

@@ -68,14 +68,9 @@ export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Pro
         </div>
       </ScrollArea>
       <div className="border-t px-4 py-5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="space-y-4">
           <UserBadge user={user} />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-          >
+          <Button type="button" variant="outline" className="w-full" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Logout
           </Button>

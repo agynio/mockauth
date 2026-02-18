@@ -29,8 +29,8 @@ export function AdminShell({ children, user, tenants, activeTenantId }: AdminShe
   };
 
   return (
-    <div className="flex min-h-screen bg-muted/20">
-      <aside className="hidden border-r bg-background/95 md:block md:w-72">
+    <div className="flex h-screen overflow-hidden bg-muted/20">
+      <aside className="hidden h-full border-r bg-background/95 md:flex md:w-72 md:flex-col">
         <AdminSidebar
           user={user}
           tenants={tenants}
@@ -39,8 +39,8 @@ export function AdminShell({ children, user, tenants, activeTenantId }: AdminShe
         />
       </aside>
 
-      <div className="flex flex-1 flex-col">
-        <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="z-40 border-b bg-background/90 backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-10">
             <Sheet>
               <SheetTrigger asChild>
@@ -49,7 +49,7 @@ export function AdminShell({ children, user, tenants, activeTenantId }: AdminShe
                   <span className="sr-only">Open navigation</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 p-0">
+              <SheetContent side="left" className="flex w-72 flex-col p-0">
                 <AdminSidebar
                   user={user}
                   tenants={tenants}
@@ -88,7 +88,7 @@ export function AdminShell({ children, user, tenants, activeTenantId }: AdminShe
             </div>
           </div>
         </header>
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10">
+        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
           <div className="mx-auto w-full max-w-5xl space-y-8">{children}</div>
         </main>
       </div>
