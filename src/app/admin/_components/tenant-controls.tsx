@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -36,6 +37,7 @@ export function TenantSwitcher({
   activeTenantId: string | null;
   onAddTenant: () => void;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -54,6 +56,7 @@ export function TenantSwitcher({
         setOptimisticTenantId(null);
         return;
       }
+      router.refresh();
       toast({ title: "Active tenant updated", description: `Switched to ${tenants.find((t) => t.id === tenantId)?.name ?? tenantId}` });
       setOptimisticTenantId(null);
       setOpen(false);
@@ -129,6 +132,7 @@ export function TenantSwitcher({
 }
 
 export function CreateTenantDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const router = useRouter();
   const form = useForm<TenantFormValues>({
     resolver: zodResolver(tenantFormSchema),
     defaultValues: { name: "" },
@@ -143,6 +147,7 @@ export function CreateTenantDialog({ open, onOpenChange }: { open: boolean; onOp
         toast({ variant: "destructive", title: "Unable to create tenant", description: result.error });
         return;
       }
+      router.refresh();
       toast({ title: "Tenant created", description: result.success ?? "Tenant added" });
       form.reset();
       onOpenChange(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { rotateKeyAction } from "@/app/admin/actions";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
 export const RotateKeyButton = ({ tenantId }: { tenantId: string }) => {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
 
@@ -18,6 +20,7 @@ export const RotateKeyButton = ({ tenantId }: { tenantId: string }) => {
         toast({ variant: "destructive", title: "Unable to rotate key", description: result.error });
         return;
       }
+      router.refresh();
       toast({ title: "Signing key rotated", description: "JWKS now contains the new key" });
     });
   };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Loader2, Trash2 } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +23,7 @@ const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 c
 const redirectSchema = z.object({ uri: z.string().url("Enter a valid URL") });
 
 export function UpdateClientNameForm({ clientId, initialName }: { clientId: string; initialName: string }) {
+  const router = useRouter();
   const form = useForm<z.infer<typeof nameSchema>>({ resolver: zodResolver(nameSchema), defaultValues: { name: initialName } });
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -37,6 +39,7 @@ export function UpdateClientNameForm({ clientId, initialName }: { clientId: stri
         toast({ variant: "destructive", title: "Unable to update", description: result.error });
         return;
       }
+      router.refresh();
       toast({ title: "Client updated", description: result.success ?? "Saved" });
     });
   };
@@ -66,6 +69,7 @@ export function UpdateClientNameForm({ clientId, initialName }: { clientId: stri
 }
 
 export function RotateSecretForm({ clientId }: { clientId: string }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const { toast } = useToast();
@@ -80,6 +84,7 @@ export function RotateSecretForm({ clientId }: { clientId: string }) {
       if (result.data?.clientSecret) {
         setClientSecret(result.data.clientSecret);
       }
+      router.refresh();
       toast({ title: "Client secret rotated", description: "Copy the new secret immediately" });
     });
   };
@@ -101,6 +106,7 @@ export function RotateSecretForm({ clientId }: { clientId: string }) {
 }
 
 export function AddRedirectForm({ clientId }: { clientId: string }) {
+  const router = useRouter();
   const form = useForm<z.infer<typeof redirectSchema>>({ resolver: zodResolver(redirectSchema), defaultValues: { uri: "" } });
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -114,6 +120,7 @@ export function AddRedirectForm({ clientId }: { clientId: string }) {
       }
       toast({ title: "Redirect saved" });
       form.reset();
+      router.refresh();
     });
   };
 
@@ -142,6 +149,7 @@ export function AddRedirectForm({ clientId }: { clientId: string }) {
 }
 
 export function DeleteRedirectButton({ redirectId }: { redirectId: string }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
 
@@ -153,6 +161,7 @@ export function DeleteRedirectButton({ redirectId }: { redirectId: string }) {
         return;
       }
       toast({ title: "Redirect removed" });
+      router.refresh();
     });
   };
 
