@@ -39,9 +39,17 @@ test.describe("admin console", () => {
     await expect(page.getByTestId(`tenant-option-${tenantId}`)).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("Escape");
 
+    const activeTenantFromApi = await page.evaluate(async () => {
+      const response = await fetch("/admin/api/test/active-tenant");
+      const payload = (await response.json()) as { activeTenantId: string | null };
+      return payload.activeTenantId;
+    });
+    expect(activeTenantFromApi).toBe(tenantId);
+
     await page.reload();
     await expect(page.getByText(`Tenant · ${tenantDisplayName}`)).toBeVisible();
     await expect(page.getByRole("row", { name: new RegExp(seededClientName, "i") })).toBeVisible();
+    await expect(page.getByText(emptyStateText)).toHaveCount(0);
 
     await page.getByRole("link", { name: "Add client" }).click();
     await page.getByLabel("Client name").fill("Playwright Client");
