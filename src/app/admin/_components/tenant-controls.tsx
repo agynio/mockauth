@@ -38,7 +38,7 @@ export function TenantSwitcher({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
   const [optimisticTenantId, setOptimisticTenantId] = useState<string | null>(null);
@@ -47,14 +47,18 @@ export function TenantSwitcher({
   const selectedTenantId = optimisticTenantId ?? activeTenantId ?? fallbackTenantId;
   const activeTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
   const filteredTenants = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) {
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (!trimmed) {
       return tenants;
     }
-    return tenants.filter((tenant) => tenant.name.toLowerCase().includes(query) || tenant.id.toLowerCase().includes(query));
-  }, [search, tenants]);
+    return tenants.filter((tenant) => tenant.name.toLowerCase().includes(trimmed) || tenant.id.toLowerCase().includes(trimmed));
+  }, [searchQuery, tenants]);
 
   const handleSelect = (tenantId: string) => {
+    if (!tenantId || tenantId === selectedTenantId || pending) {
+      setOpen(false);
+      return;
+    }
     setOptimisticTenantId(tenantId);
     startTransition(async () => {
       const result = await setActiveTenantAction({ tenantId });
@@ -66,6 +70,7 @@ export function TenantSwitcher({
       router.refresh();
       toast({ title: "Active tenant updated", description: `Switched to ${tenants.find((t) => t.id === tenantId)?.name ?? tenantId}` });
       setOptimisticTenantId(null);
+      setSearchQuery("");
       setOpen(false);
     });
   };
@@ -86,7 +91,6 @@ export function TenantSwitcher({
             aria-label="Select tenant"
             data-testid="tenant-switcher"
             className="w-full justify-between"
-            disabled={tenants.length === 0}
           >
             <div className="flex flex-col text-left">
               <span className="font-semibold">
@@ -97,63 +101,71 @@ export function TenantSwitcher({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[320px] space-y-3 p-3" align="start" sideOffset={8}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search tenants..."
-              className="pl-10"
-              data-testid="tenant-search"
-            />
+        <PopoverContent className="w-[320px] p-0" align="start" sideOffset={8}>
+          <div className="border-b p-3">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search tenants"
+                className="pl-8"
+                data-testid="tenant-search"
+              />
+            </div>
           </div>
-          <div className="rounded-md border">
+          <div
+            className="max-h-64 overflow-y-auto p-1"
+            role="listbox"
+            aria-label="Tenants"
+            data-testid="tenant-options"
+          >
             {filteredTenants.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">
+              <p className="px-3 py-6 text-sm text-muted-foreground">
                 {tenants.length === 0 ? "No tenants yet. Create one to get started." : "No tenants match your search."}
-              </div>
+              </p>
             ) : (
-              <div className="max-h-60 divide-y overflow-y-auto" role="listbox" aria-label="Tenants">
-                {filteredTenants.map((tenant) => {
-                  const selected = tenant.id === selectedTenantId;
-                  return (
-                    <button
-                      key={tenant.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      onClick={() => handleSelect(tenant.id)}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-muted",
-                        selected && "bg-muted text-foreground",
-                      )}
-                      data-testid={`tenant-option-${tenant.id}`}
-                    >
-                      <span className="flex flex-col">
-                        <span className="font-medium">{tenant.name}</span>
-                        <span className="text-xs text-muted-foreground">{tenant.id}</span>
-                      </span>
-                      {selected ? <Check className="h-4 w-4" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+              filteredTenants.map((tenant) => {
+                const isSelected = tenant.id === selectedTenantId;
+                return (
+                  <button
+                    key={tenant.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => handleSelect(tenant.id)}
+                    className={cn(
+                      "flex w-full flex-col items-start rounded-md px-3 py-2 text-left text-sm",
+                      isSelected ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                    )}
+                    data-testid={`tenant-option-${tenant.id}`}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span className="font-medium">{tenant.name}</span>
+                      {isSelected ? <Check className="h-3.5 w-3.5" /> : null}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{tenant.id}</span>
+                  </button>
+                );
+              })
             )}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full justify-center gap-2"
-            onClick={() => {
-              setOpen(false);
-              onAddTenant();
-            }}
-            data-testid="tenant-option-add"
-          >
-            <Plus className="h-4 w-4" />
-            Add tenant
-          </Button>
+          <div className="border-t bg-muted/40 p-3">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full justify-center gap-2"
+              onClick={() => {
+                setOpen(false);
+                setSearchQuery("");
+                onAddTenant();
+              }}
+              data-testid="tenant-option-add"
+            >
+              <Plus className="h-4 w-4" />
+              Add tenant
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
     </div>

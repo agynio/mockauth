@@ -36,18 +36,20 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, activeTenant.id);
-  const requiredParameters = [
-    { label: "Issuer", value: urls.issuer },
-    { label: "Discovery (.well-known)", value: urls.discovery },
-    { label: "Authorize endpoint", value: urls.authorize },
-    { label: "Token endpoint", value: urls.token },
-    { label: "Client ID", value: client.clientId },
+  type FieldDefinition = { label: string; value: string; testId?: string };
+  const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
+  const requiredFields: FieldDefinition[] = [
+    { label: "Client ID", value: client.clientId, testId: "oauth-field-client-id" },
+    { label: "Issuer", value: urls.issuer, testId: "oauth-field-issuer" },
+    { label: "Authorization endpoint", value: urls.authorize, testId: "oauth-field-authorization" },
+    { label: "Token endpoint", value: urls.token, testId: "oauth-field-token" },
   ];
-  const optionalParameters = [
-    { label: "JWKS", value: urls.jwks },
-    { label: "Userinfo endpoint", value: urls.userinfo },
-    { label: "Tenant ID", value: activeTenant.id },
+  const optionalFields: FieldDefinition[] = [
+    { label: "Discovery (.well-known)", value: urls.discovery, testId: "oauth-field-discovery" },
+    { label: "JWKS", value: urls.jwks, testId: "oauth-field-jwks" },
+    { label: "Userinfo", value: urls.userinfo, testId: "oauth-field-userinfo" },
   ];
+  const requiredBundleItems = [tenantField, ...requiredFields].map(({ label, value }) => ({ label, value }));
 
   return (
     <div className="space-y-8">
@@ -67,7 +69,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>OAuth parameters</CardTitle>
@@ -81,39 +83,46 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                   <p className="text-xs text-muted-foreground">Include these in every integration.</p>
                 </div>
                 <CopyBundleButton
-                  items={requiredParameters}
+                  items={requiredBundleItems}
                   label="Copy bundle"
                   ariaLabel="Copy required OAuth parameters"
                   testId="oauth-copy-required-btn"
                 />
               </div>
               <div className="space-y-3">
-                {requiredParameters.map((item) => (
-                  <CopyField key={item.label} label={item.label} value={item.value} />
-                ))}
+                <CopyField key={tenantField.label} label={tenantField.label} value={tenantField.value} testId={tenantField.testId} />
+                <CopyField
+                  key={requiredFields[0].label}
+                  label={requiredFields[0].label}
+                  value={requiredFields[0].value}
+                  testId={requiredFields[0].testId}
+                />
                 {client.clientType === "CONFIDENTIAL" ? (
                   <RotateSecretForm clientId={client.id} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
+                  <p className="text-xs text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
                 )}
+                {requiredFields.slice(1).map((item) => (
+                  <CopyField key={item.label} label={item.label} value={item.value} testId={item.testId} />
+                ))}
               </div>
             </section>
             <section className="space-y-4" data-testid="oauth-optional">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Optional</p>
-                  <p className="text-xs text-muted-foreground">Provide when the RP needs additional context.</p>
+                  <p className="text-xs text-muted-foreground">Provide when the relying party needs extra context.</p>
                 </div>
                 <CopyBundleButton
-                  items={optionalParameters}
+                  items={optionalFields}
                   label="Copy bundle"
                   ariaLabel="Copy optional OAuth parameters"
                   testId="oauth-copy-optional-btn"
                 />
               </div>
               <div className="space-y-3">
-                {optionalParameters.map((item) => (
-                  <CopyField key={item.label} label={item.label} value={item.value} />
+                {optionalFields.map((item) => (
+                  <CopyField key={item.label} label={item.label} value={item.value} testId={item.testId} />
                 ))}
               </div>
             </section>
