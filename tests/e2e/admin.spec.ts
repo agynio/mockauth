@@ -40,7 +40,7 @@ test.describe("admin console", () => {
     await page.keyboard.press("Escape");
 
     const activeTenantFromApi = await page.evaluate(async () => {
-      const response = await fetch("/api/test/active-tenant");
+      const response = await fetch("/admin/api/test/active-tenant");
       const payload = (await response.json()) as { activeTenantId: string | null };
       return payload.activeTenantId;
     });

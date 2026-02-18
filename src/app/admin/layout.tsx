@@ -23,14 +23,6 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     name: membership.tenant.name,
   }));
 
-  if (process.env.NODE_ENV !== "test") {
-    console.info("[tenant-switch] layout", {
-      adminId: user.id,
-      activeTenantId: tenantContext.activeTenant?.id ?? null,
-      resolvedTenantId: tenantContext.activeMembership?.tenantId ?? null,
-    });
-  }
-
   return (
     <AdminShell user={user} tenants={tenantSummaries} activeTenantId={tenantContext.activeTenant?.id ?? null}>
       {children}

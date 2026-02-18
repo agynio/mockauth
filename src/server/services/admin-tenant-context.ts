@@ -8,31 +8,21 @@ export const ADMIN_ACTIVE_TENANT_COOKIE = "admin_active_tenant";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 const cookieOptions = {
-  path: "/",
+  path: "/admin",
   httpOnly: true,
   sameSite: "lax" as const,
   secure: isProd,
   maxAge: COOKIE_MAX_AGE_SECONDS,
 };
 
-const shouldLogTenantDebug = process.env.NODE_ENV !== "test";
-const logTenantDebug = (event: string, payload: Record<string, unknown>) => {
-  if (!shouldLogTenantDebug) {
-    return;
-  }
-  console.info(`[admin-tenant] ${event}`, payload);
-};
-
 export const setAdminActiveTenantCookie = async (tenantId: string) => {
   const store = await cookies();
   store.set(ADMIN_ACTIVE_TENANT_COOKIE, tenantId, cookieOptions);
-  logTenantDebug("set-cookie", { tenantId, options: cookieOptions });
 };
 
 export const clearAdminActiveTenantCookie = async () => {
   const store = await cookies();
   store.set(ADMIN_ACTIVE_TENANT_COOKIE, "", { ...cookieOptions, maxAge: 0 });
-  logTenantDebug("clear-cookie", { options: { ...cookieOptions, maxAge: 0 } });
 };
 
 type MembershipWithTenant = Prisma.TenantMembershipGetPayload<{ include: { tenant: true } }>;
@@ -46,13 +36,6 @@ export const getAdminTenantContext = async (adminUserId: string): Promise<{
   const cookieTenantId = store.get(ADMIN_ACTIVE_TENANT_COOKIE)?.value;
   const memberships = await getTenantMemberships(adminUserId);
   const activeMembership = memberships.find((membership) => membership.tenantId === cookieTenantId) ?? memberships[0] ?? null;
-
-  logTenantDebug("read-cookie", {
-    adminUserId,
-    cookieTenantId,
-    membershipTenantIds: memberships.map((membership) => membership.tenantId),
-    resolvedTenantId: activeMembership?.tenantId ?? null,
-  });
 
   return {
     memberships,
