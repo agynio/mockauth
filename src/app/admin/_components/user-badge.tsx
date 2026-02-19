@@ -12,7 +12,7 @@ export function UserBadge({ user }: Props) {
   const initials = getInitials(user.name ?? user.email ?? "User");
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card/80 px-3 py-3">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card/80 px-3 py-3" data-testid="sidebar-user-badge">
       <Avatar>
         {user.image ? <AvatarImage src={user.image} alt="avatar" /> : null}
         <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">{initials}</AvatarFallback>

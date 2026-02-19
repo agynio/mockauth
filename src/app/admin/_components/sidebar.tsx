@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 
 import { SidebarNav } from "@/app/admin/_components/sidebar-nav";
@@ -8,7 +8,6 @@ import { TenantSwitcher } from "@/app/admin/_components/tenant-controls";
 import { UserBadge } from "@/app/admin/_components/user-badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 
 type TenantSummary = {
   id: string;
@@ -38,37 +37,17 @@ export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Pro
   };
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="flex h-full flex-col bg-background" data-testid="admin-sidebar">
       <div className="border-b px-6 py-5">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Control center</p>
         <h1 className="text-lg font-semibold text-foreground">Administration</h1>
       </div>
-      <ScrollArea className="flex-1 px-4 py-6">
-        <div className="space-y-6">
-          <section>
-            <h2 className="text-xs font-semibold uppercase text-muted-foreground">Navigation</h2>
-            <div className="mt-3">
-              <SidebarNav items={NAV_ITEMS} />
-            </div>
-          </section>
-          <Separator />
-          <section className="space-y-3">
-            <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} onAddTenant={onAddTenant} />
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full"
-              onClick={onAddTenant}
-              data-testid="add-tenant-btn"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create tenant
-            </Button>
-          </section>
-        </div>
+      <ScrollArea className="flex-1 px-4 py-6" data-testid="sidebar-nav-area">
+        <SidebarNav items={NAV_ITEMS} />
       </ScrollArea>
-      <div className="border-t px-4 py-5">
-        <div className="space-y-4">
+      <div className="border-t px-4 py-5 space-y-5" data-testid="sidebar-footer">
+        <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} onAddTenant={onAddTenant} />
+        <div className="space-y-4" data-testid="sidebar-user-section">
           <UserBadge user={user} />
           <Button type="button" variant="outline" className="w-full" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
