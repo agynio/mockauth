@@ -16,6 +16,10 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
 - pnpm 10+
 - Docker (for local PostgreSQL)
 
+> **Package manager note:** Mockauth is pnpm-only. The `packageManager` field and `.npmrc` enforce pnpm 10.29.3, and the
+> checked-in `pnpm-lock.yaml` is the single source of truth. Avoid running `npm` or `yarn install` to keep dependencies
+> in sync across environments.
+
 ## Environment & Database
 
 1. Start the local Postgres containers (one for app data, one for tests):
