@@ -18,8 +18,12 @@ export default function Home() {
           tokens, and exercise PKCE flows without relying on external identity systems.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/admin" className="rounded-md bg-amber-400 px-4 py-2 font-semibold text-slate-900">
-            Open admin console
+          <Link
+            href="/api/auth/signin/logto?callbackUrl=%2Fadmin"
+            className="rounded-md bg-amber-400 px-4 py-2 font-semibold text-slate-900"
+            data-testid="landing-sign-in-link"
+          >
+            Sign in to admin console
           </Link>
           <a
             href="https://github.com/agynio/mockauth"
