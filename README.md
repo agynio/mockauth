@@ -1,6 +1,7 @@
-Mockauth is a multi-tenant mock OpenID Connect provider for QA and ephemeral environments. Each tenant is exposed under
-`https://<host>/t/<tenant>/oidc` with per-tenant JWKS, username-only login, and an admin console (NextAuth + Logto) for
-managing tenants, clients, redirect URIs, and RSA signing keys.
+Mockauth is a multi-tenant mock OpenID Connect provider for QA and ephemeral environments. Each tenant issues tokens
+through resource-scoped paths like `https://<host>/t/<tenantId>/r/<apiResourceId>/oidc`, exposing per-resource JWKS,
+username-only login, and an admin console (NextAuth + Logto) for managing tenants, API resources, redirect URIs, and RSA
+signing keys.
 
 ## Stack
 
@@ -103,26 +104,25 @@ updates). CI runs this script automatically before executing E2E specs.
   (disabled by default). When you type `*` in the Admin UI, a destructive warning reminds you that this must never be
   enabled in production.
 
-### Breaking Change — Stage 2 (tenantId issuers)
+### Breaking Change — Stage 2 (tenantId + apiResource issuers)
 
 - Tenant slugs are removed. Every OIDC URL now uses the tenant ID (e.g. `tenant_qa`).
-- Copy the tenant ID directly from the Admin sidebar (Active tenant dropdown) and update your relying parties to use
-  issuers like `https://<host>/t/<tenantId>/oidc` and discovery endpoints under the same tenantId path.
-- Legacy discovery requests that still target `/t/<slug>/oidc/.well-known/openid-configuration` respond with `410 Gone`
-  and link back to `/admin/clients`, where tenantId + issuer strings can be copied.
+- Each tenant has a default API resource (visible in the Admin sidebar) and issuers follow the
+  `https://<host>/t/<tenantId>/r/<apiResourceId>/oidc` pattern. Copy both IDs directly from the Admin UI before updating
+  relying parties.
 
 ## OIDC Endpoints
 
-For the seeded tenant `tenant_qa`:
+For the seeded tenant `tenant_qa` (default resource `tenant_qa_default_resource`):
 
 | Endpoint | Path |
 | --- | --- |
-| Issuer | `http(s)://<host>/t/tenant_qa/oidc` |
-| Discovery | `/t/tenant_qa/oidc/.well-known/openid-configuration` |
-| JWKS | `/t/tenant_qa/oidc/jwks.json` (alias `/t/tenant_qa/.well-known/jwks.json`) |
-| Authorize | `/t/tenant_qa/oidc/authorize` (Authorization Code + PKCE S256 only) |
-| Token | `/t/tenant_qa/oidc/token` |
-| UserInfo | `/t/tenant_qa/oidc/userinfo` |
+| Issuer | `http(s)://<host>/t/tenant_qa/r/tenant_qa_default_resource/oidc` |
+| Discovery | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/.well-known/openid-configuration` |
+| JWKS | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/jwks.json` (alias `/t/tenant_qa/.well-known/jwks.json`) |
+| Authorize | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/authorize` (Authorization Code + PKCE S256 only) |
+| Token | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/token` |
+| UserInfo | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/userinfo` |
 - Username-only login lives at `/t/<tenantId>/r/<apiResourceId>/oidc/login` and stores a tenant-scoped mock-user session cookie (separate
   from NextAuth).
 
