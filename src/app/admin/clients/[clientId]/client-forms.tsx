@@ -11,14 +11,17 @@ import {
   addRedirectUriAction,
   deleteRedirectUriAction,
   rotateClientSecretAction,
+  updateClientIssuerAction,
   updateClientNameAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
 const redirectSchema = z.object({
@@ -40,6 +43,7 @@ const redirectSchema = z.object({
       }
     }),
 });
+const issuerSchema = z.object({ resourceId: z.union([z.literal("default"), z.string().min(1)]) });
 
 export function UpdateClientNameForm({
   clientId,
@@ -245,5 +249,96 @@ export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: stri
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       {!pending && <span className="ml-1 text-sm">Remove</span>}
     </Button>
+  );
+}
+
+type IssuerOption = {
+  id: string;
+  label: string;
+};
+
+export function UpdateClientIssuerForm({
+  clientId,
+  canEdit,
+  defaultResourceId,
+  defaultResourceName,
+  currentResourceId,
+  usesDefault,
+  resources,
+}: {
+  clientId: string;
+  canEdit: boolean;
+  defaultResourceId: string;
+  defaultResourceName: string;
+  currentResourceId: string;
+  usesDefault: boolean;
+  resources: IssuerOption[];
+}) {
+  const router = useRouter();
+  const [selectedResourceId, setSelectedResourceId] = useState<string>(usesDefault ? "default" : currentResourceId ?? defaultResourceId);
+  const [pending, startSaveTransition] = useTransition();
+  const [, startResetTransition] = useTransition();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    startResetTransition(() => {
+      setSelectedResourceId(usesDefault ? "default" : currentResourceId);
+    });
+  }, [currentResourceId, usesDefault, startResetTransition]);
+
+  const options: IssuerOption[] = [
+    { id: "default", label: `Use tenant default (${defaultResourceName})` },
+    ...resources,
+  ];
+
+  const handleSave = () => {
+    const parsed = issuerSchema.safeParse({ resourceId: selectedResourceId });
+    if (!parsed.success) {
+      toast({ variant: "destructive", title: "Select an API resource" });
+      return;
+    }
+    startSaveTransition(async () => {
+      const normalized = parsed.data.resourceId === "default" ? "default" : parsed.data.resourceId;
+      const result = await updateClientIssuerAction({ clientId, apiResourceId: normalized });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update issuer", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Issuer updated", description: "Client now issues tokens for the selected resource." });
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div className="flex-1 space-y-2">
+        <Label htmlFor="client-issuer-select">Issuer / API resource</Label>
+        <Select
+          value={selectedResourceId}
+          onValueChange={setSelectedResourceId}
+          disabled={!canEdit || pending}
+        >
+          <SelectTrigger id="client-issuer-select" aria-label="API resource">
+            <SelectValue placeholder="Select API resource" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={option.id} data-testid={`issuer-option-${option.id}`}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button
+        type="button"
+        onClick={handleSave}
+        disabled={!canEdit || pending}
+        className="sm:w-auto w-full"
+        data-testid="issuer-form-save"
+      >
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+      </Button>
+    </div>
   );
 }

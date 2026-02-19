@@ -14,6 +14,8 @@ import { describe, expect, it } from "vitest";
 
 const createTenantWithOwner = async () => {
   const tenant = await prisma.tenant.create({ data: { name: `Membership Tenant ${randomUUID()}` } });
+  const apiResource = await prisma.apiResource.create({ data: { tenantId: tenant.id, name: "Default" } });
+  await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
   const owner = await prisma.adminUser.create({
     data: { email: `owner+${randomUUID()}@example.test`, name: "Owner" },
   });

@@ -9,7 +9,7 @@ import { verifySecret } from "@/server/crypto/hash";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { DomainError } from "@/server/errors";
 import { claimsForScopes } from "@/server/oidc/claims";
-import { issuerForTenant } from "@/server/oidc/issuer";
+import { issuerForResource } from "@/server/oidc/issuer";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { getActiveKey } from "@/server/services/key-service";
 
@@ -70,7 +70,7 @@ export const issueTokensFromCode = async (params: {
   const signingKey = await importJWK(privateJwk, "RS256");
 
   const now = Math.floor(Date.now() / 1000);
-  const issuer = issuerForTenant(origin, code.tenantId);
+  const issuer = issuerForResource(origin, code.tenantId, code.apiResourceId);
   const scopes = code.scope.split(" ").filter(Boolean);
   const idToken = await new SignJWT({
     ...claimsForScopes(code.user, scopes),
@@ -101,6 +101,7 @@ export const issueTokensFromCode = async (params: {
   await prisma.accessToken.create({
     data: {
       tenantId: code.tenantId,
+      apiResourceId: code.apiResourceId,
       clientId: code.clientId,
       userId: code.userId,
       jti,

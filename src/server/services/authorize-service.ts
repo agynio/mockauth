@@ -1,13 +1,14 @@
-import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createAuthorizationCode } from "@/server/services/authorization-code-service";
 import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getActiveTenantById } from "@/server/services/tenant-service";
+import { getApiResourceForTenant } from "@/server/services/api-resource-service";
 
 type AuthorizeParams = {
   tenantId: string;
+  apiResourceId: string;
   clientId: string;
   redirectUri: string;
   responseType: string;
@@ -41,7 +42,12 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   }
 
   const tenant = await getActiveTenantById(params.tenantId);
+  const resource = await getApiResourceForTenant(tenant.id, params.apiResourceId);
   const client = await getClientForTenant(tenant.id, params.clientId);
+  const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
+  if (clientResourceId !== resource.id) {
+    throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
+  }
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
 
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
@@ -52,13 +58,14 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   if (shouldLogin) {
     return {
       type: "login" as const,
-      redirectTo: `/t/${tenant.id}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
+      redirectTo: `/t/${tenant.id}/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
     };
   }
 
   const code = await createAuthorizationCode({
     tenantId: tenant.id,
     clientId: client.id,
+    apiResourceId: resource.id,
     userId: session.userId,
     redirectUri: redirect,
     scope: params.scope,

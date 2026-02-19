@@ -123,7 +123,7 @@ For the seeded tenant `tenant_qa`:
 | Authorize | `/t/tenant_qa/oidc/authorize` (Authorization Code + PKCE S256 only) |
 | Token | `/t/tenant_qa/oidc/token` |
 | UserInfo | `/t/tenant_qa/oidc/userinfo` |
-- Username-only login lives at `/t/<tenantId>/oidc/login` and stores a tenant-scoped mock-user session cookie (separate
+- Username-only login lives at `/t/<tenantId>/r/<apiResourceId>/oidc/login` and stores a tenant-scoped mock-user session cookie (separate
   from NextAuth).
 
 ## CI

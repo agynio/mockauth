@@ -3,7 +3,7 @@ import { decodeJwt, decodeProtectedHeader, importJWK, jwtVerify } from "jose";
 import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
 import { claimsForScopes } from "@/server/oidc/claims";
-import { issuerForTenant } from "@/server/oidc/issuer";
+import { issuerForResource, legacyTenantIssuer, parseIssuerSegments } from "@/server/oidc/issuer";
 import { getPublicJwkByKid } from "@/server/services/key-service";
 import { getActiveTenantById } from "@/server/services/tenant-service";
 
@@ -20,19 +20,11 @@ const parseBearer = (header?: string | null) => {
   return token;
 };
 
-const extractTenantId = (iss: string) => {
-  const url = new URL(iss);
-  const segments = url.pathname.split("/").filter(Boolean);
-  if (segments.length < 3 || segments[0] !== "t" || segments[2] !== "oidc") {
-    throw new DomainError("Invalid issuer", { status: 400, code: "invalid_token" });
-  }
-  return segments[1];
-};
-
 export const getUserInfo = async (
   authHeader: string | null | undefined,
   origin: string,
   expectedTenantId: string,
+  expectedApiResourceId: string,
 ) => {
   const token = parseBearer(authHeader ?? undefined);
   const decoded = decodeJwt(token);
@@ -40,11 +32,17 @@ export const getUserInfo = async (
     throw new DomainError("Token missing issuer", { status: 400, code: "invalid_token" });
   }
 
-  const tenantId = extractTenantId(decoded.iss);
-  if (tenantId !== expectedTenantId) {
+  let issuerContext;
+  try {
+    issuerContext = parseIssuerSegments(decoded.iss);
+  } catch {
     throw new DomainError("Invalid issuer", { status: 400, code: "invalid_token" });
   }
-  const tenant = await getActiveTenantById(tenantId);
+
+  if (issuerContext.tenantId !== expectedTenantId) {
+    throw new DomainError("Invalid issuer", { status: 400, code: "invalid_token" });
+  }
+  const tenant = await getActiveTenantById(issuerContext.tenantId);
 
   const header = decodeProtectedHeader(token);
   if (!header.kid) {
@@ -53,8 +51,19 @@ export const getUserInfo = async (
 
   const keyJwk = await getPublicJwkByKid(tenant.id, header.kid);
   const key = await importJWK(keyJwk, "RS256");
-  const issuer = issuerForTenant(origin, tenant.id);
-  const { payload } = await jwtVerify(token, key, { issuer });
+  let expectedIssuer: string;
+  if (issuerContext.isLegacy) {
+    if (tenant.defaultApiResourceId !== expectedApiResourceId) {
+      throw new DomainError("Invalid issuer", { status: 400, code: "invalid_token" });
+    }
+    expectedIssuer = legacyTenantIssuer(origin, tenant.id);
+  } else {
+    if (issuerContext.apiResourceId !== expectedApiResourceId) {
+      throw new DomainError("Invalid issuer", { status: 400, code: "invalid_token" });
+    }
+    expectedIssuer = issuerForResource(origin, tenant.id, issuerContext.apiResourceId);
+  }
+  const { payload } = await jwtVerify(token, key, { issuer: expectedIssuer });
 
   const user = await prisma.mockUser.findUnique({ where: { id: payload.sub as string } });
   if (!user) {

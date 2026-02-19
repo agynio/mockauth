@@ -1,9 +1,9 @@
-import { issuerForTenant } from "@/server/oidc/issuer";
+import { issuerForResource } from "@/server/oidc/issuer";
 
 const SUPPORTED_SCOPES = ["openid", "profile", "email"];
 
-export const buildDiscoveryDocument = (origin: string, tenantId: string) => {
-  const issuer = issuerForTenant(origin, tenantId);
+export const buildDiscoveryDocument = (origin: string, tenantId: string, apiResourceId: string) => {
+  const issuer = issuerForResource(origin, tenantId, apiResourceId);
   return {
     issuer,
     authorization_endpoint: `${issuer}/authorize`,

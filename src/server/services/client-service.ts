@@ -112,7 +112,11 @@ export const listClients = async (
 export const getClientByIdForTenant = async (tenantId: string, clientInternalId: string) => {
   const client = await prisma.client.findFirst({
     where: { id: clientInternalId, tenantId },
-    include: { redirectUris: { orderBy: { createdAt: "asc" } }, tenant: true },
+    include: {
+      redirectUris: { orderBy: { createdAt: "asc" } },
+      tenant: { include: { defaultApiResource: true } },
+      apiResource: true,
+    },
   });
 
   if (!client) {
@@ -136,4 +140,8 @@ export const rotateClientSecret = async (clientId: string) => {
 
 export const updateClientName = async (clientId: string, name: string) => {
   return prisma.client.update({ where: { id: clientId }, data: { name } });
+};
+
+export const updateClientApiResource = async (clientId: string, apiResourceId: string | null) => {
+  return prisma.client.update({ where: { id: clientId }, data: { apiResourceId } });
 };

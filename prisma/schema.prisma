@@ -48,6 +48,9 @@ model Tenant {
   status            TenantStatus        @default(ACTIVE)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
+  defaultApiResource   ApiResource?     @relation("TenantDefaultApiResource", fields: [defaultApiResourceId], references: [id])
+  defaultApiResourceId String?          @unique
+  apiResources       ApiResource[]
   memberships       TenantMembership[]
   invites           Invite[]
   clients           Client[]
@@ -56,6 +59,22 @@ model Tenant {
   authorizationCode AuthorizationCode[]
   accessTokens      AccessToken[]
   mockSessions      MockSession[]
+}
+
+model ApiResource {
+  id          String     @id @default(cuid())
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  clients     Client[]
+  authorizationCodes AuthorizationCode[]
+  accessTokens AccessToken[]
+  defaultFor  Tenant?    @relation("TenantDefaultApiResource")
+
+  @@unique([tenantId, name])
 }
 
 model AdminUser {
@@ -107,6 +126,8 @@ model Client {
   id                       String                   @id @default(cuid())
   tenant                   Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId                 String
+  apiResource              ApiResource?             @relation(fields: [apiResourceId], references: [id])
+  apiResourceId            String?
   name                     String
   clientId                 String
   clientSecretHash         String?
@@ -185,6 +206,8 @@ model AuthorizationCode {
   tenantId           String
   client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId           String
+  apiResource        ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId      String
   user               MockUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId             String
   codeHash           String      @unique
@@ -206,6 +229,8 @@ model AccessToken {
   tenantId   String
   client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId   String
+  apiResource ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId String
   user       MockUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
   jti        String   @unique

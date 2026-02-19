@@ -4,7 +4,13 @@ import { getServerSession } from "next-auth";
 import { format } from "date-fns";
 
 import { CopyBundleButton, CopyField } from "@/app/admin/_components/copy-field";
-import { AddRedirectForm, DeleteRedirectButton, RotateSecretForm, UpdateClientNameForm } from "@/app/admin/clients/[clientId]/client-forms";
+import {
+  AddRedirectForm,
+  DeleteRedirectButton,
+  RotateSecretForm,
+  UpdateClientIssuerForm,
+  UpdateClientNameForm,
+} from "@/app/admin/clients/[clientId]/client-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
+import { listApiResources } from "@/server/services/api-resource-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 
 type PageParams = Promise<{ clientId: string }>;
@@ -34,11 +41,21 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     notFound();
   }
 
+  const resources = await listApiResources(activeTenant.id);
+
   const viewerRole = activeMembership?.role ?? "READER";
   const canManageClients = viewerRole === "OWNER" || viewerRole === "WRITER";
+  const defaultResourceId = activeTenant.defaultApiResourceId!;
+  const clientUsesDefault = !client.apiResourceId;
+  const currentResourceId = client.apiResourceId ?? defaultResourceId;
+  const defaultResource = resources.find((resource) => resource.id === defaultResourceId);
+  const currentResourceName = client.apiResource?.name ?? defaultResource?.name ?? "Default resource";
+  const issuerOptions = resources
+    .filter((resource) => resource.id !== defaultResourceId)
+    .map((resource) => ({ id: resource.id, label: resource.name }));
 
   const origin = await getRequestOrigin();
-  const urls = buildOidcUrls(origin, activeTenant.id);
+  const urls = buildOidcUrls(origin, activeTenant.id, currentResourceId);
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
   const requiredFields: FieldDefinition[] = [
@@ -77,7 +94,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         <Card>
           <CardHeader>
             <CardTitle>OAuth parameters</CardTitle>
-            <CardDescription>Copy issuer metadata for relying parties.</CardDescription>
+            <CardDescription>Copy issuer metadata for relying parties. Currently issuing for {currentResourceName}.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-8">
             <section className="space-y-4" data-testid="oauth-required">
@@ -133,9 +150,30 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Metadata</CardTitle>
+      <Card>
+        <CardHeader>
+          <CardTitle>Issuer / API resource</CardTitle>
+          <CardDescription>Choose which API resource this client uses for discovery and tokens.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <UpdateClientIssuerForm
+            clientId={client.id}
+            canEdit={canManageClients}
+            defaultResourceId={defaultResourceId}
+            defaultResourceName={defaultResource?.name ?? "Default resource"}
+            currentResourceId={currentResourceId}
+            usesDefault={clientUsesDefault}
+            resources={issuerOptions}
+          />
+          <p className="text-xs text-muted-foreground">
+            Selecting the default keeps this client aligned with tenant-level issuer changes.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Metadata</CardTitle>
             <CardDescription>Review grant configuration for audits.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -197,8 +235,8 @@ const MetadataRow = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const buildOidcUrls = (origin: string, tenantId: string) => {
-  const base = `${origin}/t/${tenantId}/oidc`;
+const buildOidcUrls = (origin: string, tenantId: string, apiResourceId: string) => {
+  const base = `${origin}/t/${tenantId}/r/${apiResourceId}/oidc`;
   return {
     issuer: base,
     discovery: `${base}/.well-known/openid-configuration`,

@@ -6,11 +6,14 @@ import { getJwks, getPublicJwkByKid, ensureActiveKey, rotateKey } from "@/server
 import { describe, expect, it, vi } from "vitest";
 
 const createTenant = async () => {
-  return prisma.tenant.create({
+  const tenant = await prisma.tenant.create({
     data: {
       name: `Key Service Test Tenant ${randomUUID()}`,
     },
   });
+  const apiResource = await prisma.apiResource.create({ data: { tenantId: tenant.id, name: "Default" } });
+  await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
+  return tenant;
 };
 
 describe("key rotation", () => {

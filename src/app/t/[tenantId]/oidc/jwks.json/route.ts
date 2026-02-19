@@ -1,15 +1,16 @@
-import { toResponse } from "@/server/errors";
-import { getJwks } from "@/server/services/key-service";
-import { getActiveTenantById } from "@/server/services/tenant-service";
+import type { NextRequest } from "next/server";
+
+import { resolveUrl } from "@/server/http/origin";
+import { legacyIssuerRedirect } from "../legacy-redirect";
 import type { TenantRouteContext } from "@/types/tenant-route";
 
-export async function GET(_: Request, context: TenantRouteContext) {
-  try {
-    const { tenantId } = await context.params;
-    const tenant = await getActiveTenantById(tenantId);
-    const keys = await getJwks(tenant.id);
-    return Response.json({ keys });
-  } catch (error) {
-    return toResponse(error);
-  }
+export async function GET(request: NextRequest, context: TenantRouteContext) {
+  const { tenantId } = await context.params;
+  const normalizedUrl = resolveUrl(request);
+  const basePath = `/t/${tenantId}/oidc`;
+  const suffixPath = normalizedUrl.pathname.startsWith(basePath)
+    ? normalizedUrl.pathname.slice(basePath.length)
+    : normalizedUrl.pathname;
+  const suffix = `${suffixPath}${normalizedUrl.search}`;
+  return legacyIssuerRedirect(request, tenantId, suffix || "/jwks.json");
 }

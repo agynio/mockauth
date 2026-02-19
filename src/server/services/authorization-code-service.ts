@@ -10,6 +10,7 @@ const CODE_TTL_MINUTES = 10;
 export const createAuthorizationCode = async (params: {
   tenantId: string;
   clientId: string;
+  apiResourceId: string;
   userId: string;
   redirectUri: string;
   scope: string;
@@ -23,6 +24,7 @@ export const createAuthorizationCode = async (params: {
     data: {
       tenantId: params.tenantId,
       clientId: params.clientId,
+      apiResourceId: params.apiResourceId,
       userId: params.userId,
       redirectUri: params.redirectUri,
       scope: params.scope,
