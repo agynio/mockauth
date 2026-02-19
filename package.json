@@ -19,7 +19,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx -r tsconfig-paths/register prisma/seed.ts",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "postinstall": "playwright install --with-deps"
+    "postinstall": "pnpm prisma:generate",
+    "playwright:install": "playwright install --with-deps"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.0",

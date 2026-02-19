@@ -51,6 +51,9 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
 | `pnpm prisma:migrate` | `prisma migrate dev` for the dev database. |
 | `pnpm prisma:seed` | Seeds tenants/clients/mock users for manual testing. |
 
+Playwright browsers are installed separately via `pnpm playwright:install` (run once per workstation or after dependency
+updates). CI runs this script automatically before executing E2E specs.
+
 ## Logto dev/test configuration
 
 - `tests/fixtures/logto.dev.config.ts` contains the Logto dev tenant details provided by Rowan. These credentials are for
