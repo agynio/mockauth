@@ -1,5 +1,10 @@
 import { RedirectUriType } from "@/generated/prisma/client";
+import { setAllowAnyRedirectOverride } from "@/server/oidc/redirect-policy";
 import { classifyRedirect, resolveRedirectUri } from "@/server/oidc/redirect-uri";
+
+afterEach(() => {
+  setAllowAnyRedirectOverride(null);
+});
 
 describe("redirect uri handling", () => {
   it("classifies host wildcards", () => {
@@ -31,5 +36,40 @@ describe("redirect uri handling", () => {
         { uri: "https://example.test/callback", type: RedirectUriType.EXACT, enabled: true },
       ]),
     ).toThrow();
+  });
+
+  it("supports path wildcard prefixes", () => {
+    const classified = classifyRedirect("https://app.example.test/callback/*");
+    expect(classified.type).toBe(RedirectUriType.PATH_SUFFIX);
+    const normalized = resolveRedirectUri("https://app.example.test/callback/child", [
+      { uri: classified.normalized, type: RedirectUriType.PATH_SUFFIX, enabled: true },
+    ]);
+    expect(normalized).toBe("https://app.example.test/callback/child");
+  });
+
+  it("rejects host + path wildcard combos", () => {
+    expect(() => classifyRedirect("https://*.example.test/callback/*")).toThrow("Host wildcards");
+  });
+
+  it("rejects fragments in redirect entries", () => {
+    expect(() => classifyRedirect("https://example.test/callback#frag")).toThrow("fragment");
+  });
+
+  it("gates * redirects behind the env flag", () => {
+    const classified = classifyRedirect("*");
+    expect(classified.type).toBe(RedirectUriType.ANY);
+    expect(classified.normalized).toBe("*");
+
+    expect(() =>
+      resolveRedirectUri("https://example.test/callback", [
+        { uri: classified.normalized, type: RedirectUriType.ANY, enabled: true },
+      ]),
+    ).toThrow("redirect_uri mismatch");
+
+    setAllowAnyRedirectOverride(true);
+    const normalized = resolveRedirectUri("https://example.test/any", [
+      { uri: classified.normalized, type: RedirectUriType.ANY, enabled: true },
+    ]);
+    expect(normalized).toBe("https://example.test/any");
   });
 });

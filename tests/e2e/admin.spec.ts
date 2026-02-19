@@ -93,7 +93,12 @@ test.describe("admin console", () => {
     await tenantIdField.getByRole("button", { name: "Copy Tenant ID" }).click();
     await expect(tenantIdField.getByText("Copied")).toBeVisible();
 
-    await page.getByLabel("Redirect URI").fill("https://pw.example.test/alt");
+    const redirectInput = page.getByLabel("Redirect URI");
+    await redirectInput.fill("*");
+    await expect(page.getByTestId("redirect-any-warning")).toBeVisible();
+    await redirectInput.fill("https://*.example.test/callback");
+    await expect(page.getByTestId("redirect-wildcard-warning")).toBeVisible();
+    await redirectInput.fill("https://pw.example.test/alt");
     await page.getByRole("button", { name: /^Add$/ }).click();
     await expect(page.getByText("https://pw.example.test/alt")).toBeVisible();
 

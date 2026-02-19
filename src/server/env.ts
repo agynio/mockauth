@@ -9,6 +9,11 @@ const envSchema = z.object({
   LOGTO_CLIENT_ID: z.string().min(1),
   LOGTO_CLIENT_SECRET: z.string().min(1),
   MOCKAUTH_KEY_ENCRYPTION_SECRET: z.string().min(32, "Provide a strong encryption secret for tenant keys"),
+  MOCKAUTH_ALLOW_ANY_REDIRECT: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((value) => value === "true"),
   ENABLE_TEST_ROUTES: z
     .enum(["true", "false"])
     .optional()
@@ -30,6 +35,7 @@ export const env = envSchema.parse({
   LOGTO_CLIENT_ID: process.env.LOGTO_CLIENT_ID,
   LOGTO_CLIENT_SECRET: process.env.LOGTO_CLIENT_SECRET,
   MOCKAUTH_KEY_ENCRYPTION_SECRET: process.env.MOCKAUTH_KEY_ENCRYPTION_SECRET,
+  MOCKAUTH_ALLOW_ANY_REDIRECT: process.env.MOCKAUTH_ALLOW_ANY_REDIRECT,
   ENABLE_TEST_ROUTES: process.env.ENABLE_TEST_ROUTES,
   ALLOW_EMAIL_LINKING: process.env.ALLOW_EMAIL_LINKING,
 });
