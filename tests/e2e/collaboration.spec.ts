@@ -36,10 +36,11 @@ test.describe("collaboration", () => {
     await expect(firstInviteRow.getByText("Active")).toBeVisible();
 
     // Accept invite as a different user (without prior membership)
+    const invitedWriterEmail = `collab-writer-${Date.now()}@example.test`;
     const inviteContext = await browser.newContext();
     const invitePage = await inviteContext.newPage();
     const inviteSession = await createTestSession(invitePage, {
-      email: `collab-writer-${Date.now()}@example.test`,
+      email: invitedWriterEmail,
       assignMembership: false,
     });
     await authenticate(invitePage, inviteSession);
@@ -48,7 +49,7 @@ test.describe("collaboration", () => {
     await inviteContext.close();
 
     await page.reload();
-    await expect(page.getByTestId("member-row").filter({ hasText: /collab-writer/ })).toBeVisible();
+    await expect(page.getByTestId("member-row").filter({ hasText: invitedWriterEmail })).toBeVisible();
 
     // Create a second invite, revoke it, and ensure the link stops working
     await page.getByRole("button", { name: "Invite member" }).click();

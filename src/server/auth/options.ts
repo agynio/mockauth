@@ -33,14 +33,15 @@ const adapter: Adapter = {
   },
 };
 
-export const authOptions: NextAuthOptions = {
+export const createAuthOptions = (appEnv: typeof env): NextAuthOptions => ({
   adapter,
   providers: [
     LogtoProvider({
-      issuer: env.LOGTO_ISSUER,
-      clientId: env.LOGTO_CLIENT_ID,
-      clientSecret: env.LOGTO_CLIENT_SECRET,
+      issuer: appEnv.LOGTO_ISSUER,
+      clientId: appEnv.LOGTO_CLIENT_ID,
+      clientSecret: appEnv.LOGTO_CLIENT_SECRET,
       scope: "openid profile email",
+      allowDangerousEmailAccountLinking: appEnv.ALLOW_EMAIL_LINKING,
     }),
   ],
   session: {
@@ -67,4 +68,9 @@ export const authOptions: NextAuthOptions = {
       });
     },
   },
-};
+  pages: {
+    error: "/auth/error",
+  },
+});
+
+export const authOptions = createAuthOptions(env);
