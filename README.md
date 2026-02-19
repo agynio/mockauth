@@ -67,6 +67,19 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
   detailed client pages (copy helpers, redirect management, secret rotation, metadata). Mock login remains
   username-only—no whitelist or user records to manage.
 
+### QA sign-in + account linking
+
+- NextAuth blocks linking multiple OAuth accounts to the same email by default. In QA we seed `owner@example.test`
+  (and other roles) ahead of time, so the first Logto sign-in must be allowed to link automatically. Toggle this with
+  `ALLOW_EMAIL_LINKING=true` (enabled in `.env.development` and `.env.test`, left `false` elsewhere by default).
+- `NEXTAUTH_URL` **must** match the public tunnel URL (e.g., the Cloudflare tunnel hostname) and stay stable. If the
+  tunnel rotates, update `NEXTAUTH_URL` immediately and keep `NEXTAUTH_SECRET` unchanged to avoid forcing users to
+  re-authorize.
+- For automated tests we rely on a built-in mock Logto server that lives under
+  `http://127.0.0.1:3000/api/test/logto`. Enable it via `ENABLE_TEST_ROUTES=true` and set `LOGTO_ISSUER` to the same
+  URL. You can POST to `/api/test/logto/profile` with `{ email, sub, name }` to queue the next identity when simulating
+  edge cases.
+
 ### Breaking Change — Stage 2 (tenantId issuers)
 
 - Tenant slugs are removed. Every OIDC URL now uses the tenant ID (e.g. `tenant_qa`).

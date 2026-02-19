@@ -14,6 +14,11 @@ const envSchema = z.object({
     .optional()
     .default("false")
     .transform((value) => value === "true"),
+  ALLOW_EMAIL_LINKING: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export const env = envSchema.parse({
@@ -26,6 +31,7 @@ export const env = envSchema.parse({
   LOGTO_CLIENT_SECRET: process.env.LOGTO_CLIENT_SECRET,
   MOCKAUTH_KEY_ENCRYPTION_SECRET: process.env.MOCKAUTH_KEY_ENCRYPTION_SECRET,
   ENABLE_TEST_ROUTES: process.env.ENABLE_TEST_ROUTES,
+  ALLOW_EMAIL_LINKING: process.env.ALLOW_EMAIL_LINKING,
 });
 
 export const isProd = env.NODE_ENV === "production";
