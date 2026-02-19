@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { env } from "@/server/env";
+import { resolvePublicOrigin } from "@/server/http/origin";
 
 const notFound = NextResponse.json({ error: "Not Found" }, { status: 404 });
 
@@ -9,7 +10,7 @@ export function GET(request: Request) {
     return notFound;
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = resolvePublicOrigin(request);
   const issuer = new URL("/api/test/logto", origin).toString();
 
   return NextResponse.json({
