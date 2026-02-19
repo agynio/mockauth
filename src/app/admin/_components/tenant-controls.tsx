@@ -77,10 +77,6 @@ export function TenantSwitcher({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs font-semibold uppercase text-muted-foreground">
-        <span>Active tenant</span>
-        {pending && <Loader2 className="h-3 w-3 animate-spin" />}
-      </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -98,7 +94,11 @@ export function TenantSwitcher({
               </span>
               {activeTenant ? <span className="text-xs text-muted-foreground">{activeTenant.id}</span> : null}
             </div>
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            {pending ? (
+              <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin" />
+            ) : (
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[320px] p-0" align="start" sideOffset={8}>
