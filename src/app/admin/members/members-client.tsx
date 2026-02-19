@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
-import { Copy, Loader2, Trash2, UserPlus, XCircle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Copy, Eye, Loader2, PenLine, ShieldCheck, Trash2, UserPlus, XCircle } from "lucide-react";
 
 import type { MembershipRole } from "@/generated/prisma/client";
 import { Button } from "@/components/ui/button";
@@ -16,13 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +64,19 @@ const roleLabels: Record<MembershipRole, string> = {
   WRITER: "Writer",
   READER: "Reader",
 };
+
+type RoleOption = { value: MembershipRole; label: string; description: string; icon: LucideIcon };
+
+const roleOptions: RoleOption[] = [
+  { value: "OWNER", label: roleLabels.OWNER, description: "Full access", icon: ShieldCheck },
+  { value: "WRITER", label: roleLabels.WRITER, description: "Configure clients", icon: PenLine },
+  { value: "READER", label: roleLabels.READER, description: "View only", icon: Eye },
+];
+
+const roleOptionMap = roleOptions.reduce<Record<MembershipRole, RoleOption>>((acc, option) => {
+  acc[option.value] = option;
+  return acc;
+}, {} as Record<MembershipRole, RoleOption>);
 
 const inviteExpiryOptions = ["1", "24", "168"] as const;
 type InviteExpiryOption = (typeof inviteExpiryOptions)[number];
@@ -241,13 +249,19 @@ export function MembersClient({ tenantId, tenantName, viewerId, viewerRole, memb
                               onValueChange={(value) => handleRoleChange(member.id, value as MembershipRole)}
                               disabled={roleDisabled || isPending || pendingMemberId === member.id}
                             >
-                              <SelectTrigger aria-label="Member role">
-                                <SelectValue placeholder="Role" />
+                              <SelectTrigger aria-label="Member role" data-testid="member-role-select" className="justify-between text-left">
+                                <RoleTriggerLabel role={member.role} />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="OWNER">Owner</SelectItem>
-                                <SelectItem value="WRITER">Writer</SelectItem>
-                                <SelectItem value="READER">Reader</SelectItem>
+                                {roleOptions.map((option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                    data-testid={`role-option-${option.value.toLowerCase()}`}
+                                  >
+                                    <RoleMenuOption option={option} />
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           ) : (
@@ -448,5 +462,32 @@ const InviteDialog = ({ tenantId, onInviteCreated }: { tenantId: string; onInvit
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+const RoleTriggerLabel = ({ role }: { role: MembershipRole }) => {
+  const option = roleOptionMap[role];
+  if (!option) {
+    return <span className="text-sm font-medium capitalize">{role.toLowerCase()}</span>;
+  }
+  const Icon = option.icon;
+  return (
+    <span className="flex items-center gap-2">
+      <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />
+      <span className="text-sm font-medium text-foreground">{option.label}</span>
+    </span>
+  );
+};
+
+const RoleMenuOption = ({ option }: { option: RoleOption }) => {
+  const Icon = option.icon;
+  return (
+    <span className="flex flex-col gap-0.5 text-left">
+      <span className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <span className="text-sm font-medium text-foreground">{option.label}</span>
+      </span>
+      <span className="text-xs text-muted-foreground">{option.description}</span>
+    </span>
   );
 };
