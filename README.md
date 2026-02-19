@@ -83,6 +83,19 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
   `/api/auth/signin/logto?callbackUrl=/admin` so they inherit the current host; reserve `NEXTAUTH_URL` for server-side
   NextAuth configuration only.
 
+### Redirect wildcard policy
+
+- Redirect entries must be absolute URLs and use `https` unless they target `localhost`, `127.0.0.1`, or `::1` over
+  `http` for local testing.
+- Supported shapes:
+  - Exact URL: `https://app.example.com/callback`
+  - Host wildcard (single left-most label only): `https://*.example.com/callback`
+  - Path wildcard (trailing `/*` suffix): `https://app.example.com/callback/*`
+- Host and path wildcards are intended for QA only. The Admin form surfaces muted warnings whenever one is entered.
+- A full catch-all (`*`) exists strictly for QA automation and is gated by the `MOCKAUTH_ALLOW_ANY_REDIRECT` env flag
+  (disabled by default). When you type `*` in the Admin UI, a destructive warning reminds you that this must never be
+  enabled in production.
+
 ### Breaking Change — Stage 2 (tenantId issuers)
 
 - Tenant slugs are removed. Every OIDC URL now uses the tenant ID (e.g. `tenant_qa`).

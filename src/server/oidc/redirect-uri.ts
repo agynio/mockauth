@@ -1,8 +1,11 @@
 import { RedirectUriType } from "@/generated/prisma/client";
 import { DomainError } from "@/server/errors";
+import { allowAnyRedirects } from "@/server/oidc/redirect-policy";
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const HOST_WILDCARD_REGEX = /^https:\/\/\*\.([a-zA-Z0-9.-]+)(?<path>\/[a-zA-Z0-9\-._~!$&'()*+,;=:@\/]*)?$/;
+const ANY_REDIRECT_VALUE = "*";
+const PATH_WILDCARD_SUFFIX = "/*";
 
 const ensureSchemeAllowed = (url: URL) => {
   const host = url.hostname.toLowerCase();
@@ -17,7 +20,14 @@ const ensureSchemeAllowed = (url: URL) => {
   throw new DomainError("redirect_uri must use https", { status: 400, code: "invalid_redirect_uri" });
 };
 
+const ensureNoFragment = (url: URL) => {
+  if (url.hash && url.hash !== "") {
+    throw new DomainError("redirect_uri must not include fragment", { status: 400, code: "invalid_redirect_uri" });
+  }
+};
+
 const normalizeUrl = (url: URL) => {
+  ensureNoFragment(url);
   url.hostname = url.hostname.toLowerCase();
   if (!url.pathname) {
     url.pathname = "/";
@@ -26,7 +36,11 @@ const normalizeUrl = (url: URL) => {
 };
 
 const normalizeHostWildcard = (value: string) => {
-  const match = HOST_WILDCARD_REGEX.exec(value);
+  if (value.endsWith(PATH_WILDCARD_SUFFIX)) {
+    throw new DomainError("Host wildcards do not support path wildcards", { code: "invalid_redirect_uri" });
+  }
+  const normalizedScheme = value.replace(/^https:\/\//i, "https://");
+  const match = HOST_WILDCARD_REGEX.exec(normalizedScheme);
   if (!match || !match[1]) {
     throw new DomainError("Invalid host wildcard redirect", { code: "invalid_redirect_uri" });
   }
@@ -36,18 +50,38 @@ const normalizeHostWildcard = (value: string) => {
 };
 
 export const classifyRedirect = (value: string): { type: RedirectUriType; normalized: string } => {
-  if (value.startsWith("https://*.")) {
-    return { type: RedirectUriType.HOST_WILDCARD, normalized: normalizeHostWildcard(value) };
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new DomainError("redirect_uri is required", { code: "invalid_redirect_uri" });
   }
 
-  if (value.endsWith("/*")) {
-    const withoutSuffix = value.slice(0, -1);
+  if (trimmed === ANY_REDIRECT_VALUE) {
+    return { type: RedirectUriType.ANY, normalized: ANY_REDIRECT_VALUE };
+  }
+
+  const schemeNormalized = trimmed.replace(/^https:\/\//i, "https://");
+
+  if (schemeNormalized.startsWith("https://*.")) {
+    if (trimmed.includes("?")) {
+      throw new DomainError("Host wildcards cannot include query parameters", { code: "invalid_redirect_uri" });
+    }
+    if (trimmed.includes("#")) {
+      throw new DomainError("Host wildcards cannot include fragment", { code: "invalid_redirect_uri" });
+    }
+    return { type: RedirectUriType.HOST_WILDCARD, normalized: normalizeHostWildcard(trimmed) };
+  }
+
+  if (trimmed.endsWith(PATH_WILDCARD_SUFFIX)) {
+    const withoutSuffix = trimmed.slice(0, -1);
     const url = normalizeUrl(new URL(withoutSuffix));
     ensureSchemeAllowed(url);
+    if (url.search) {
+      throw new DomainError("Path wildcards cannot include query parameters", { code: "invalid_redirect_uri" });
+    }
     return { type: RedirectUriType.PATH_SUFFIX, normalized: `${url.origin}${url.pathname}*` };
   }
 
-  const url = normalizeUrl(new URL(value));
+  const url = normalizeUrl(new URL(trimmed));
   ensureSchemeAllowed(url);
   return { type: RedirectUriType.EXACT, normalized: `${url.origin}${url.pathname}${url.search}` };
 };
@@ -113,7 +147,15 @@ export const resolveRedirectUri = (candidate: string, redirects: RedirectRecord[
       return matchHostWildcard(redirect, url);
     }
 
-    return matchPathSuffix(redirect, url);
+    if (redirect.type === RedirectUriType.PATH_SUFFIX) {
+      return matchPathSuffix(redirect, url);
+    }
+
+    if (redirect.type === RedirectUriType.ANY) {
+      return allowAnyRedirects();
+    }
+
+    return false;
   });
 
   if (!match) {

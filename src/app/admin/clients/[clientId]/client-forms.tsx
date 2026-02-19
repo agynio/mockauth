@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Loader2, Trash2 } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import {
   addRedirectUriAction,
@@ -18,10 +18,28 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
-const redirectSchema = z.object({ uri: z.string().url("Enter a valid URL") });
+const redirectSchema = z.object({
+  uri: z
+    .string()
+    .min(1, "Enter a redirect URI")
+    .superRefine((value, ctx) => {
+      const trimmed = value.trim();
+      if (trimmed === "*") {
+        return;
+      }
+      try {
+        const url = new URL(trimmed);
+        if (!url.protocol.startsWith("http")) {
+          throw new Error("invalid");
+        }
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter an absolute URL or *" });
+      }
+    }),
+});
 
 export function UpdateClientNameForm({
   clientId,
@@ -133,6 +151,13 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
   const form = useForm<z.infer<typeof redirectSchema>>({ resolver: zodResolver(redirectSchema), defaultValues: { uri: "" } });
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
+  const watchedField = useWatch({ control: form.control, name: "uri" }) ?? "";
+  const watchedUri = watchedField.trim();
+  const normalized = watchedUri.toLowerCase();
+  const isAnyWildcard = watchedUri === "*";
+  const isHostWildcard = !isAnyWildcard && normalized.startsWith("https://*.");
+  const isPathWildcard =
+    !isAnyWildcard && !isHostWildcard && watchedUri.endsWith("/*") && normalized.startsWith("http");
 
   const onSubmit = (values: z.infer<typeof redirectSchema>) => {
     startTransition(async () => {
@@ -157,9 +182,29 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
             <FormItem>
               <FormLabel>Redirect URI</FormLabel>
               <FormControl>
-                <Input placeholder="https://app.example.com/callback" {...field} disabled={!canEdit || pending} />
+                <Input placeholder="https://app.example.com/callback or *" {...field} disabled={!canEdit || pending} />
               </FormControl>
               <FormMessage />
+              {isAnyWildcard ? (
+                <Alert variant="destructive" data-testid="redirect-any-warning" className="mt-3">
+                  <AlertTitle>QA-only wildcard</AlertTitle>
+                  <AlertDescription>
+                    Allowing <span className="font-mono">*</span> matches every redirect URI and only works when
+                    MOCKAUTH_ALLOW_ANY_REDIRECT=true. Never enable this in production.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              {!isAnyWildcard && (isHostWildcard || isPathWildcard) ? (
+                <Alert
+                  data-testid="redirect-wildcard-warning"
+                  className="mt-3 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40"
+                >
+                  <AlertTitle>Wildcard redirects are for QA</AlertTitle>
+                  <AlertDescription>
+                    Host and path wildcards are intended for QA environments only and must not be used for production tenants.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
             </FormItem>
           )}
         />

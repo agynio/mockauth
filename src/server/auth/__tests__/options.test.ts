@@ -13,6 +13,7 @@ const baseEnv: AppEnv = {
   LOGTO_CLIENT_ID: "client-id",
   LOGTO_CLIENT_SECRET: "client-secret",
   MOCKAUTH_KEY_ENCRYPTION_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
+  MOCKAUTH_ALLOW_ANY_REDIRECT: false,
   ENABLE_TEST_ROUTES: true,
   ALLOW_EMAIL_LINKING: false,
 };

@@ -9,6 +9,7 @@ type Body = {
   tenantId?: string;
   names?: string[];
   clientType?: "PUBLIC" | "CONFIDENTIAL";
+  redirectUris?: string[];
 };
 
 export async function POST(request: Request) {
@@ -20,10 +21,11 @@ export async function POST(request: Request) {
   const tenantId = payload.tenantId ?? DEFAULT_TENANT_ID;
   const names = Array.isArray(payload.names) && payload.names.length > 0 ? payload.names : ["Playwright Client"];
   const clientType = payload.clientType ?? "CONFIDENTIAL";
+  const redirectUris = Array.isArray(payload.redirectUris) ? payload.redirectUris : undefined;
 
   const created = [] as { id: string; name: string; clientId: string }[];
   for (const name of names) {
-    const { client } = await createClient(tenantId, { name, clientType });
+    const { client } = await createClient(tenantId, { name, clientType, redirectUris });
     created.push({ id: client.id, name: client.name, clientId: client.clientId });
   }
 

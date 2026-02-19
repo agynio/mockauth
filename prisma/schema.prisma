@@ -27,6 +27,7 @@ enum RedirectUriType {
   EXACT
   HOST_WILDCARD
   PATH_SUFFIX
+  ANY
 }
 
 enum KeyStatus {
