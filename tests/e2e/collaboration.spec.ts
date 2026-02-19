@@ -87,6 +87,12 @@ test.describe("collaboration", () => {
     await expect(page.getByRole("button", { name: "Invite member" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Member role" }).first()).toBeEnabled();
     await expect(page.getByTestId("member-remove").first()).toBeVisible();
+    const firstRoleSelect = page.getByTestId("member-role-select").first();
+    await firstRoleSelect.click();
+    await expect(page.getByTestId("role-option-owner")).toContainText("Owner");
+    await expect(page.getByTestId("role-option-writer")).toContainText("Writer");
+    await expect(page.getByTestId("role-option-reader")).toContainText("Reader");
+    await page.keyboard.press("Escape");
 
     // Writer cannot manage members or invites
     const writerContext = await browser.newContext();
