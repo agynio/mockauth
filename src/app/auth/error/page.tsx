@@ -35,7 +35,7 @@ export default function AuthErrorPage({ searchParams }: ErrorPageProps) {
     description: "Retry the request. If the issue persists, reach out to QA for help.",
   };
 
-  const retryHref = `/api/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+  const retryHref = `/api/auth/signin/logto?callbackUrl=${encodeURIComponent(callbackUrl)}`;
   const supportHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     `Mockauth sign-in error: ${errorCode || "unknown"}`,
   )}`;

@@ -73,12 +73,15 @@ managing tenants, clients, redirect URIs, and RSA signing keys.
   (and other roles) ahead of time, so the first Logto sign-in must be allowed to link automatically. Toggle this with
   `ALLOW_EMAIL_LINKING=true` (enabled in `.env.development` and `.env.test`, left `false` elsewhere by default).
 - `NEXTAUTH_URL` **must** match the public tunnel URL (e.g., the Cloudflare tunnel hostname) and stay stable. If the
-  tunnel rotates, update `NEXTAUTH_URL` immediately and keep `NEXTAUTH_SECRET` unchanged to avoid forcing users to
-  re-authorize.
+  tunnel rotates, update `NEXTAUTH_URL` immediately, re-add the tunnel callback URL inside Logto (Applications → your
+  client → **Sign-in redirect URIs**), and keep `NEXTAUTH_SECRET` unchanged to avoid forcing users to re-authorize.
 - For automated tests we rely on a built-in mock Logto server that lives under
   `http://127.0.0.1:3000/api/test/logto`. Enable it via `ENABLE_TEST_ROUTES=true` and set `LOGTO_ISSUER` to the same
   URL. You can POST to `/api/test/logto/profile` with `{ email, sub, name }` to queue the next identity when simulating
   edge cases.
+- Client-side sign-in buttons should always point to the relative path
+  `/api/auth/signin/logto?callbackUrl=/admin` so they inherit the current host; reserve `NEXTAUTH_URL` for server-side
+  NextAuth configuration only.
 
 ### Breaking Change — Stage 2 (tenantId issuers)
 
