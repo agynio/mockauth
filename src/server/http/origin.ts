@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+import { env } from "@/server/env";
+
 type RequestWithNextUrl = Request | (NextRequest & { nextUrl: URL });
 
 const ensureProtocol = (protocol: string) => (protocol.endsWith(":") ? protocol : `${protocol}:`);
@@ -35,4 +37,24 @@ export const resolveUrl = (request: RequestWithNextUrl) => {
 
 export const resolveOrigin = (request: RequestWithNextUrl) => {
   return resolveUrl(request).origin;
+};
+
+const parseConfiguredOrigin = () => {
+  const target = env.NEXTAUTH_URL;
+  if (!target) {
+    return null;
+  }
+  try {
+    return new URL(target).origin;
+  } catch {
+    return null;
+  }
+};
+
+export const resolvePublicOrigin = (request: RequestWithNextUrl) => {
+  const configured = parseConfiguredOrigin();
+  if (configured) {
+    return configured;
+  }
+  return resolveOrigin(request);
 };

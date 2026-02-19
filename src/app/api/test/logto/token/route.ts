@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { env } from "@/server/env";
+import { resolvePublicOrigin } from "@/server/http/origin";
 import { logtoStub } from "@/server/test/logto-stub";
 
 const notFound = NextResponse.json({ error: "Not Found" }, { status: 404 });
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_client" }, { status: 401 });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = resolvePublicOrigin(request);
   const issuer = new URL("/api/test/logto", origin).toString();
   const tokens = await logtoStub.createTokens(profile, { issuer, audience: clientId });
 
