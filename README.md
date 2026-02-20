@@ -42,6 +42,8 @@ signing keys.
    pnpm prisma:migrate
    pnpm prisma:seed
    ```
+   (`pnpm prisma:migrate` targets the local dev database via `prisma migrate dev`. For deploys, use
+   `pnpm db:migrate`, which wraps `prisma migrate deploy`.)
 
 ## Common Commands
 
@@ -53,6 +55,8 @@ signing keys.
 | `pnpm test` | Prepares test DB, seeds fixtures, runs Vitest suite. |
 | `pnpm test:e2e` | Rebuilds test DB and runs Playwright (uses `openid-client` to complete Auth Code + PKCE). |
 | `pnpm test:e2e:dev` | Same as above but keeps a dev server running via `start-server-and-test`. |
+| `pnpm db:generate` | Runs `prisma generate` (no migrations). Used by `postinstall` and Vercel builds. |
+| `pnpm db:migrate` | Runs `prisma migrate deploy` for production/provisioned databases. |
 | `pnpm prisma:migrate` | `prisma migrate dev` for the dev database. |
 | `pnpm prisma:seed` | Seeds tenants/clients/mock users for manual testing. |
 
@@ -125,6 +129,14 @@ For the seeded tenant `tenant_qa` (default resource `tenant_qa_default_resource`
 | UserInfo | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/userinfo` |
 - Username-only login lives at `/t/<tenantId>/r/<apiResourceId>/oidc/login` and stores a tenant-scoped mock-user session cookie (separate
   from NextAuth).
+
+## Vercel deploys
+
+- `vercel.json` pins the install command to `pnpm install --frozen-lockfile` so deploys stay in lockstep with the repo.
+- The build command always runs `pnpm prisma:generate` and only executes `pnpm db:migrate` when `VERCEL_ENV=production`
+  (preview deployments stay read-only, production applies migrations before `next build`).
+- Local `postinstall` still calls `pnpm prisma:generate` and never attempts to run migrations, keeping `pnpm install`
+  safe on contributor machines.
 
 ## CI
 
