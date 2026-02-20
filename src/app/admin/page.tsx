@@ -41,7 +41,11 @@ export default async function AdminPage() {
 
   const redirectCount = clientSnapshot.clients.reduce((acc, client) => acc + client._count.redirectUris, 0);
   const lastUpdated = clientSnapshot.clients[0]?.updatedAt;
-  const issuer = `${origin}/t/${activeTenant.id}/oidc`;
+  const defaultResourceId = activeTenant.defaultApiResourceId;
+  if (!defaultResourceId) {
+    throw new Error("Active tenant is missing a default API resource");
+  }
+  const issuer = `${origin}/t/${activeTenant.id}/r/${defaultResourceId}/oidc`;
 
   const viewerRole = tenantContext.activeMembership?.role ?? "READER";
   const stats = [

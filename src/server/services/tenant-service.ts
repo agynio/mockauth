@@ -1,4 +1,4 @@
-import type { MembershipRole, Prisma, TenantMembership } from "@/generated/prisma/client";
+import type { MembershipRole, Prisma, Tenant, TenantMembership } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
 import { rotateKey } from "@/server/services/key-service";
@@ -21,12 +21,15 @@ export const maxRole = (left: MembershipRole, right: MembershipRole): Membership
   return ROLE_RANK[left] >= ROLE_RANK[right] ? left : right;
 };
 
-export const getActiveTenantById = async (tenantId: string) => {
+export const getActiveTenantById = async (tenantId: string): Promise<Tenant & { defaultApiResourceId: string }> => {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant || tenant.status !== "ACTIVE") {
     throw new DomainError("Unknown tenant", { status: 404, code: "tenant_not_found" });
   }
-  return tenant;
+  if (!tenant.defaultApiResourceId) {
+    throw new DomainError("Tenant is missing a default API resource", { status: 500, code: "api_resource_missing" });
+  }
+  return tenant as Tenant & { defaultApiResourceId: string };
 };
 
 type MembershipWithTenant = Prisma.TenantMembershipGetPayload<{ include: { tenant: true } }>;
@@ -63,10 +66,17 @@ export const assertTenantRole = async (
 
 export const createTenant = async (adminUserId: string, data: { name: string }) => {
   return prisma.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({
+    const tenant = await tx.tenant.create({ data: { name: data.name } });
+    const defaultResource = await tx.apiResource.create({
       data: {
-        name: data.name,
+        tenantId: tenant.id,
+        name: `${data.name} default`,
+        description: "Default issuer",
       },
+    });
+    const tenantWithDefault = await tx.tenant.update({
+      where: { id: tenant.id },
+      data: { defaultApiResourceId: defaultResource.id },
     });
 
     await tx.tenantMembership.create({
@@ -77,6 +87,6 @@ export const createTenant = async (adminUserId: string, data: { name: string }) 
       },
     });
     await rotateKey(tenant.id, tx);
-    return tenant;
+    return tenantWithDefault;
   });
 };

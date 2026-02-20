@@ -18,6 +18,17 @@ async function main() {
     create: { id: DEFAULT_TENANT_ID, name: DEFAULT_TENANT_NAME },
   });
 
+  const defaultResourceId = tenant.defaultApiResourceId ?? `${tenant.id}_default_resource`;
+  const apiResource = await prisma.apiResource.upsert({
+    where: { id: defaultResourceId },
+    update: { name: `${tenant.name} default` },
+    create: { id: defaultResourceId, tenantId: tenant.id, name: `${tenant.name} default` },
+  });
+
+  if (!tenant.defaultApiResourceId) {
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
+  }
+
   await ensureActiveKey(tenant.id);
 
   const client = await prisma.client.upsert({

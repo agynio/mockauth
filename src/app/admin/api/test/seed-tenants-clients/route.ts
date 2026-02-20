@@ -9,8 +9,10 @@ const ADMIN_EMAIL = "pw-admin@example.test";
 
 type SeedResponse = {
   tenantAId: string;
+  tenantAResourceId: string;
   tenantAName: string;
   tenantBId: string;
+  tenantBResourceId: string;
   tenantBName: string;
   clientsA: { id: string; name: string; clientId: string }[];
   clientsB: { id: string; name: string; clientId: string }[];
@@ -42,8 +44,10 @@ export async function POST() {
 
   const payload: SeedResponse = {
     tenantAId: tenantA.id,
+    tenantAResourceId: tenantA.defaultApiResourceId!,
     tenantAName: tenantA.name,
     tenantBId: tenantB.id,
+    tenantBResourceId: tenantB.defaultApiResourceId!,
     tenantBName: tenantB.name,
     clientsA,
     clientsB,

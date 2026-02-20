@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { authenticate, createTestSession, stubClipboard } from "./helpers/admin";
 
 const tenantId = "tenant_qa";
 const tenantDisplayName = "QA Sandbox";
+const legacyResourceId = "tenant_qa_default_resource";
+const legacyResourceName = `${tenantDisplayName} default`;
 const seededClientName = "QA Client";
 const emptyStateText = "No clients yet. Create one to start an OIDC flow.";
 
@@ -18,7 +21,7 @@ test.describe("admin console", () => {
     await expect(page.getByRole("heading", { name: "OAuth clients" })).toBeVisible();
 
     const sidebar = page.getByTestId("admin-sidebar");
-    await expect(sidebar.getByText("Navigation", { exact: true })).toHaveCount(0);
+    await expect(sidebar.getByText("Navigation", { exact: true })).toHaveCount(1);
     await expect(sidebar.getByText("Active tenant", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("add-tenant-btn")).toHaveCount(0);
 
@@ -155,4 +158,85 @@ test.describe("admin console", () => {
     await page.getByTestId("logout-button").click();
     await page.waitForURL("**/api/auth/signin**");
   });
+
+  test("manages API resources and client issuers", async ({ page }) => {
+    const seed = await seedTenantsWithClients(page);
+    const tenantIdUnderTest = seed.tenantAId;
+    const tenantNameUnderTest = seed.tenantAName;
+    const legacyResourceId = seed.tenantAResourceId;
+    const legacyResourceName = `${tenantNameUnderTest} default`;
+    const seededClientName = seed.clientsA[0]?.name ?? "Tenant A Client";
+
+    const sessionToken = await createTestSession(page, { tenantId: tenantIdUnderTest });
+    await authenticate(page, sessionToken);
+
+    const createResource = async () => {
+      const resourceName = `Playwright API ${Date.now()}`;
+      await page.goto("/admin/api-resources");
+      await selectTenant(page, tenantIdUnderTest);
+      await expect(page.getByRole("heading", { name: "API resources" })).toBeVisible();
+      await page.getByTestId("api-resource-create-btn").click();
+      const dialog = page.getByRole("dialog", { name: "Create API resource" });
+      await dialog.getByLabel("Display name").fill(resourceName);
+      await dialog.getByLabel("Description").fill("Playwright resource");
+      await dialog.getByRole("button", { name: "Create" }).click();
+      const row = page.getByRole("row", { name: new RegExp(escapeRegExp(resourceName), "i") }).last();
+      await expect(row.getByText(resourceName)).toBeVisible();
+      const resourceId = await row.getAttribute("data-resource-id");
+      expect(resourceId).toBeTruthy();
+      return { row, resourceName, resourceId: resourceId! };
+    };
+
+    const { row, resourceName, resourceId } = await createResource();
+    await row.getByRole("button", { name: "Set default" }).click();
+    await expect(row.getByTestId("api-resource-default-badge")).toBeVisible();
+
+    const issuerPanel = page.getByTestId("issuer-panel");
+    await expect(issuerPanel).toContainText(resourceName);
+    await expect(page.getByTestId("issuer-field-issuer")).toContainText(`/r/${resourceId}/oidc`);
+
+    await page.goto("/admin/clients");
+    await selectTenant(page, tenantIdUnderTest);
+    await page.getByRole("row", { name: new RegExp(escapeRegExp(seededClientName), "i") })
+      .last()
+      .getByRole("link", { name: "Details →" })
+      .click();
+    await expect(page.getByText(new RegExp(`Currently issuing for ${escapeRegExp(resourceName)}`))).toBeVisible();
+
+    const issuerSelect = page.getByRole("combobox", { name: "API resource" });
+    await issuerSelect.click();
+    await page.getByTestId(`issuer-option-${legacyResourceId}`).click();
+    await page.getByTestId("issuer-form-save").click();
+    await expect(page.getByText(new RegExp(`Currently issuing for ${escapeRegExp(legacyResourceName)}`))).toBeVisible();
+    await expect(page.getByTestId("oauth-field-issuer")).toContainText(`/r/${legacyResourceId}/oidc`);
+
+    await page.goto("/admin/api-resources");
+    await selectTenant(page, tenantIdUnderTest);
+    const originalRow = page.getByRole("row", { name: new RegExp(escapeRegExp(legacyResourceName), "i") });
+    await originalRow.getByRole("button", { name: "Set default" }).click();
+    await expect(originalRow.getByTestId("api-resource-default-badge")).toBeVisible();
+  });
 });
+
+type SeedResponse = {
+  tenantAId: string;
+  tenantAResourceId: string;
+  tenantAName: string;
+  clientsA: { name: string }[];
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const seedTenantsWithClients = async (page: Page): Promise<SeedResponse> => {
+  const response = await page.request.post("/admin/api/test/seed-tenants-clients", { data: {} });
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as SeedResponse;
+};
+
+const selectTenant = async (page: Page, tenantId: string) => {
+  const switcher = page.getByTestId("tenant-switcher");
+  await switcher.click();
+  const option = page.getByTestId(`tenant-option-${tenantId}`);
+  await expect(option).toBeVisible();
+  await option.click();
+};

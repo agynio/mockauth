@@ -8,6 +8,7 @@ import { TenantSwitcher } from "@/app/admin/_components/tenant-controls";
 import { UserBadge } from "@/app/admin/_components/user-badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 
 type TenantSummary = {
   id: string;
@@ -28,6 +29,7 @@ type Props = {
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", description: "Tenant keys and SSO stats" },
   { href: "/admin/clients", label: "Clients", description: "Manage OAuth clients" },
+  { href: "/admin/api-resources", label: "API resources", description: "Manage issuers per tenant" },
   { href: "/admin/members", label: "Members", description: "Collaborate with your team" },
 ];
 
@@ -43,10 +45,20 @@ export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Pro
         <h1 className="text-lg font-semibold text-foreground">Administration</h1>
       </div>
       <ScrollArea className="flex-1 px-4 py-6" data-testid="sidebar-nav-area">
-        <SidebarNav items={NAV_ITEMS} />
+        <div className="space-y-6">
+          <section>
+            <h2 className="text-xs font-semibold uppercase text-muted-foreground">Navigation</h2>
+            <div className="mt-3">
+              <SidebarNav items={NAV_ITEMS} />
+            </div>
+          </section>
+          <Separator />
+          <section>
+            <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} onAddTenant={onAddTenant} />
+          </section>
+        </div>
       </ScrollArea>
       <div className="border-t px-4 py-5 space-y-5" data-testid="sidebar-footer">
-        <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} onAddTenant={onAddTenant} />
         <div className="space-y-4" data-testid="sidebar-user-section">
           <UserBadge user={user} />
           <Button type="button" variant="outline" className="w-full" onClick={handleLogout}>

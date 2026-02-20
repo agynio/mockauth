@@ -13,7 +13,8 @@ import {
 } from "openid-client";
 
 const tenantId = "tenant_qa";
-const issuerBase = `http://127.0.0.1:3000/t/${tenantId}/oidc`;
+const defaultResourceId = "tenant_qa_default_resource";
+const issuerBase = `http://127.0.0.1:3000/t/${tenantId}/r/${defaultResourceId}/oidc`;
 const redirectUri = "https://client.example.test/callback";
 
 const cookieJar = () => {

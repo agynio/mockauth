@@ -5,11 +5,19 @@ import { createClient, getClientByIdForTenant, rotateClientSecret } from "@/serv
 import { describe, expect, it } from "vitest";
 
 const createTenant = async () => {
-  return prisma.tenant.create({
+  const tenant = await prisma.tenant.create({
     data: {
       name: `Client Test Tenant ${randomUUID()}`,
     },
   });
+  const apiResource = await prisma.apiResource.create({
+    data: {
+      tenantId: tenant.id,
+      name: "Default",
+    },
+  });
+  await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
+  return tenant;
 };
 
 describe("client service", () => {

@@ -7,8 +7,10 @@ type SeededClients = { id: string; name: string; clientId: string }[];
 
 type SeedResponse = {
   tenantAId: string;
+  tenantAResourceId: string;
   tenantAName: string;
   tenantBId: string;
+  tenantBResourceId: string;
   tenantBName: string;
   clientsA: SeededClients;
   clientsB: SeededClients;
@@ -36,6 +38,23 @@ test.describe("tenant switching", () => {
     await expectClientsHidden(page, seed.clientsA.map((client) => client.name));
     await expectTenantCookie(page, seed.tenantBId);
     await expectActiveTenant(page, seed.tenantBId);
+  });
+
+  test("guardrail: add tenant action lives inside switcher", async ({ page }) => {
+    const sessionToken = await createTestSession(page);
+    await authenticate(page, sessionToken);
+
+    await page.goto("/admin");
+    await expect(page.locator('[data-testid="tenant-option-add"]')).toHaveCount(0);
+
+    await page.getByTestId("tenant-switcher").click();
+    const addButton = page.getByTestId("tenant-option-add");
+    await expect(addButton).toBeVisible();
+    await addButton.click();
+
+    const dialog = page.getByRole("dialog", { name: "Add tenant" });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 });
 

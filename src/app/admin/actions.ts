@@ -14,6 +14,7 @@ import {
   createClient,
   rotateClientSecret,
   updateClientName,
+  updateClientApiResource,
 } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
 import { setAdminActiveTenantCookie } from "@/server/services/admin-tenant-context";
@@ -24,6 +25,12 @@ import {
   createTenant,
 } from "@/server/services/tenant-service";
 import { createInvite, removeMember, revokeInvite, updateMemberRole } from "@/server/services/membership-service";
+import {
+  createApiResource,
+  updateApiResource as updateApiResourceRecord,
+  setDefaultApiResource,
+  getApiResourceForTenant,
+} from "@/server/services/api-resource-service";
 
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
@@ -56,6 +63,17 @@ const createInviteSchema = z.object({
   expiresInHours: z.enum(["1", "24", "168"]),
 });
 const revokeInviteSchema = z.object({ tenantId: z.string().min(1), inviteId: z.string().min(1) });
+const apiResourceSchema = z.object({
+  tenantId: z.string().min(1),
+  name: z.string().min(2),
+  description: z.string().max(200).optional().nullable(),
+});
+const updateApiResourceSchema = apiResourceSchema.extend({ apiResourceId: z.string().min(1) });
+const setDefaultResourceSchema = z.object({ tenantId: z.string().min(1), apiResourceId: z.string().min(1) });
+const updateClientIssuerSchema = z.object({
+  clientId: z.string().min(1),
+  apiResourceId: z.union([z.literal("default"), z.string().min(1)]),
+});
 
 const requireSession = async () => {
   const session = await getServerSession(authOptions);
@@ -147,6 +165,60 @@ export const createClientAction = async (
   }
 };
 
+export const createApiResourceAction = async (input: z.infer<typeof apiResourceSchema>): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = apiResourceSchema.parse(input);
+    const membership = await assertTenantMembership(adminId, parsed.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+    await createApiResource(parsed.tenantId, { name: parsed.name, description: parsed.description });
+    revalidatePath("/admin/api-resources");
+    revalidatePath("/admin/clients");
+    return { success: "API resource created" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Failed to create API resource" };
+  }
+};
+
+export const updateApiResourceAction = async (input: z.infer<typeof updateApiResourceSchema>): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateApiResourceSchema.parse(input);
+    const membership = await assertTenantMembership(adminId, parsed.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+    await updateApiResourceRecord(parsed.tenantId, parsed.apiResourceId, {
+      name: parsed.name,
+      description: parsed.description,
+    });
+    revalidatePath("/admin/api-resources");
+    revalidatePath("/admin/clients");
+    return { success: "API resource updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update API resource" };
+  }
+};
+
+export const setDefaultApiResourceAction = async (
+  input: z.infer<typeof setDefaultResourceSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = setDefaultResourceSchema.parse(input);
+    const membership = await assertTenantMembership(adminId, parsed.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+    await setDefaultApiResource(parsed.tenantId, parsed.apiResourceId);
+    revalidatePath("/admin/api-resources");
+    revalidatePath("/admin/clients");
+    revalidatePath("/admin", "layout");
+    return { success: "Default issuer updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to set default resource" };
+  }
+};
+
 export const rotateKeyAction = async (input: z.infer<typeof keySchema>): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
@@ -215,6 +287,33 @@ export const updateClientNameAction = async (input: z.infer<typeof updateClientS
   } catch (error) {
     console.error(error);
     return { error: "Unable to update client" };
+  }
+};
+
+export const updateClientIssuerAction = async (
+  input: z.infer<typeof updateClientIssuerSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateClientIssuerSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+
+    let apiResourceId: string | null = null;
+    if (parsed.apiResourceId !== "default") {
+      apiResourceId = parsed.apiResourceId;
+      await getApiResourceForTenant(client.tenantId, apiResourceId);
+    }
+
+    await updateClientApiResource(client.id, apiResourceId);
+    revalidatePath(clientPath(client.id));
+    revalidatePath("/admin/clients");
+    return { success: "Client issuer updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update issuer" };
   }
 };
 

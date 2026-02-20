@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 const features = [
-  "Path-based issuer per tenant (https://host/t/{tenant}/oidc)",
+  "Resource-scoped issuers (https://host/t/{tenant}/r/{apiResourceId}/oidc)",
   "Username-only login with isolated cookies",
-  "Authorization Code + PKCE (S256) with JWKS per tenant",
+  "Authorization Code + PKCE (S256) with JWKS per API resource",
   "NextAuth-powered admin console for tenants, clients, keys",
 ];
 
