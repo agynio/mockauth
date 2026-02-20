@@ -7,8 +7,10 @@ type SeededClients = { id: string; name: string; clientId: string }[];
 
 type SeedResponse = {
   tenantAId: string;
+  tenantAResourceId: string;
   tenantAName: string;
   tenantBId: string;
+  tenantBResourceId: string;
   tenantBName: string;
   clientsA: SeededClients;
   clientsB: SeededClients;
