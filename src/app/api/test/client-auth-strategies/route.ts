@@ -35,3 +35,24 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ clientId: client.clientId, strategies });
 }
+
+export async function GET(request: Request) {
+  if (!env.ENABLE_TEST_ROUTES) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const url = new URL(request.url);
+  const tenantId = url.searchParams.get("tenantId")?.trim() || DEFAULT_TENANT_ID;
+  const clientId = url.searchParams.get("clientId")?.trim();
+  if (!clientId) {
+    return NextResponse.json({ error: "clientId required" }, { status: 400 });
+  }
+
+  const client = await prisma.client.findFirst({ where: { tenantId, clientId }, select: { authStrategies: true } });
+  if (!client) {
+    return NextResponse.json({ error: "client_not_found" }, { status: 404 });
+  }
+
+  const strategies = parseClientAuthStrategies(client.authStrategies ?? DEFAULT_CLIENT_AUTH_STRATEGIES);
+  return NextResponse.json({ clientId, strategies });
+}
