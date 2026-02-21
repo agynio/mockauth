@@ -202,13 +202,28 @@ test.describe("admin console", () => {
       .getByRole("link", { name: "Details →" })
       .click();
     await expect(page.getByText(new RegExp(`Currently issuing for ${escapeRegExp(resourceName)}`))).toBeVisible();
-
     const issuerSelect = page.getByRole("combobox", { name: "API resource" });
+    await expect(issuerSelect).toHaveText(new RegExp(`Tenant default \\(${escapeRegExp(resourceName)}\\)`));
+
     await issuerSelect.click();
-    await page.getByTestId(`issuer-option-${legacyResourceId}`).click();
+    const legacyOption = page.getByTestId(`issuer-option-${legacyResourceId}`);
+    await expect(legacyOption).toBeVisible();
+    await expect(legacyOption).toHaveText(new RegExp(escapeRegExp(legacyResourceName)));
+    await legacyOption.click();
+    await expect(issuerSelect).toHaveText(new RegExp(escapeRegExp(legacyResourceName)));
     await page.getByTestId("issuer-form-save").click();
     await expect(page.getByText(new RegExp(`Currently issuing for ${escapeRegExp(legacyResourceName)}`))).toBeVisible();
+    const issuerSelectAfterSave = page.getByRole("combobox", { name: "API resource" });
+    await expect(issuerSelectAfterSave).toHaveText(new RegExp(escapeRegExp(legacyResourceName)));
     await expect(page.getByTestId("oauth-field-issuer")).toContainText(`/r/${legacyResourceId}/oidc`);
+    await expect(page.getByTestId("oauth-field-discovery")).toContainText(`/r/${legacyResourceId}/oidc/.well-known`);
+
+    await page.reload();
+    await selectTenant(page, tenantIdUnderTest);
+    const issuerSelectAfterReload = page.getByRole("combobox", { name: "API resource" });
+    await expect(issuerSelectAfterReload).toHaveText(new RegExp(escapeRegExp(legacyResourceName)));
+    await expect(page.getByTestId("oauth-field-issuer")).toContainText(`/r/${legacyResourceId}/oidc`);
+    await expect(page.getByTestId("oauth-field-discovery")).toContainText(`/r/${legacyResourceId}/oidc/.well-known`);
 
     await page.goto("/admin/api-resources");
     await selectTenant(page, tenantIdUnderTest);

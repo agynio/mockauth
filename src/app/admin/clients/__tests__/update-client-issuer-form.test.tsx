@@ -35,13 +35,14 @@ const defaultResources = [
 ];
 
 const renderForm = (props?: Partial<Parameters<typeof UpdateClientIssuerForm>[0]>) => {
+  const currentResourceProp = props && Object.prototype.hasOwnProperty.call(props, "currentResourceId") ? props.currentResourceId : undefined;
   return render(
     <UpdateClientIssuerForm
       clientId="client_123"
       canEdit
       defaultResourceId="api_res_1"
       defaultResourceName="Primary API"
-      currentResourceId={props?.currentResourceId ?? "api_res_2"}
+      currentResourceId={currentResourceProp ?? "api_res_2"}
       usesDefault={props?.usesDefault ?? false}
       resources={props?.resources ?? defaultResources}
       {...props}
@@ -56,15 +57,28 @@ describe("UpdateClientIssuerForm", () => {
     mockToast.mockClear();
   });
 
-  it("loads the tenant default when usesDefault is true", () => {
-    renderForm({ usesDefault: true });
-    expect(screen.getByLabelText("API resource")).toHaveValue("default");
+  it("maps null resource ids to the tenant default label", () => {
+    renderForm({ currentResourceId: null, usesDefault: true });
+    expect(screen.getByLabelText("API resource")).toHaveDisplayValue("Tenant default (Primary API)");
   });
 
-  it("syncs the selection when props change", async () => {
-    const { rerender } = renderForm({ currentResourceId: "api_res_2", usesDefault: false });
+  it("updates the trigger text when a resource is selected", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
     const select = screen.getByLabelText("API resource");
-    expect(select).toHaveValue("api_res_2");
+    await user.selectOptions(select, "api_res_1");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("API resource")).toHaveDisplayValue("Primary API");
+    });
+  });
+
+  it("persists the chosen resource across rerenders until props change", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderForm();
+    const select = screen.getByLabelText("API resource");
+    await user.selectOptions(select, "api_res_1");
 
     rerender(
       <UpdateClientIssuerForm
@@ -72,14 +86,28 @@ describe("UpdateClientIssuerForm", () => {
         canEdit
         defaultResourceId="api_res_1"
         defaultResourceName="Primary API"
-        currentResourceId="api_res_1"
+        currentResourceId="api_res_2"
+        usesDefault={false}
+        resources={defaultResources}
+      />,
+    );
+
+    expect(screen.getByLabelText("API resource")).toHaveDisplayValue("Primary API");
+
+    rerender(
+      <UpdateClientIssuerForm
+        clientId="client_123"
+        canEdit
+        defaultResourceId="api_res_1"
+        defaultResourceName="Primary API"
+        currentResourceId={null}
         usesDefault
         resources={defaultResources}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("API resource")).toHaveValue("default");
+      expect(screen.getByLabelText("API resource")).toHaveDisplayValue("Tenant default (Primary API)");
     });
   });
 

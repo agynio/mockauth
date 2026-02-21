@@ -489,36 +489,42 @@ export function UpdateClientIssuerForm({
   canEdit: boolean;
   defaultResourceId: string;
   defaultResourceName: string;
-  currentResourceId: string;
+  currentResourceId: string | null;
   usesDefault: boolean;
   resources: IssuerOption[];
 }) {
   const router = useRouter();
-  const [selectedResourceId, setSelectedResourceId] = useState<string>(usesDefault ? "default" : currentResourceId ?? defaultResourceId);
   const [pending, startSaveTransition] = useTransition();
-  const [, startResetTransition] = useTransition();
   const { toast } = useToast();
 
-  useEffect(() => {
-    startResetTransition(() => {
-      setSelectedResourceId(usesDefault ? "default" : currentResourceId);
-    });
-  }, [currentResourceId, usesDefault, startResetTransition]);
-
+  const tenantDefaultLabel = `Tenant default (${defaultResourceName})`;
   const options: IssuerOption[] = [
-    { id: "default", label: `Use tenant default (${defaultResourceName})` },
+    { id: "default", label: tenantDefaultLabel },
     ...resources,
   ];
 
-  const handleSave = () => {
-    const parsed = issuerSchema.safeParse({ resourceId: selectedResourceId });
-    if (!parsed.success) {
-      toast({ variant: "destructive", title: "Select an API resource" });
-      return;
+  const normalizeResourceId = (resourceId: string | null | undefined) => {
+    if (!resourceId || resourceId === "default") {
+      return "default";
     }
+    return resourceId;
+  };
+
+  const form = useForm<z.infer<typeof issuerSchema>>({
+    resolver: zodResolver(issuerSchema),
+    defaultValues: { resourceId: normalizeResourceId(usesDefault ? "default" : currentResourceId ?? defaultResourceId) },
+  });
+
+  useEffect(() => {
+    form.reset({ resourceId: normalizeResourceId(usesDefault ? "default" : currentResourceId ?? defaultResourceId) });
+  }, [currentResourceId, defaultResourceId, form, usesDefault]);
+
+  const watchedResourceId = useWatch({ control: form.control, name: "resourceId" });
+  const selectedLabel = options.find((option) => option.id === watchedResourceId)?.label ?? tenantDefaultLabel;
+
+  const handleSubmit = form.handleSubmit((values) => {
     startSaveTransition(async () => {
-      const normalized = parsed.data.resourceId === "default" ? "default" : parsed.data.resourceId;
-      const result = await updateClientIssuerAction({ clientId, apiResourceId: normalized });
+      const result = await updateClientIssuerAction({ clientId, apiResourceId: values.resourceId });
       if (result.error) {
         toast({ variant: "destructive", title: "Unable to update issuer", description: result.error });
         return;
@@ -526,38 +532,60 @@ export function UpdateClientIssuerForm({
       router.refresh();
       toast({ title: "Issuer updated", description: "Client now issues tokens for the selected resource." });
     });
-  };
+  });
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="flex-1 space-y-2">
-        <Label htmlFor="client-issuer-select">Issuer / API resource</Label>
-        <Select
-          value={selectedResourceId}
-          onValueChange={setSelectedResourceId}
+    <Form {...form}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <FormField
+          control={form.control}
+          name="resourceId"
+          render={({ field }) => (
+            <FormItem className="flex-1 space-y-2">
+              <FormLabel htmlFor="client-issuer-select">Issuer / API resource</FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  if (!value) {
+                    return;
+                  }
+                  const normalized = normalizeResourceId(value);
+                  field.onChange(normalized);
+                  form.setValue("resourceId", normalized, { shouldValidate: true, shouldDirty: true });
+                }}
+                disabled={!canEdit || pending}
+              >
+                <FormControl>
+                  <SelectTrigger
+                    id="client-issuer-select"
+                    aria-label="API resource"
+                    data-testid="client-issuer-trigger"
+                  >
+                    <SelectValue aria-hidden="true" className="sr-only" />
+                    <span className="truncate" data-testid="client-issuer-value">{selectedLabel}</span>
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {options.map((option) => (
+                    <SelectItem key={option.id} value={option.id} data-testid={`issuer-option-${option.id}`}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button
+          type="submit"
           disabled={!canEdit || pending}
+          className="sm:w-auto w-full"
+          data-testid="issuer-form-save"
         >
-          <SelectTrigger id="client-issuer-select" aria-label="API resource">
-            <SelectValue placeholder="Select API resource" />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((option) => (
-              <SelectItem key={option.id} value={option.id} data-testid={`issuer-option-${option.id}`}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Button
-        type="button"
-        onClick={handleSave}
-        disabled={!canEdit || pending}
-        className="sm:w-auto w-full"
-        data-testid="issuer-form-save"
-      >
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
-      </Button>
-    </div>
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+        </Button>
+      </form>
+    </Form>
   );
 }
