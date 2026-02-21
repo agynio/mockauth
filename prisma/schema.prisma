@@ -43,7 +43,7 @@ enum TokenEndpointAuthMethod {
 }
 
 model Tenant {
-  id                String              @id @default(cuid())
+  id                String              @id @default(uuid())
   name              String
   status            TenantStatus        @default(ACTIVE)
   createdAt         DateTime            @default(now())
@@ -62,7 +62,7 @@ model Tenant {
 }
 
 model ApiResource {
-  id          String     @id @default(cuid())
+  id          String     @id @default(uuid())
   tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId    String
   name        String
@@ -78,7 +78,7 @@ model ApiResource {
 }
 
 model AdminUser {
-  id          String            @id @default(cuid())
+  id          String            @id @default(uuid())
   logtoSub    String?           @unique
   email       String?           @unique
   name        String?
@@ -94,7 +94,7 @@ model AdminUser {
 }
 
 model TenantMembership {
-  id         String       @id @default(cuid())
+  id         String       @id @default(uuid())
   tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId   String
   adminUser  AdminUser    @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
@@ -106,7 +106,7 @@ model TenantMembership {
 }
 
 model Invite {
-  id             String          @id @default(cuid())
+  id             String          @id @default(uuid())
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId       String
   role           MembershipRole  @default(READER)
@@ -123,7 +123,7 @@ model Invite {
 }
 
 model Client {
-  id                       String                   @id @default(cuid())
+  id                       String                   @id @default(uuid())
   tenant                   Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId                 String
   apiResource              ApiResource?             @relation(fields: [apiResourceId], references: [id])
@@ -146,7 +146,7 @@ model Client {
 }
 
 model RedirectUri {
-  id        String          @id @default(cuid())
+  id        String          @id @default(uuid())
   client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId  String
   uri       String
@@ -157,7 +157,7 @@ model RedirectUri {
 }
 
 model TenantKey {
-  id                   String     @id @default(cuid())
+  id                   String     @id @default(uuid())
   tenant               Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId             String
   kid                  String
@@ -174,7 +174,7 @@ model TenantKey {
 }
 
 model MockUser {
-  id            String            @id @default(cuid())
+  id            String            @id @default(uuid())
   tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId      String
   username      String
@@ -190,7 +190,7 @@ model MockUser {
 }
 
 model MockSession {
-  id               String   @id @default(cuid())
+  id               String   @id @default(uuid())
   tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId         String
   user             MockUser @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -201,7 +201,7 @@ model MockSession {
 }
 
 model AuthorizationCode {
-  id                 String      @id @default(cuid())
+  id                 String      @id @default(uuid())
   tenant             Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId           String
   client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -224,7 +224,7 @@ model AuthorizationCode {
 }
 
 model AccessToken {
-  id         String   @id @default(cuid())
+  id         String   @id @default(uuid())
   tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId   String
   client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -240,7 +240,7 @@ model AccessToken {
 }
 
 model Account {
-  id                String    @id @default(cuid())
+  id                String    @id @default(uuid())
   user              AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId            String
   type              String
@@ -259,7 +259,7 @@ model Account {
 }
 
 model Session {
-  id           String    @id @default(cuid())
+  id           String    @id @default(uuid())
   sessionToken String    @unique
   user         AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId       String
