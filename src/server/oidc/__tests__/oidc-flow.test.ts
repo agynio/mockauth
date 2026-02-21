@@ -50,7 +50,6 @@ describe("OIDC flow", () => {
     const challenge = computeS256Challenge(codeVerifier);
     const authorize = await handleAuthorize(
       {
-        tenantId,
         apiResourceId,
         clientId: "qa-client",
         redirectUri: "https://client.example.test/callback",
@@ -62,7 +61,7 @@ describe("OIDC flow", () => {
         sessionToken,
       },
       "https://mockauth.test",
-      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -82,12 +81,7 @@ describe("OIDC flow", () => {
     expect(tokenResponse.access_token).toBeTruthy();
     expect(tokenResponse.id_token).toBeTruthy();
 
-    const userinfo = await getUserInfo(
-      `Bearer ${tokenResponse.access_token}`,
-      "https://mockauth.test",
-      tenantId,
-      apiResourceId,
-    );
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", apiResourceId);
     expect(userinfo.sub).toBe("demo");
     const idToken = decodeJwt(tokenResponse.id_token);
     expect(idToken.sub).toBe("demo");
@@ -122,7 +116,6 @@ describe("OIDC flow", () => {
     const challenge = computeS256Challenge(codeVerifier);
     const authorize = await handleAuthorize(
       {
-        tenantId,
         apiResourceId,
         clientId: "qa-client",
         redirectUri: "https://client.example.test/callback",
@@ -134,7 +127,7 @@ describe("OIDC flow", () => {
         sessionToken: emailSessionToken,
       },
       "https://mockauth.test",
-      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -154,12 +147,7 @@ describe("OIDC flow", () => {
     expect(idToken.email_verified).toBe(false);
     expect(idToken.preferred_username).toBeUndefined();
 
-    const userinfo = await getUserInfo(
-      `Bearer ${tokenResponse.access_token}`,
-      "https://mockauth.test",
-      tenantId,
-      apiResourceId,
-    );
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", apiResourceId);
     expect(userinfo.email).toBe("email-user@example.test");
     await clearSession(tenantId, emailSessionToken);
   });
@@ -191,7 +179,6 @@ describe("OIDC flow", () => {
     const challenge = computeS256Challenge(codeVerifier);
     const authorize = await handleAuthorize(
       {
-        tenantId,
         apiResourceId,
         clientId: "qa-client",
         redirectUri: "https://client.example.test/callback",
@@ -203,7 +190,7 @@ describe("OIDC flow", () => {
         sessionToken: sessionTokenOverride,
       },
       "https://mockauth.test",
-      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -220,12 +207,7 @@ describe("OIDC flow", () => {
     const idToken = decodeJwt(tokenResponse.id_token);
     expect(idToken.sub).toBe(subject);
 
-    const userinfo = await getUserInfo(
-      `Bearer ${tokenResponse.access_token}`,
-      "https://mockauth.test",
-      tenantId,
-      apiResourceId,
-    );
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", apiResourceId);
     expect(userinfo.sub).toBe(subject);
     await clearSession(tenantId, sessionTokenOverride);
   });
@@ -251,7 +233,6 @@ describe("OIDC flow", () => {
     });
     const authorize = await handleAuthorize(
       {
-        tenantId,
         apiResourceId,
         clientId: "qa-client",
         redirectUri: "https://client.example.test/callback",
@@ -263,7 +244,7 @@ describe("OIDC flow", () => {
         sessionToken: verifiedSession,
       },
       "https://mockauth.test",
-      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
     );
     const code = new URL(authorize.redirectTo).searchParams.get("code");
     const consumed = await consumeAuthorizationCode(code!);
@@ -303,7 +284,6 @@ describe("OIDC flow", () => {
       });
       const authorize = await handleAuthorize(
         {
-          tenantId,
           apiResourceId,
           clientId: "qa-client",
           redirectUri: "https://client.example.test/callback",
@@ -315,7 +295,7 @@ describe("OIDC flow", () => {
           sessionToken: sessionTokenChoice,
         },
         "https://mockauth.test",
-        `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
       );
       const code = new URL(authorize.redirectTo).searchParams.get("code");
       const consumed = await consumeAuthorizationCode(code!);

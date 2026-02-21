@@ -71,7 +71,7 @@ export const issueTokensFromCode = async (params: {
   const signingKey = await importJWK(privateJwk, "RS256");
 
   const now = Math.floor(Date.now() / 1000);
-  const issuer = issuerForResource(origin, code.tenantId, code.apiResourceId);
+  const issuer = issuerForResource(origin, code.apiResourceId);
   const scopes = code.scope.split(" ").filter(Boolean);
   const strategy = fromPrismaLoginStrategy(code.loginStrategy);
   const strategies = parseClientAuthStrategies(code.client.authStrategies);

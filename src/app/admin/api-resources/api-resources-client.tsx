@@ -65,8 +65,8 @@ const ISSUER_FIELDS = [
   { key: "discovery", label: "Discovery (.well-known)" },
 ] as const;
 
-const buildIssuerUrls = (origin: string, tenantId: string, apiResourceId: string) => {
-  const base = `${origin}/t/${tenantId}/r/${apiResourceId}/oidc`;
+const buildIssuerUrls = (origin: string, apiResourceId: string) => {
+  const base = `${origin}/r/${apiResourceId}/oidc`;
   return {
     issuer: base,
     authorize: `${base}/authorize`,
@@ -83,7 +83,7 @@ export function ApiResourcesClient({ tenantId, tenantName, viewerRole, defaultRe
   const router = useRouter();
   const [dialogState, setDialogState] = useState<DialogState>(null);
   const [pendingDefault, startDefaultTransition] = useTransition();
-  const issuerUrls = useMemo(() => buildIssuerUrls(origin, tenantId, defaultResourceId), [origin, tenantId, defaultResourceId]);
+  const issuerUrls = useMemo(() => buildIssuerUrls(origin, defaultResourceId), [origin, defaultResourceId]);
   const resourceMap = useMemo(() => new Map(resources.map((resource) => [resource.id, resource])), [resources]);
   const defaultResource = resourceMap.get(defaultResourceId) ?? resources[0];
 

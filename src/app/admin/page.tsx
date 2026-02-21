@@ -46,7 +46,7 @@ export default async function AdminPage() {
   if (!defaultResourceId) {
     throw new Error("Active tenant is missing a default API resource");
   }
-  const issuer = `${origin}/t/${activeTenant.id}/r/${defaultResourceId}/oidc`;
+  const issuer = `${origin}/r/${defaultResourceId}/oidc`;
 
   const viewerRole = tenantContext.activeMembership?.role ?? "READER";
   const stats = [

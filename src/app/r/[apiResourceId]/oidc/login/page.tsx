@@ -1,21 +1,21 @@
 import Link from "next/link";
 
-import { LoginForm } from "@/app/t/[tenantId]/r/[apiResourceId]/oidc/login/login-form";
+import { LoginForm } from "@/app/r/[apiResourceId]/oidc/login/login-form";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { getClientForTenant } from "@/server/services/client-service";
-import { getActiveTenantById } from "@/server/services/tenant-service";
+import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 
 type LoginPageProps = {
-  params: Promise<{ tenantId: string; apiResourceId: string }>;
+  params: Promise<{ apiResourceId: string }>;
   searchParams?: Promise<{ return_to?: string }>;
 };
 
 export default async function TenantLoginPage({ params, searchParams }: LoginPageProps) {
-  const { tenantId, apiResourceId } = await params;
+  const { apiResourceId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const tenant = await getActiveTenantById(tenantId);
-  const fallbackReturnTo = `/t/${tenantId}/r/${apiResourceId}/oidc/authorize`;
+  const { tenant, resource } = await getApiResourceWithTenant(apiResourceId);
+  const fallbackReturnTo = `/r/${resource.id}/oidc/authorize`;
   const returnTo = resolvedSearchParams?.return_to ?? fallbackReturnTo;
   let strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
   try {
@@ -66,7 +66,7 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
         <p className="text-sm text-slate-300 mb-6">
           Enter any {strategySummary} to simulate an end-user signing in. The session is scoped to tenant {tenant.id}.
         </p>
-        <LoginForm tenantId={tenant.id} apiResourceId={apiResourceId} returnTo={returnTo} strategies={strategies} />
+        <LoginForm apiResourceId={apiResourceId} returnTo={returnTo} strategies={strategies} />
         <p className="mt-4 text-xs text-slate-400">
           Need to manage tenants? Visit the <Link href="/admin" className="underline">admin console</Link>.
         </p>

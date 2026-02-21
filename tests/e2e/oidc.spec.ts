@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { decodeJwt } from "jose";
 import {
   allowInsecureRequests,
   authorizationCodeGrant,
@@ -11,11 +12,35 @@ import {
   randomState,
   skipSubjectCheck,
 } from "openid-client";
-import { buildAuthorizeUrl, cookieJar, redirectUri, runEmailFlow, withSessionCookies } from "./helpers/oidc";
 
-const tenantId = "tenant_qa";
 const defaultResourceId = "tenant_qa_default_resource";
-const issuerBase = `http://127.0.0.1:3000/t/${tenantId}/r/${defaultResourceId}/oidc`;
+const issuerBase = `http://127.0.0.1:3000/r/${defaultResourceId}/oidc`;
+const redirectUri = "https://client.example.test/callback";
+
+const cookieJar = () => {
+  const jar = new Map<string, string>();
+  return {
+    addFrom(response: Response) {
+      // @ts-ignore Node 20 exposes getSetCookie
+      const cookies: string[] = response.headers.getSetCookie?.() ?? [];
+      for (const cookie of cookies) {
+        const [pair] = cookie.split(";");
+        const [name, value] = pair.split("=");
+        jar.set(name, value);
+      }
+    },
+    header() {
+      return Array.from(jar.entries())
+        .map(([name, value]) => `${name}=${value}`)
+        .join("; ");
+    },
+  };
+};
+
+const withSessionCookies = (jar: ReturnType<typeof cookieJar>) => {
+  const header = jar.header();
+  return header ? { cookie: header } : undefined;
+};
 
 test("completes Authorization Code + PKCE flow", async () => {
   const config = await discovery(new URL(issuerBase), "qa-client", "qa-secret", undefined, {
@@ -54,6 +79,13 @@ test("completes Authorization Code + PKCE flow", async () => {
     body: new URLSearchParams({ username: "e2e-user", return_to: authUrl }).toString(),
   });
   jar.addFrom(loginResponse);
+  // @ts-ignore Node 20 exposes getSetCookie
+  const loginCookies: string[] = loginResponse.headers.getSetCookie?.() ?? [];
+  expect(
+    loginCookies.some(
+      (cookie) => cookie.includes("mockauth_enduser_session") && cookie.includes("Path=/r"),
+    ),
+  ).toBeTruthy();
   expect(loginResponse.status).toBe(303);
   const authorizeAgain = await fetch(loginResponse.headers.get("location")!, {
     redirect: "manual",
@@ -77,14 +109,6 @@ test("completes Authorization Code + PKCE flow", async () => {
   expect(userInfo.sub).toBeDefined();
 });
 
-test("legacy slug discovery responds with guidance", async () => {
-  const response = await fetch("http://127.0.0.1:3000/t/qa/oidc/.well-known/openid-configuration");
-  expect(response.status).toBe(410);
-  const payload = await response.json();
-  expect(payload.error).toBe("tenant_id_required");
-  expect(payload.adminUrl).toContain("/admin/clients");
-});
-
 test("requires login when session strategy disallows client", async ({ request }) => {
   const { tenantId, resourceId } = await seedTenantClients(request);
   const [emailClientId, usernameClientId] = await createClients(request, tenantId);
@@ -104,7 +128,7 @@ test("requires login when session strategy disallows client", async ({ request }
   const firstChallenge = await calculatePKCECodeChallenge(firstVerifier);
   const firstState = randomState();
   const firstNonce = randomNonce();
-  const emailAuthUrl = buildAuthorizeUrl(tenantId, resourceId, emailClientId, firstChallenge, firstState, firstNonce);
+  const emailAuthUrl = buildAuthorizeUrl(resourceId, emailClientId, firstChallenge, firstState, firstNonce);
 
   const authorizeEmailClient = await fetch(emailAuthUrl, { redirect: "manual", headers: withSessionCookies(jar) });
   jar.addFrom(authorizeEmailClient);
@@ -144,14 +168,7 @@ test("requires login when session strategy disallows client", async ({ request }
   const secondChallenge = await calculatePKCECodeChallenge(secondVerifier);
   const secondState = randomState();
   const secondNonce = randomNonce();
-  const usernameAuthUrl = buildAuthorizeUrl(
-    tenantId,
-    resourceId,
-    usernameClientId,
-    secondChallenge,
-    secondState,
-    secondNonce,
-  );
+  const usernameAuthUrl = buildAuthorizeUrl(resourceId, usernameClientId, secondChallenge, secondState, secondNonce);
 
   const authorizeUsernameClient = await fetch(usernameAuthUrl, {
     redirect: "manual",
@@ -168,8 +185,7 @@ test("email strategy mode false returns unverified claims", async ({ request }) 
     username: { enabled: false, subSource: "entered" },
     email: { enabled: true, subSource: "entered", emailVerifiedMode: "false" },
   });
-  const { idToken } = await runEmailFlow({
-    tenantId,
+  const idToken = await runEmailFlow({
     resourceId,
     clientId,
     email: "mode-false@example.test",
@@ -184,8 +200,7 @@ test("email strategy mode true returns verified claims", async ({ request }) => 
     username: { enabled: false, subSource: "entered" },
     email: { enabled: true, subSource: "entered", emailVerifiedMode: "true" },
   });
-  const { idToken } = await runEmailFlow({
-    tenantId,
+  const idToken = await runEmailFlow({
     resourceId,
     clientId,
     email: "mode-true@example.test",
@@ -200,16 +215,14 @@ test("email strategy user choice honors selection", async ({ request }) => {
     username: { enabled: false, subSource: "entered" },
     email: { enabled: true, subSource: "entered", emailVerifiedMode: "user_choice" },
   });
-  const { idToken: verifiedToken } = await runEmailFlow({
-    tenantId,
+  const verifiedToken = await runEmailFlow({
     resourceId,
     clientId,
     email: "choice@example.test",
     emailVerifiedPreference: "true",
   });
   expect(verifiedToken.email_verified).toBe(true);
-  const { idToken: unverifiedToken } = await runEmailFlow({
-    tenantId,
+  const unverifiedToken = await runEmailFlow({
     resourceId,
     clientId,
     email: "choice@example.test",
@@ -259,4 +272,91 @@ const setClientStrategies = async (
     },
   });
   expect(response.ok()).toBeTruthy();
+};
+
+const buildAuthorizeUrl = (
+  resourceId: string,
+  clientId: string,
+  codeChallenge: string,
+  state: string,
+  nonce: string,
+) => {
+  const url = new URL(`http://127.0.0.1:3000/r/${resourceId}/oidc/authorize`);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "openid profile email");
+  url.searchParams.set("state", state);
+  url.searchParams.set("nonce", nonce);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  return url.toString();
+};
+
+const runEmailFlow = async ({
+  resourceId,
+  clientId,
+  email,
+  emailVerifiedPreference,
+}: {
+  resourceId: string;
+  clientId: string;
+  email: string;
+  emailVerifiedPreference?: "true" | "false";
+}) => {
+  const jar = cookieJar();
+  const codeVerifier = randomPKCECodeVerifier();
+  const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
+  const state = randomState();
+  const nonce = randomNonce();
+  const authorizeUrl = buildAuthorizeUrl(resourceId, clientId, codeChallenge, state, nonce);
+  const authorizeResponse = await fetch(authorizeUrl, { redirect: "manual", headers: withSessionCookies(jar) });
+  jar.addFrom(authorizeResponse);
+  expect(authorizeResponse.status).toBe(302);
+  const loginLocation = authorizeResponse.headers.get("location");
+  expect(loginLocation).toBeTruthy();
+  const loginUrl = new URL(loginLocation!, "http://127.0.0.1:3000");
+  loginUrl.pathname = loginUrl.pathname.replace(/\/oidc\/login$/, "/oidc/login/submit");
+  const headers: Record<string, string> = { "content-type": "application/x-www-form-urlencoded" };
+  const cookieHeader = jar.header();
+  if (cookieHeader) {
+    headers.cookie = cookieHeader;
+  }
+  const loginBody = new URLSearchParams({ strategy: "email", email, return_to: authorizeUrl });
+  if (emailVerifiedPreference) {
+    loginBody.set("email_verified_preference", emailVerifiedPreference);
+  }
+  const loginResponse = await fetch(loginUrl, {
+    method: "POST",
+    redirect: "manual",
+    headers,
+    body: loginBody.toString(),
+  });
+  jar.addFrom(loginResponse);
+  expect(loginResponse.status).toBe(303);
+  const authorizeAfterLogin = await fetch(loginResponse.headers.get("location")!, {
+    redirect: "manual",
+    headers: withSessionCookies(jar),
+  });
+  expect(authorizeAfterLogin.status).toBe(302);
+  const finalLocation = authorizeAfterLogin.headers.get("location");
+  expect(finalLocation).toContain("code=");
+  const callbackUrl = new URL(finalLocation!);
+  const code = callbackUrl.searchParams.get("code");
+  expect(code).toBeTruthy();
+  const tokenResponse = await fetch(`http://127.0.0.1:3000/r/${resourceId}/oidc/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code!,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+      client_id: clientId,
+    }).toString(),
+  });
+  expect(tokenResponse.ok).toBeTruthy();
+  const payload = (await tokenResponse.json()) as { id_token: string };
+  expect(payload.id_token).toBeTruthy();
+  return decodeJwt(payload.id_token);
 };

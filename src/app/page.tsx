@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const features = [
-  "Resource-scoped issuers (https://host/t/{tenant}/r/{apiResourceId}/oidc)",
+  "Resource-scoped issuers (https://host/r/{apiResourceId}/oidc)",
   "Username-only login with isolated cookies",
   "Authorization Code + PKCE (S256) with JWKS per API resource",
   "NextAuth-powered admin console for tenants, clients, keys",

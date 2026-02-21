@@ -1,5 +1,5 @@
 Mockauth is a multi-tenant mock OpenID Connect provider for QA and ephemeral environments. Each tenant issues tokens
-through resource-scoped paths like `https://<host>/t/<tenantId>/r/<apiResourceId>/oidc`, exposing per-resource JWKS,
+through resource-scoped paths like `https://<host>/r/<apiResourceId>/oidc`, exposing per-resource JWKS,
 username-only login, and an admin console (NextAuth + Logto) for managing tenants, API resources, redirect URIs, and RSA
 signing keys.
 
@@ -135,11 +135,11 @@ updates). CI runs this script automatically before executing E2E specs.
 - All subject decisions are stored on the session + authorization code so every token and `userinfo` response reflects
   the strategy that was used during login.
 
-### Breaking Change — Stage 2 (tenantId + apiResource issuers)
+### Breaking Change — Stage 2 (resource-scoped issuers)
 
-- Tenant slugs are removed. Every OIDC URL now uses the tenant ID (e.g. `tenant_qa`).
-- Each tenant has a default API resource (visible in the Admin sidebar) and issuers follow the
-  `https://<host>/t/<tenantId>/r/<apiResourceId>/oidc` pattern. Copy both IDs directly from the Admin UI before updating
+- Tenant slugs have been removed from OIDC URLs. Issuers are now scoped purely by API resource.
+- Each tenant still exposes its default API resource in the Admin sidebar, and issuers follow the
+  `https://<host>/r/<apiResourceId>/oidc` pattern. Copy the resource ID directly from the Admin UI before updating
   relying parties.
 
 ## OIDC Endpoints
@@ -148,13 +148,13 @@ For the seeded tenant `tenant_qa` (default resource `tenant_qa_default_resource`
 
 | Endpoint | Path |
 | --- | --- |
-| Issuer | `http(s)://<host>/t/tenant_qa/r/tenant_qa_default_resource/oidc` |
-| Discovery | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/.well-known/openid-configuration` |
-| JWKS | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/jwks.json` (alias `/t/tenant_qa/.well-known/jwks.json`) |
-| Authorize | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/authorize` (Authorization Code + PKCE S256 only) |
-| Token | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/token` |
-| UserInfo | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/userinfo` |
-- The QA login form lives at `/t/<tenantId>/r/<apiResourceId>/oidc/login` and renders whichever strategies the client
+| Issuer | `http(s)://<host>/r/tenant_qa_default_resource/oidc` |
+| Discovery | `/r/tenant_qa_default_resource/oidc/.well-known/openid-configuration` |
+| JWKS | `/r/tenant_qa_default_resource/oidc/jwks.json` |
+| Authorize | `/r/tenant_qa_default_resource/oidc/authorize` (Authorization Code + PKCE S256 only) |
+| Token | `/r/tenant_qa_default_resource/oidc/token` |
+| UserInfo | `/r/tenant_qa_default_resource/oidc/userinfo` |
+- The QA login form lives at `/r/<apiResourceId>/oidc/login` and renders whichever strategies the client
   has enabled. Sessions are tenant-scoped and stored separately from NextAuth admin auth.
 
 ## Vercel deploys
