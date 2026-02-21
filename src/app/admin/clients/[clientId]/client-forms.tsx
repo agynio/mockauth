@@ -258,6 +258,7 @@ export function UpdateAuthStrategiesForm({
     resolver: zodResolver(authStrategiesSchema),
     defaultValues: initialStrategies,
   });
+  const watchedStrategies = useWatch({ control: form.control });
 
   useEffect(() => {
     form.reset(initialStrategies);
@@ -275,11 +276,14 @@ export function UpdateAuthStrategiesForm({
     });
   };
 
-  const renderStrategySection = (key: keyof ClientAuthStrategies) => (
-    <div key={key} className="rounded-md border p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-semibold text-foreground">{strategyMetadata[key].title}</h4>
+  const renderStrategySection = (key: keyof ClientAuthStrategies) => {
+    const isStrategyEnabled = watchedStrategies?.[key]?.enabled ?? false;
+    const triggerTestId = `strategy-${key}-subsource`;
+    return (
+      <div key={key} className="rounded-md border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">{strategyMetadata[key].title}</h4>
           <p className="text-xs text-muted-foreground">{strategyMetadata[key].description}</p>
         </div>
         <FormField
@@ -301,40 +305,50 @@ export function UpdateAuthStrategiesForm({
           )}
         />
       </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name={`${key}.subSource` as const}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Subject source</FormLabel>
-              <Select
-                value={field.value}
-                onValueChange={field.onChange}
-                disabled={!canEdit || pending || !form.getValues()[key].enabled}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select subject source" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="entered">Use entered value</SelectItem>
-                  <SelectItem value="generated_uuid">Generate UUID per session</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name={`${key}.subSource` as const}
+          render={({ field }) => {
+            const subjectSourceLabel =
+              field.value === "generated_uuid"
+                ? "Generate UUID per session"
+                : field.value === "entered"
+                  ? "Use entered value"
+                  : "Select subject source";
+            return (
+              <FormItem>
+                <FormLabel>Subject source</FormLabel>
+                <Select
+                  value={field.value}
+                  defaultValue={field.value}
+                  onValueChange={field.onChange}
+                  disabled={!canEdit || pending || !isStrategyEnabled}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid={triggerTestId} aria-label={subjectSourceLabel}>
+                      <span className="truncate text-left">{subjectSourceLabel}</span>
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="entered">Use entered value</SelectItem>
+                    <SelectItem value="generated_uuid">Generate UUID per session</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
       </div>
-      <p className="mt-4 text-xs text-muted-foreground">
-        {key === "email"
-          ? "Email strategy returns email claims gated by the email scope and marks email_verified=false."
-          : "Username strategy returns preferred_username gated by the profile scope."}
-      </p>
-    </div>
-  );
+        <p className="mt-4 text-xs text-muted-foreground">
+          {key === "email"
+            ? "Email strategy returns email claims gated by the email scope and marks email_verified=false."
+            : "Username strategy returns preferred_username gated by the profile scope."}
+        </p>
+      </div>
+    );
+  };
 
   return (
     <Form {...form}>
