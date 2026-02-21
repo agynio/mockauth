@@ -28,7 +28,6 @@ type Props = {
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", description: "Tenant keys and SSO stats" },
-  { href: "/admin/tenants", label: "Tenants", description: "Manage tenant access" },
   { href: "/admin/clients", label: "Clients", description: "Manage OAuth clients" },
   { href: "/admin/api-resources", label: "API resources", description: "Manage issuers per tenant" },
   { href: "/admin/members", label: "Members", description: "Collaborate with your team" },

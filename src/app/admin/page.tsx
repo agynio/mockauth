@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { formatDistanceToNow } from "date-fns";
 
 import { RotateKeyButton } from "@/app/admin/_components/rotate-key-button";
+import { TenantDangerZone } from "@/app/admin/_components/tenant-danger-zone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -49,7 +50,6 @@ export default async function AdminPage() {
 
   const viewerRole = tenantContext.activeMembership?.role ?? "READER";
   const stats = [
-    { label: "Tenants", value: tenantContext.memberships.length, helper: "total linked to this admin" },
     { label: "Clients", value: clientSnapshot.total, helper: `${activeTenant.name}` },
     { label: "Redirect URIs", value: redirectCount, helper: "across visible clients" },
   ];
@@ -83,7 +83,7 @@ export default async function AdminPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {stats.map((stat) => (
           <Card key={stat.label}>
             <CardHeader>
@@ -160,6 +160,8 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      <TenantDangerZone tenantId={activeTenant.id} tenantName={activeTenant.name} canDelete={viewerRole === "OWNER"} />
     </div>
   );
 }

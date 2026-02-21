@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { authenticate, createTestSession, stubClipboard } from "./helpers/admin";
+import { authenticate, createTestSession } from "./helpers/admin";
 
 type SeededClients = { id: string; name: string; clientId: string }[];
 
@@ -57,7 +57,7 @@ test.describe("tenant switching", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("tenants page opens and deletes tenants", async ({ page }) => {
+  test("overview danger zone deletes tenants", async ({ page }) => {
     await page.goto("/");
     const adminEmail = `pw-tenants-${Date.now()}@example.test`;
     const seed = await seedTenantsWithClients(page, { adminEmail });
@@ -67,30 +67,23 @@ test.describe("tenant switching", () => {
       tenantId: seed.tenantAId,
     });
     await authenticate(page, sessionToken);
-    await stubClipboard(page);
 
-    await page.goto("/admin/tenants");
-    const table = page.getByTestId("tenants-table");
-    await expect(table.getByTestId(`tenant-row-${seed.tenantAId}`)).toBeVisible();
-    await expect(table.getByTestId(`tenant-row-${seed.tenantBId}`)).toBeVisible();
+    await page.goto("/admin/clients");
+    await switchTenant(page, seed.tenantBId, seed.tenantBName);
 
-    await page.getByTestId(`tenant-copy-${seed.tenantAId}`).click();
-    await expect.poll(async () => {
-      return page.evaluate(() => (window as typeof window & { __mockClipboard?: string }).__mockClipboard ?? null);
-    }).toBe(seed.tenantAId);
+    await page.goto("/admin");
+    const dangerZone = page.getByTestId("tenant-danger-zone");
+    await expect(dangerZone).toBeVisible();
+    const deleteButton = page.getByTestId("tenant-danger-delete");
+    await expect(deleteButton).toBeEnabled();
+    await deleteButton.click();
 
-    await page.getByTestId(`tenant-open-${seed.tenantBId}`).click();
-    const notifications = page.getByRole("region", { name: /Notifications/i });
-    await expect(notifications.getByRole("status").first()).toContainText("Tenant switched");
-    await expectActiveTenant(page, seed.tenantBId);
-
-    await page.getByTestId(`tenant-delete-${seed.tenantBId}`).click();
     const confirmDialog = page.getByRole("alertdialog", { name: new RegExp(`Delete ${escapeRegExp(seed.tenantBName)}`) });
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByTestId("tenant-delete-confirm").click();
+    await confirmDialog.getByTestId("tenant-danger-confirm").click();
 
-    await expect(page.getByRole("status").first()).toContainText("Tenant deleted");
-    await expect(table.getByTestId(`tenant-row-${seed.tenantBId}`)).toHaveCount(0);
+    const notifications = page.getByRole("region", { name: /Notifications/i });
+    await expect(notifications.getByRole("status").first()).toContainText("Tenant deleted");
     await expectActiveTenant(page, seed.tenantAId);
     await expectTenantCookie(page, seed.tenantAId);
 
