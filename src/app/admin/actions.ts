@@ -85,11 +85,13 @@ const updateClientIssuerSchema = z.object({
   apiResourceId: z.union([z.literal("default"), z.string().min(1)]),
 });
 const subjectSourceSchema = z.enum(["entered", "generated_uuid"]);
+const emailVerifiedModeSchema = z.enum(["true", "false", "user_choice"]);
 const strategyConfigSchema = z.object({ enabled: z.boolean(), subSource: subjectSourceSchema });
+const emailStrategyConfigSchema = strategyConfigSchema.extend({ emailVerifiedMode: emailVerifiedModeSchema });
 const updateClientStrategiesSchema = z.object({
   clientId: z.string().min(1),
   username: strategyConfigSchema,
-  email: strategyConfigSchema,
+  email: emailStrategyConfigSchema,
 });
 
 const requireSession = async () => {

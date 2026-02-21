@@ -16,12 +16,14 @@ import {
   parseClientAuthStrategies,
   toPrismaLoginStrategy,
 } from "@/server/oidc/auth-strategy";
+import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
   username: z.string().optional(),
   email: z.string().email().optional(),
   return_to: z.string().optional(),
+  email_verified_preference: z.enum(["true", "false"]).optional(),
 });
 
 const sanitizeReturnTo = (value: string | undefined, fallback: URL, currentUrl: URL) => {
@@ -50,6 +52,7 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
     username: form.get("username")?.toString(),
     email: form.get("email")?.toString(),
     return_to: form.get("return_to")?.toString(),
+    email_verified_preference: form.get("email_verified_preference")?.toString(),
   });
 
   if (!data.success) {
@@ -82,6 +85,16 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
 
     const normalizedIdentifier =
       data.data.strategy === "email" ? trimmedIdentifier.toLowerCase() : trimmedIdentifier;
+    let emailVerifiedOverride: boolean | undefined;
+    if (data.data.strategy === "email") {
+      const emailConfig = selectedConfig as ClientAuthStrategies["email"];
+      if (emailConfig.emailVerifiedMode === "user_choice") {
+        if (!data.data.email_verified_preference) {
+          return Response.json({ error: "missing_email_verified_choice" }, { status: 400 });
+        }
+        emailVerifiedOverride = data.data.email_verified_preference === "true";
+      }
+    }
     const subject = selectedConfig.subSource === "entered" ? trimmedIdentifier : randomUUID();
     const user = await findOrCreateMockUser(tenant.id, normalizedIdentifier, {
       displayName: trimmedIdentifier,
@@ -90,6 +103,7 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
     const token = await createSession(tenant.id, user.id, {
       strategy: toPrismaLoginStrategy(data.data.strategy),
       subject,
+      emailVerifiedOverride,
     });
     const fallback = new URL(`/t/${tenant.id}/r/${apiResourceId}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);

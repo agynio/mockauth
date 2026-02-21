@@ -12,7 +12,7 @@ import { claimsForScopes } from "@/server/oidc/claims";
 import { issuerForResource } from "@/server/oidc/issuer";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { getActiveKey } from "@/server/services/key-service";
-import { fromPrismaLoginStrategy } from "@/server/oidc/auth-strategy";
+import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 const ID_TOKEN_TTL_SECONDS = 600;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -74,8 +74,15 @@ export const issueTokensFromCode = async (params: {
   const issuer = issuerForResource(origin, code.tenantId, code.apiResourceId);
   const scopes = code.scope.split(" ").filter(Boolean);
   const strategy = fromPrismaLoginStrategy(code.loginStrategy);
+  const strategies = parseClientAuthStrategies(code.client.authStrategies);
+  const emailVerifiedClaim =
+    strategy === "email"
+      ? strategies.email.emailVerifiedMode === "user_choice"
+        ? Boolean(code.emailVerifiedOverride)
+        : strategies.email.emailVerifiedMode === "true"
+      : undefined;
   const idToken = await new SignJWT({
-    ...claimsForScopes(code.user, scopes, strategy),
+    ...claimsForScopes(code.user, scopes, strategy, { emailVerified: emailVerifiedClaim }),
     sub: code.subject,
     aud: code.client.clientId,
     iss: issuer,
@@ -89,7 +96,7 @@ export const issueTokensFromCode = async (params: {
 
   const jti = randomUUID();
   const accessToken = await new SignJWT({
-    ...claimsForScopes(code.user, scopes, strategy),
+    ...claimsForScopes(code.user, scopes, strategy, { emailVerified: emailVerifiedClaim }),
     sub: code.subject,
     aud: code.client.clientId,
     iss: issuer,

@@ -142,7 +142,7 @@ model Client {
   allowedResponseTypes     String[]                 @default(["code"])
   pkceRequired             Boolean                  @default(true)
   tokenEndpointAuthMethod  TokenEndpointAuthMethod  @default(client_secret_basic)
-  authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\"}}")
+  authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\",\"emailVerifiedMode\":\"false\"}}")
   redirectUris             RedirectUri[]
   authorizationCodes       AuthorizationCode[]
   accessTokens             AccessToken[]
@@ -203,6 +203,7 @@ model MockSession {
   userId           String
   loginStrategy    LoginStrategy
   subject          String
+  emailVerifiedOverride Boolean?
   sessionTokenHash String   @unique
   expiresAt        DateTime
   createdAt        DateTime @default(now())
@@ -220,6 +221,7 @@ model AuthorizationCode {
   userId             String
   loginStrategy      LoginStrategy
   subject            String
+  emailVerifiedOverride Boolean?
   codeHash           String      @unique
   redirectUri        String
   scope              String

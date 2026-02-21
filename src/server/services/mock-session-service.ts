@@ -11,7 +11,7 @@ export const MOCK_SESSION_COOKIE = "mockauth_enduser_session";
 export const createSession = async (
   tenantId: string,
   userId: string,
-  data: { strategy: $Enums.LoginStrategy; subject: string },
+  data: { strategy: $Enums.LoginStrategy; subject: string; emailVerifiedOverride?: boolean },
 ) => {
   const token = generateOpaqueToken();
   await prisma.mockSession.create({
@@ -20,6 +20,7 @@ export const createSession = async (
       userId,
       loginStrategy: data.strategy,
       subject: data.subject,
+      emailVerifiedOverride: data.emailVerifiedOverride ?? null,
       sessionTokenHash: hashOpaqueToken(token),
       expiresAt: addHours(new Date(), SESSION_TTL_HOURS),
     },

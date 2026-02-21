@@ -74,6 +74,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     userId: session.userId,
     loginStrategy: session.loginStrategy,
     subject: session.subject,
+    emailVerifiedOverride: session.emailVerifiedOverride ?? undefined,
     redirectUri: redirect,
     scope: params.scope,
     nonce: params.nonce,
