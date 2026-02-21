@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 
@@ -17,12 +18,18 @@ import {
   updateClientApiResource,
 } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
-import { setAdminActiveTenantCookie } from "@/server/services/admin-tenant-context";
+import {
+  ADMIN_ACTIVE_TENANT_COOKIE,
+  clearAdminActiveTenantCookie,
+  setAdminActiveTenantCookie,
+} from "@/server/services/admin-tenant-context";
 import {
   assertTenantMembership,
   assertTenantRole,
   ensureMembershipRole,
   createTenant,
+  deleteTenant,
+  getTenantMemberships,
 } from "@/server/services/tenant-service";
 import { createInvite, removeMember, revokeInvite, updateMemberRole } from "@/server/services/membership-service";
 import {
@@ -51,6 +58,7 @@ const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.strin
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
 const membershipRoleSchema = z.enum(["OWNER", "WRITER", "READER"]);
 const inviteRoleSchema = z.enum(["WRITER", "READER"]);
+const deleteTenantSchema = z.object({ tenantId: z.string().min(1) });
 const updateMemberRoleSchema = z.object({
   tenantId: z.string().min(1),
   membershipId: z.string().min(1),
@@ -115,6 +123,7 @@ export const createTenantAction = async (input: z.infer<typeof tenantSchema>): P
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath("/admin/members");
+    revalidatePath("/admin/tenants");
     return { success: "Tenant created" };
   } catch (error) {
     console.error(error);
@@ -131,6 +140,7 @@ export const setActiveTenantAction = async (input: z.infer<typeof setTenantSchem
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath("/admin/members");
+    revalidatePath("/admin/tenants");
     return { success: "Active tenant updated" };
   } catch (error) {
     console.error(error);
@@ -401,5 +411,42 @@ export const revokeInviteAction = async (input: z.infer<typeof revokeInviteSchem
   } catch (error) {
     console.error(error);
     return { error: "Unable to revoke invite" };
+  }
+};
+
+export const deleteTenantAction = async (
+  input: z.infer<typeof deleteTenantSchema>,
+): Promise<ActionState<{ activeTenantId: string | null; remainingTenants: number }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = deleteTenantSchema.parse(input);
+    await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
+    await deleteTenant(parsed.tenantId);
+
+    const store = await cookies();
+    const activeTenantCookie = store.get(ADMIN_ACTIVE_TENANT_COOKIE)?.value ?? null;
+    const remainingMemberships = await getTenantMemberships(adminId);
+    let resultingActiveTenantId = activeTenantCookie;
+    if (activeTenantCookie === parsed.tenantId) {
+      resultingActiveTenantId = remainingMemberships[0]?.tenantId ?? null;
+      if (resultingActiveTenantId) {
+        await setAdminActiveTenantCookie(resultingActiveTenantId);
+      } else {
+        await clearAdminActiveTenantCookie();
+      }
+    }
+
+    revalidatePath("/admin", "layout");
+    revalidatePath("/admin/clients");
+    revalidatePath("/admin/api-resources");
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/tenants");
+    return {
+      success: "Tenant deleted",
+      data: { activeTenantId: resultingActiveTenantId ?? null, remainingTenants: remainingMemberships.length },
+    };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to delete tenant" };
   }
 };

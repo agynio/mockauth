@@ -7,6 +7,10 @@ import { createClient } from "@/server/services/client-service";
 
 const ADMIN_EMAIL = "pw-admin@example.test";
 
+type SeedRequest = {
+  adminEmail?: string;
+};
+
 type SeedResponse = {
   tenantAId: string;
   tenantAResourceId: string;
@@ -18,16 +22,19 @@ type SeedResponse = {
   clientsB: { id: string; name: string; clientId: string }[];
 };
 
-export async function POST() {
+export async function POST(request: Request) {
   if (!env.ENABLE_TEST_ROUTES) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const payload = (await request.json().catch(() => ({}))) as SeedRequest;
+  const adminEmail = payload.adminEmail?.toLowerCase().trim() || ADMIN_EMAIL;
+
   const admin = await prisma.adminUser.upsert({
-    where: { email: ADMIN_EMAIL },
+    where: { email: adminEmail },
     update: {},
     create: {
-      email: ADMIN_EMAIL,
+      email: adminEmail,
       name: "Playwright Admin",
     },
   });
@@ -42,7 +49,7 @@ export async function POST() {
   const clientsA = await seedClients(tenantA.id, [`Tenant A Client ${timestamp}`, `Tenant A Extra ${timestamp}`]);
   const clientsB = await seedClients(tenantB.id, [`Tenant B Client ${timestamp}`, `Tenant B Extra ${timestamp + 1}`]);
 
-  const payload: SeedResponse = {
+  const responsePayload: SeedResponse = {
     tenantAId: tenantA.id,
     tenantAResourceId: tenantA.defaultApiResourceId!,
     tenantAName: tenantA.name,
@@ -53,7 +60,7 @@ export async function POST() {
     clientsB,
   };
 
-  return NextResponse.json(payload);
+  return NextResponse.json(responsePayload);
 }
 
 const seedClients = async (tenantId: string, names: string[]) => {

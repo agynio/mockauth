@@ -90,3 +90,25 @@ export const createTenant = async (adminUserId: string, data: { name: string }) 
     return tenantWithDefault;
   });
 };
+
+export const deleteTenant = async (tenantId: string) => {
+  await prisma.$transaction(async (tx) => {
+    const tenant = await tx.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new DomainError("Tenant not found", { status: 404, code: "tenant_not_found" });
+    }
+
+    await tx.tenant.update({ where: { id: tenantId }, data: { defaultApiResourceId: null } });
+    await tx.authorizationCode.deleteMany({ where: { tenantId } });
+    await tx.accessToken.deleteMany({ where: { tenantId } });
+    await tx.mockSession.deleteMany({ where: { tenantId } });
+    await tx.mockUser.deleteMany({ where: { tenantId } });
+    await tx.redirectUri.deleteMany({ where: { client: { tenantId } } });
+    await tx.client.deleteMany({ where: { tenantId } });
+    await tx.apiResource.deleteMany({ where: { tenantId } });
+    await tx.tenantKey.deleteMany({ where: { tenantId } });
+    await tx.invite.deleteMany({ where: { tenantId } });
+    await tx.tenantMembership.deleteMany({ where: { tenantId } });
+    await tx.tenant.delete({ where: { id: tenantId } });
+  });
+};
