@@ -43,6 +43,14 @@ describe("tenant service", () => {
         expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       },
     });
+    await prisma.mockIdentity.create({
+      data: {
+        tenantId: tenant.id,
+        strategy: $Enums.LoginStrategy.USERNAME,
+        identifier: `identity-${randomUUID()}`,
+        sub: randomUUID(),
+      },
+    });
     await prisma.authorizationCode.create({
       data: {
         tenantId: tenant.id,
@@ -93,5 +101,6 @@ describe("tenant service", () => {
     expect(await prisma.accessToken.count({ where: { tenantId: tenant.id } })).toBe(0);
     expect(await prisma.mockUser.count({ where: { tenantId: tenant.id } })).toBe(0);
     expect(await prisma.mockSession.count({ where: { tenantId: tenant.id } })).toBe(0);
+    expect(await prisma.mockIdentity.count({ where: { tenantId: tenant.id } })).toBe(0);
   });
 });

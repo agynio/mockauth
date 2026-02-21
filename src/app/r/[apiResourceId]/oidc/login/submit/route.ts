@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -17,6 +15,7 @@ import {
 } from "@/server/oidc/auth-strategy";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { resolveStableSubject } from "@/server/services/mock-identity-service";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
@@ -95,7 +94,15 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         emailVerifiedOverride = data.data.email_verified_preference === "true";
       }
     }
-    const subject = selectedConfig.subSource === "entered" ? trimmedIdentifier : randomUUID();
+    const subject =
+      selectedConfig.subSource === "entered"
+        ? trimmedIdentifier
+        : await resolveStableSubject({
+            tenantId: tenant.id,
+            strategy: data.data.strategy,
+            identifier: normalizedIdentifier,
+            email: data.data.strategy === "email" ? normalizedIdentifier : undefined,
+          });
     const user = await findOrCreateMockUser(tenant.id, normalizedIdentifier, {
       displayName: trimmedIdentifier,
       email: data.data.strategy === "email" ? normalizedIdentifier : null,
