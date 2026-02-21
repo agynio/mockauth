@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { authenticate, createTestSession } from "./helpers/admin";
+import { authenticate, createTestSession, stubClipboard } from "./helpers/admin";
 
 type SeededClients = { id: string; name: string; clientId: string }[];
 
@@ -56,19 +56,78 @@ test.describe("tenant switching", () => {
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
   });
+
+  test("tenants page opens and deletes tenants", async ({ page }) => {
+    await page.goto("/");
+    const adminEmail = `pw-tenants-${Date.now()}@example.test`;
+    const seed = await seedTenantsWithClients(page, { adminEmail });
+    const sessionToken = await createTestSession(page, {
+      assignMembership: false,
+      email: adminEmail,
+      tenantId: seed.tenantAId,
+    });
+    await authenticate(page, sessionToken);
+    await stubClipboard(page);
+
+    await page.goto("/admin/tenants");
+    const table = page.getByTestId("tenants-table");
+    await expect(table.getByTestId(`tenant-row-${seed.tenantAId}`)).toBeVisible();
+    await expect(table.getByTestId(`tenant-row-${seed.tenantBId}`)).toBeVisible();
+
+    await page.getByTestId(`tenant-copy-${seed.tenantAId}`).click();
+    await expect.poll(async () => {
+      return page.evaluate(() => (window as typeof window & { __mockClipboard?: string }).__mockClipboard ?? null);
+    }).toBe(seed.tenantAId);
+
+    await page.getByTestId(`tenant-open-${seed.tenantBId}`).click();
+    const notifications = page.getByRole("region", { name: /Notifications/i });
+    await expect(notifications.getByRole("status").first()).toContainText("Tenant switched");
+    await expectActiveTenant(page, seed.tenantBId);
+
+    await page.getByTestId(`tenant-delete-${seed.tenantBId}`).click();
+    const confirmDialog = page.getByRole("alertdialog", { name: new RegExp(`Delete ${escapeRegExp(seed.tenantBName)}`) });
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.getByTestId("tenant-delete-confirm").click();
+
+    await expect(page.getByRole("status").first()).toContainText("Tenant deleted");
+    await expect(table.getByTestId(`tenant-row-${seed.tenantBId}`)).toHaveCount(0);
+    await expectActiveTenant(page, seed.tenantAId);
+    await expectTenantCookie(page, seed.tenantAId);
+
+    const state = await page.evaluate(async (tenantId) => {
+      const response = await fetch("/admin/api/test/tenant-state", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tenantId }),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to read tenant state: ${response.status}`);
+      }
+      return (await response.json()) as {
+        tenantExists: boolean;
+        counts: Record<string, number>;
+      };
+    }, seed.tenantBId);
+
+    expect(state.tenantExists).toBe(false);
+    Object.values(state.counts).forEach((value) => expect(value).toBe(0));
+  });
 });
 
-const seedTenantsWithClients = async (page: Page): Promise<SeedResponse> => {
-  return page.evaluate<SeedResponse>(async () => {
+const seedTenantsWithClients = async (page: Page, options: { adminEmail?: string } = {}): Promise<SeedResponse> => {
+  return page.evaluate<SeedResponse, { adminEmail?: string }>(async (payload) => {
     const response = await fetch("/admin/api/test/seed-tenants-clients", {
       method: "POST",
       credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
     });
     if (!response.ok) {
       throw new Error(`Failed to seed tenants: ${response.status}`);
     }
     return (await response.json()) as SeedResponse;
-  });
+  }, options);
 };
 
 const switchTenant = async (page: Page, tenantId: string, tenantName: string) => {
