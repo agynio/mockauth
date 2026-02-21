@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "@playwright/test";
 import {
   allowInsecureRequests,
   authorizationCodeGrant,
@@ -104,3 +104,147 @@ test("legacy slug discovery responds with guidance", async () => {
   expect(payload.error).toBe("tenant_id_required");
   expect(payload.adminUrl).toContain("/admin/clients");
 });
+
+test("requires login when session strategy disallows client", async ({ request }) => {
+  const { tenantId, resourceId } = await seedTenantClients(request);
+  const [emailClientId, usernameClientId] = await createClients(request, tenantId);
+
+  await setClientStrategies(request, tenantId, emailClientId, {
+    username: { enabled: false, subSource: "entered" },
+    email: { enabled: true, subSource: "entered" },
+  });
+
+  await setClientStrategies(request, tenantId, usernameClientId, {
+    username: { enabled: true, subSource: "entered" },
+    email: { enabled: false, subSource: "entered" },
+  });
+
+  const jar = cookieJar();
+  const firstVerifier = randomPKCECodeVerifier();
+  const firstChallenge = await calculatePKCECodeChallenge(firstVerifier);
+  const firstState = randomState();
+  const firstNonce = randomNonce();
+  const emailAuthUrl = buildAuthorizeUrl(tenantId, resourceId, emailClientId, firstChallenge, firstState, firstNonce);
+
+  const authorizeEmailClient = await fetch(emailAuthUrl, { redirect: "manual", headers: withSessionCookies(jar) });
+  jar.addFrom(authorizeEmailClient);
+  expect(authorizeEmailClient.status).toBe(302);
+  const loginLocation = authorizeEmailClient.headers.get("location");
+  expect(loginLocation).toContain("/login");
+
+  const loginUrl = new URL(loginLocation!, "http://127.0.0.1:3000");
+  loginUrl.pathname = loginUrl.pathname.replace(/\/oidc\/login$/, "/oidc/login/submit");
+  const loginHeaders: Record<string, string> = {
+    "content-type": "application/x-www-form-urlencoded",
+  };
+  const loginCookies = jar.header();
+  if (loginCookies) {
+    loginHeaders.cookie = loginCookies;
+  }
+  const loginResponse = await fetch(loginUrl, {
+    method: "POST",
+    redirect: "manual",
+    headers: loginHeaders,
+    body: new URLSearchParams({
+      strategy: "email",
+      email: "client-a@example.test",
+      return_to: emailAuthUrl,
+    }).toString(),
+  });
+  jar.addFrom(loginResponse);
+  expect(loginResponse.status).toBe(303);
+
+  const authorizeAfterLogin = await fetch(loginResponse.headers.get("location")!, {
+    redirect: "manual",
+    headers: withSessionCookies(jar),
+  });
+  expect(authorizeAfterLogin.status).toBe(302);
+
+  const secondVerifier = randomPKCECodeVerifier();
+  const secondChallenge = await calculatePKCECodeChallenge(secondVerifier);
+  const secondState = randomState();
+  const secondNonce = randomNonce();
+  const usernameAuthUrl = buildAuthorizeUrl(
+    tenantId,
+    resourceId,
+    usernameClientId,
+    secondChallenge,
+    secondState,
+    secondNonce,
+  );
+
+  const authorizeUsernameClient = await fetch(usernameAuthUrl, {
+    redirect: "manual",
+    headers: withSessionCookies(jar),
+  });
+  expect(authorizeUsernameClient.status).toBe(302);
+  expect(authorizeUsernameClient.headers.get("location")).toContain("/login");
+});
+
+const withSessionCookies = (jar: ReturnType<typeof cookieJar>) => {
+  const header = jar.header();
+  return header ? { cookie: header } : undefined;
+};
+
+const seedTenantClients = async (request: APIRequestContext) => {
+  const response = await request.post("/admin/api/test/seed-tenants-clients", { data: {} });
+  expect(response.ok()).toBeTruthy();
+  const payload = (await response.json()) as { tenantAId: string; tenantAResourceId: string };
+  return { tenantId: payload.tenantAId, resourceId: payload.tenantAResourceId };
+};
+
+const createClients = async (request: APIRequestContext, tenantId: string) => {
+  const response = await request.post("/api/test/clients", {
+    data: {
+      tenantId,
+      names: ["Email Strategy", "Username Strategy"],
+      clientType: "PUBLIC",
+      redirectUris: [redirectUri],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const payload = (await response.json()) as { clients: { clientId: string }[] };
+  if (payload.clients.length < 2) {
+    throw new Error("Failed to seed clients for strategy test");
+  }
+  return [payload.clients[0]!.clientId, payload.clients[1]!.clientId] as const;
+};
+
+const setClientStrategies = async (
+  request: APIRequestContext,
+  tenantId: string,
+  clientId: string,
+  strategies: {
+    username: { enabled: boolean; subSource: "entered" | "generated_uuid" };
+    email: { enabled: boolean; subSource: "entered" | "generated_uuid" };
+  },
+) => {
+  const response = await request.post("/api/test/client-auth-strategies", {
+    data: {
+      tenantId,
+      clientId,
+      strategies,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+};
+
+const buildAuthorizeUrl = (
+  tenantId: string,
+  resourceId: string,
+  clientId: string,
+  codeChallenge: string,
+  state: string,
+  nonce: string,
+) => {
+  const url = new URL(`http://127.0.0.1:3000/t/${tenantId}/r/${resourceId}/oidc/authorize`);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "openid profile email");
+  url.searchParams.set("state", state);
+  url.searchParams.set("nonce", nonce);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  return url.toString();
+};

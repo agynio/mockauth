@@ -91,8 +91,9 @@ updates). CI runs this script automatically before executing E2E specs.
 
 - Accessible at `/admin` and protected via NextAuth + Logto. Provide `LOGTO_*` env vars to point at your Logto instance.
 - The Stage 2 UI introduces a sidebar with tenant switching, per-tenant client lists, a focused create form, and
-  detailed client pages (copy helpers, redirect management, secret rotation, metadata). Mock login remains
-  username-only—no whitelist or user records to manage.
+  detailed client pages (copy helpers, redirect management, secret rotation, metadata). Each client now includes an
+  **Auth strategies** card so you can toggle username/email flows and decide how the OIDC `sub` claim is derived. The
+  mock login screen mirrors the configured strategies automatically—no whitelist or per-user setup required.
 
 ### QA sign-in + account linking
 
@@ -123,6 +124,16 @@ updates). CI runs this script automatically before executing E2E specs.
   (disabled by default). When you type `*` in the Admin UI, a destructive warning reminds you that this must never be
   enabled in production.
 
+### Per-client auth strategies
+
+- Username and email sign-in flows are configured per client. Both are enabled/disabled independently and expose their
+  own subject-source selector (`entered` reuses the typed identifier, `generated_uuid` rotates a random UUID each
+  session).
+- Username strategy returns `preferred_username` when `profile` is requested. Email strategy requires the `email` scope
+  and emits `email` + `email_verified=false`; it never exposes `preferred_username`.
+- All subject decisions are stored on the session + authorization code so every token and `userinfo` response reflects
+  the strategy that was used during login.
+
 ### Breaking Change — Stage 2 (tenantId + apiResource issuers)
 
 - Tenant slugs are removed. Every OIDC URL now uses the tenant ID (e.g. `tenant_qa`).
@@ -142,8 +153,8 @@ For the seeded tenant `tenant_qa` (default resource `tenant_qa_default_resource`
 | Authorize | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/authorize` (Authorization Code + PKCE S256 only) |
 | Token | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/token` |
 | UserInfo | `/t/tenant_qa/r/tenant_qa_default_resource/oidc/userinfo` |
-- Username-only login lives at `/t/<tenantId>/r/<apiResourceId>/oidc/login` and stores a tenant-scoped mock-user session cookie (separate
-  from NextAuth).
+- The QA login form lives at `/t/<tenantId>/r/<apiResourceId>/oidc/login` and renders whichever strategies the client
+  has enabled. Sessions are tenant-scoped and stored separately from NextAuth admin auth.
 
 ## Vercel deploys
 

@@ -16,6 +16,7 @@ import {
   rotateClientSecret,
   updateClientName,
   updateClientApiResource,
+  updateClientAuthStrategies,
 } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
 import {
@@ -38,6 +39,7 @@ import {
   setDefaultApiResource,
   getApiResourceForTenant,
 } from "@/server/services/api-resource-service";
+import { hasEnabledStrategy } from "@/server/oidc/auth-strategy";
 
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
@@ -81,6 +83,13 @@ const setDefaultResourceSchema = z.object({ tenantId: z.string().min(1), apiReso
 const updateClientIssuerSchema = z.object({
   clientId: z.string().min(1),
   apiResourceId: z.union([z.literal("default"), z.string().min(1)]),
+});
+const subjectSourceSchema = z.enum(["entered", "generated_uuid"]);
+const strategyConfigSchema = z.object({ enabled: z.boolean(), subSource: subjectSourceSchema });
+const updateClientStrategiesSchema = z.object({
+  clientId: z.string().min(1),
+  username: strategyConfigSchema,
+  email: strategyConfigSchema,
 });
 
 const requireSession = async () => {
@@ -324,6 +333,30 @@ export const updateClientIssuerAction = async (
   } catch (error) {
     console.error(error);
     return { error: "Unable to update issuer" };
+  }
+};
+
+export const updateClientAuthStrategiesAction = async (
+  input: z.infer<typeof updateClientStrategiesSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateClientStrategiesSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    const strategies = { username: parsed.username, email: parsed.email };
+    if (!hasEnabledStrategy(strategies)) {
+      return { error: "Enable at least one strategy" };
+    }
+    await updateClientAuthStrategies(client.id, strategies);
+    revalidatePath(clientPath(client.id));
+    revalidatePath("/admin/clients");
+    return { success: "Auth strategies updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update strategies" };
   }
 };
 

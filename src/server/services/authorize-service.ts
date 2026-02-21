@@ -5,6 +5,7 @@ import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getActiveTenantById } from "@/server/services/tenant-service";
 import { getApiResourceForTenant } from "@/server/services/api-resource-service";
+import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 type AuthorizeParams = {
   tenantId: string;
@@ -52,8 +53,12 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
 
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
 
+  const strategies = parseClientAuthStrategies(client.authStrategies);
   const session = await getSessionUser(tenant.id, params.sessionToken);
-  const shouldLogin = params.prompt === "login" || !session;
+  const strategyAllowed = session
+    ? strategies[fromPrismaLoginStrategy(session.loginStrategy)]?.enabled ?? false
+    : true;
+  const shouldLogin = params.prompt === "login" || !session || !strategyAllowed;
 
   if (shouldLogin) {
     return {
@@ -67,6 +72,8 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     clientId: client.id,
     apiResourceId: resource.id,
     userId: session.userId,
+    loginStrategy: session.loginStrategy,
+    subject: session.subject,
     redirectUri: redirect,
     scope: params.scope,
     nonce: params.nonce,

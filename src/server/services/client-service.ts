@@ -6,6 +6,8 @@ import { hashSecret } from "@/server/crypto/hash";
 import { generateOpaqueToken } from "@/server/crypto/opaque-token";
 import { DomainError } from "@/server/errors";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
+import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 
 export const getClientForTenant = async (tenantId: string, clientId: string) => {
   const client = await prisma.client.findFirst({
@@ -42,6 +44,7 @@ export const createClient = async (
         clientType: data.clientType,
         clientSecretHash,
         tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
+        authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
       },
     });
 
@@ -144,4 +147,8 @@ export const updateClientName = async (clientId: string, name: string) => {
 
 export const updateClientApiResource = async (clientId: string, apiResourceId: string | null) => {
   return prisma.client.update({ where: { id: clientId }, data: { apiResourceId } });
+};
+
+export const updateClientAuthStrategies = async (clientId: string, strategies: ClientAuthStrategies) => {
+  return prisma.client.update({ where: { id: clientId }, data: { authStrategies: strategies } });
 };

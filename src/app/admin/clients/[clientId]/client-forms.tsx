@@ -11,6 +11,7 @@ import {
   addRedirectUriAction,
   deleteRedirectUriAction,
   rotateClientSecretAction,
+  updateClientAuthStrategiesAction,
   updateClientIssuerAction,
   updateClientNameAction,
 } from "@/app/admin/actions";
@@ -22,6 +23,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
 const redirectSchema = z.object({
@@ -44,6 +46,13 @@ const redirectSchema = z.object({
     }),
 });
 const issuerSchema = z.object({ resourceId: z.union([z.literal("default"), z.string().min(1)]) });
+const strategyConfigSchema = z.object({ enabled: z.boolean(), subSource: z.enum(["entered", "generated_uuid"]) });
+const authStrategiesSchema = z
+  .object({ username: strategyConfigSchema, email: strategyConfigSchema })
+  .refine((value) => value.username.enabled || value.email.enabled, {
+    message: "Enable at least one strategy",
+    path: ["root"],
+  });
 
 export function UpdateClientNameForm({
   clientId,
@@ -214,6 +223,128 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
         />
         <Button type="submit" disabled={!canEdit || pending} className="self-end">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+const strategyMetadata: Record<keyof ClientAuthStrategies, { title: string; description: string; placeholder: string }> = {
+  username: {
+    title: "Username",
+    description: "QA users enter an arbitrary username (no validation).",
+    placeholder: "qa-user",
+  },
+  email: {
+    title: "Email",
+    description: "Accepts an email-like string and exposes only email claims.",
+    placeholder: "qa-user@example.test",
+  },
+};
+
+export function UpdateAuthStrategiesForm({
+  clientId,
+  canEdit,
+  initialStrategies,
+}: {
+  clientId: string;
+  canEdit: boolean;
+  initialStrategies: ClientAuthStrategies;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const form = useForm<z.infer<typeof authStrategiesSchema>>({
+    resolver: zodResolver(authStrategiesSchema),
+    defaultValues: initialStrategies,
+  });
+
+  useEffect(() => {
+    form.reset(initialStrategies);
+  }, [initialStrategies, form]);
+
+  const onSubmit = (values: z.infer<typeof authStrategiesSchema>) => {
+    startTransition(async () => {
+      const result = await updateClientAuthStrategiesAction({ clientId, ...values });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Auth strategies updated" });
+    });
+  };
+
+  const renderStrategySection = (key: keyof ClientAuthStrategies) => (
+    <div key={key} className="rounded-md border p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-semibold text-foreground">{strategyMetadata[key].title}</h4>
+          <p className="text-xs text-muted-foreground">{strategyMetadata[key].description}</p>
+        </div>
+        <FormField
+          control={form.control}
+          name={`${key}.enabled` as const}
+          render={({ field }) => (
+            <FormItem className="flex items-center gap-2">
+              <FormControl>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border border-muted"
+                  checked={field.value}
+                  onChange={(event) => field.onChange(event.target.checked)}
+                  disabled={!canEdit || pending}
+                />
+              </FormControl>
+              <FormLabel className="text-xs text-muted-foreground">Enabled</FormLabel>
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <FormField
+          control={form.control}
+          name={`${key}.subSource` as const}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Subject source</FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={field.onChange}
+                disabled={!canEdit || pending || !form.getValues()[key].enabled}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select subject source" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="entered">Use entered value</SelectItem>
+                  <SelectItem value="generated_uuid">Generate UUID per session</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        {key === "email"
+          ? "Email strategy returns email claims gated by the email scope and marks email_verified=false."
+          : "Username strategy returns preferred_username gated by the profile scope."}
+      </p>
+    </div>
+  );
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid gap-4 lg:grid-cols-2">{(Object.keys(strategyMetadata) as (keyof ClientAuthStrategies)[]).map(renderStrategySection)}</div>
+        {form.formState.errors.root?.message ? (
+          <p className="text-sm text-destructive">{form.formState.errors.root.message}</p>
+        ) : null}
+        <Button type="submit" disabled={!canEdit || pending} className="w-full sm:w-auto">
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save strategies"}
         </Button>
       </form>
     </Form>

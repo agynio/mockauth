@@ -1,7 +1,13 @@
 import { prisma } from "@/server/db/client";
 
-export const findOrCreateMockUser = async (tenantId: string, username: string) => {
-  const normalized = username.trim().toLowerCase();
+export const findOrCreateMockUser = async (
+  tenantId: string,
+  identifier: string,
+  options?: { displayName?: string; email?: string | null },
+) => {
+  const normalized = identifier.trim().toLowerCase();
+  const displayName = options?.displayName ?? identifier.trim();
+  const email = options?.email ? options.email.trim().toLowerCase() : null;
   return prisma.mockUser.upsert({
     where: {
       tenantId_username: {
@@ -9,11 +15,12 @@ export const findOrCreateMockUser = async (tenantId: string, username: string) =
         username: normalized,
       },
     },
-    update: {},
+    update: email ? { email } : {},
     create: {
       tenantId,
       username: normalized,
-      displayName: username,
+      displayName,
+      email,
     },
   });
 };

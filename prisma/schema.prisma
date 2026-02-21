@@ -42,6 +42,11 @@ enum TokenEndpointAuthMethod {
   none
 }
 
+enum LoginStrategy {
+  USERNAME
+  EMAIL
+}
+
 model Tenant {
   id                String              @id @default(uuid())
   name              String
@@ -137,6 +142,7 @@ model Client {
   allowedResponseTypes     String[]                 @default(["code"])
   pkceRequired             Boolean                  @default(true)
   tokenEndpointAuthMethod  TokenEndpointAuthMethod  @default(client_secret_basic)
+  authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\"}}")
   redirectUris             RedirectUri[]
   authorizationCodes       AuthorizationCode[]
   accessTokens             AccessToken[]
@@ -195,6 +201,8 @@ model MockSession {
   tenantId         String
   user             MockUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId           String
+  loginStrategy    LoginStrategy
+  subject          String
   sessionTokenHash String   @unique
   expiresAt        DateTime
   createdAt        DateTime @default(now())
@@ -210,6 +218,8 @@ model AuthorizationCode {
   apiResourceId      String
   user               MockUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId             String
+  loginStrategy      LoginStrategy
+  subject            String
   codeHash           String      @unique
   redirectUri        String
   scope              String
