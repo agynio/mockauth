@@ -14,6 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type TenantOption = {
@@ -75,9 +76,33 @@ export function TenantSwitcher({
     });
   };
 
+  const renderTenantId = () => {
+    if (!activeTenant) {
+      return null;
+    }
+    const truncated = activeTenant.id.slice(0, 8);
+    const idNode = (
+      <span className="font-mono text-xs text-muted-foreground" data-testid="tenant-switcher-id">
+        {truncated}
+      </span>
+    );
+    if (activeTenant.id.length <= 8) {
+      return idNode;
+    }
+    return (
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>{idNode}</TooltipTrigger>
+        <TooltipContent side="top">
+          <p className="font-mono text-xs">{activeTenant.id}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
   return (
-    <div className="space-y-2">
-      <Popover open={open} onOpenChange={setOpen}>
+    <TooltipProvider>
+      <div className="space-y-2">
+        <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
@@ -92,7 +117,7 @@ export function TenantSwitcher({
               <span className="font-semibold">
                 {activeTenant ? activeTenant.name : tenants.length === 0 ? "No tenants" : "Select tenant"}
               </span>
-              {activeTenant ? <span className="text-xs text-muted-foreground">{activeTenant.id}</span> : null}
+              {renderTenantId()}
             </div>
             {pending ? (
               <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin" />
@@ -168,7 +193,8 @@ export function TenantSwitcher({
           </div>
         </PopoverContent>
       </Popover>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
 

@@ -138,6 +138,8 @@ const switchTenant = async (page: Page, tenantId: string, tenantName: string) =>
   const notifications = page.getByRole("region", { name: /Notifications/i });
   await expect(notifications.getByRole("status").first()).toContainText("Active tenant updated");
   await expect(page.getByText(`Tenant · ${tenantName}`)).toBeVisible();
+  const truncatedId = tenantId.slice(0, 8);
+  await expect(page.locator('[data-testid="tenant-switcher-id"]:visible')).toHaveText(truncatedId);
 };
 
 const expectClientsVisible = async (page: Page, clientNames: string[]) => {
