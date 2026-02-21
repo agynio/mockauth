@@ -61,6 +61,7 @@ model Tenant {
   clients           Client[]
   keys              TenantKey[]
   mockUsers         MockUser[]
+  mockIdentities    MockIdentity[]
   authorizationCode AuthorizationCode[]
   accessTokens      AccessToken[]
   mockSessions      MockSession[]
@@ -193,6 +194,20 @@ model MockUser {
   codes         AuthorizationCode[]
   accessTokens  AccessToken[]
   @@unique([tenantId, username])
+}
+
+model MockIdentity {
+  id          String        @id @default(uuid())
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId    String
+  strategy    LoginStrategy
+  identifier  String
+  sub         String        @unique
+  email       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([tenantId, strategy, identifier])
 }
 
 model MockSession {

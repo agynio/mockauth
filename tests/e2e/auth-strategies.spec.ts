@@ -70,6 +70,9 @@ test.describe("auth strategy persistence", () => {
     expect(usernameFlow.idToken.sub).not.toBe(username);
     expect(usernameFlow.idToken.preferred_username).toBe(username);
     expect(usernameFlow.userinfo.sub).toBe(usernameFlow.idToken.sub);
+    const usernameFlowRepeat = await runUsernameFlow({ tenantId, resourceId, clientId, username });
+    expect(usernameFlowRepeat.idToken.sub).toBe(usernameFlow.idToken.sub);
+    expect(usernameFlowRepeat.userinfo.sub).toBe(usernameFlow.userinfo.sub);
 
     const emailFlowVerified = await runEmailFlow({
       resourceId,
@@ -88,6 +91,8 @@ test.describe("auth strategy persistence", () => {
     });
     expect(emailFlowUnverified.idToken.email_verified).toBe(false);
     expect(emailFlowUnverified.userinfo.email_verified).toBe(false);
+    expect(emailFlowUnverified.idToken.sub).toBe(emailFlowVerified.idToken.sub);
+    expect(emailFlowUnverified.userinfo.sub).toBe(emailFlowVerified.userinfo.sub);
   });
 });
 
