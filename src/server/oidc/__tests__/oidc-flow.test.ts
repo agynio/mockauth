@@ -229,4 +229,108 @@ describe("OIDC flow", () => {
     expect(userinfo.sub).toBe(subject);
     await clearSession(tenantId, sessionTokenOverride);
   });
+
+  it("issues email_verified=true when configured", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: {
+        authStrategies: {
+          username: { enabled: false, subSource: "entered" },
+          email: { enabled: true, subSource: "entered", emailVerifiedMode: "true" },
+        },
+      },
+    });
+    const user = await prisma.mockUser.upsert({
+      where: { tenantId_username: { tenantId, username: "email-verified" } },
+      update: { email: "email-verified@example.test", displayName: "Email Verified" },
+      create: { tenantId, username: "email-verified", email: "email-verified@example.test", displayName: "Email Verified" },
+    });
+    const verifiedSession = await createSession(tenantId, user.id, {
+      strategy: $Enums.LoginStrategy.EMAIL,
+      subject: "email-verified@example.test",
+    });
+    const authorize = await handleAuthorize(
+      {
+        tenantId,
+        apiResourceId,
+        clientId: "qa-client",
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid email",
+        state: "email-verified",
+        codeChallenge: computeS256Challenge(codeVerifier),
+        codeChallengeMethod: "S256",
+        sessionToken: verifiedSession,
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+    );
+    const code = new URL(authorize.redirectTo).searchParams.get("code");
+    const consumed = await consumeAuthorizationCode(code!);
+    const tokens = await issueTokensFromCode({
+      code: consumed,
+      codeVerifier,
+      redirectUri: "https://client.example.test/callback",
+      origin: "https://mockauth.test",
+      clientSecret: "qa-secret",
+    });
+    const idToken = decodeJwt(tokens.id_token);
+    expect(idToken.email_verified).toBe(true);
+    await clearSession(tenantId, verifiedSession);
+  });
+
+  it("respects user choice for email_verified", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: {
+        authStrategies: {
+          username: { enabled: false, subSource: "entered" },
+          email: { enabled: true, subSource: "entered", emailVerifiedMode: "user_choice" },
+        },
+      },
+    });
+    const user = await prisma.mockUser.upsert({
+      where: { tenantId_username: { tenantId, username: "email-choice" } },
+      update: { email: "email-choice@example.test", displayName: "Email Choice" },
+      create: { tenantId, username: "email-choice", email: "email-choice@example.test", displayName: "Email Choice" },
+    });
+
+    const authorizeFlow = async (override: boolean) => {
+      const sessionTokenChoice = await createSession(tenantId, user.id, {
+        strategy: $Enums.LoginStrategy.EMAIL,
+        subject: "email-choice@example.test",
+        emailVerifiedOverride: override,
+      });
+      const authorize = await handleAuthorize(
+        {
+          tenantId,
+          apiResourceId,
+          clientId: "qa-client",
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid email",
+          state: override ? "choice-true" : "choice-false",
+          codeChallenge: computeS256Challenge(codeVerifier),
+          codeChallengeMethod: "S256",
+          sessionToken: sessionTokenChoice,
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      );
+      const code = new URL(authorize.redirectTo).searchParams.get("code");
+      const consumed = await consumeAuthorizationCode(code!);
+      const tokens = await issueTokensFromCode({
+        code: consumed,
+        codeVerifier,
+        redirectUri: "https://client.example.test/callback",
+        origin: "https://mockauth.test",
+        clientSecret: "qa-secret",
+      });
+      await clearSession(tenantId, sessionTokenChoice);
+      return decodeJwt(tokens.id_token).email_verified;
+    };
+
+    await expect(authorizeFlow(true)).resolves.toBe(true);
+    await expect(authorizeFlow(false)).resolves.toBe(false);
+  });
 });

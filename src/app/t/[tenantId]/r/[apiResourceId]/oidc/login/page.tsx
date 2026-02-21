@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { LoginForm } from "@/app/t/[tenantId]/r/[apiResourceId]/oidc/login/login-form";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getActiveTenantById } from "@/server/services/tenant-service";
 
@@ -28,7 +29,10 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
   }
 
-  const enabledStrategies = (Object.entries(strategyConfig) as ["username" | "email", (typeof strategyConfig)["username"]][])
+  const enabledStrategies = (Object.entries(strategyConfig) as [
+    keyof ClientAuthStrategies,
+    ClientAuthStrategies[keyof ClientAuthStrategies],
+  ][])
     .filter(([, cfg]) => cfg.enabled)
     .map(([key, cfg]) => ({
       key,
@@ -39,16 +43,20 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     enabledStrategies.push({ key: "username", cfg: DEFAULT_CLIENT_AUTH_STRATEGIES.username });
   }
 
-  const strategies = enabledStrategies.map(({ key, cfg }) => ({
-    key,
-    title: key === "username" ? "Username" : "Email",
-    description:
-      key === "username"
-        ? "Enter any username to simulate an end-user."
-        : "Enter any email to simulate an email-based login.",
-    placeholder: key === "username" ? "qa-user" : "qa-user@example.test",
-    subSource: cfg.subSource,
-  }));
+  const strategies = enabledStrategies.map(({ key, cfg }) => {
+    const isEmail = key === "email";
+    const emailConfig = isEmail ? (cfg as ClientAuthStrategies["email"]) : null;
+    return {
+      key,
+      title: isEmail ? "Email" : "Username",
+      description: isEmail
+        ? "Enter any email to simulate an email-based login."
+        : "Enter any username to simulate an end-user.",
+      placeholder: isEmail ? "qa-user@example.test" : "qa-user",
+      subSource: cfg.subSource,
+      emailVerifiedMode: emailConfig?.emailVerifiedMode,
+    };
+  });
   const strategySummary = strategies.map((strategy) => strategy.title.toLowerCase()).join(" or ");
 
   return (

@@ -117,7 +117,7 @@ vi.mock("@/components/ui/select", async () => {
 
 const defaultStrategies: ClientAuthStrategies = {
   username: { enabled: true, subSource: "entered" },
-  email: { enabled: false, subSource: "entered" },
+  email: { enabled: false, subSource: "entered", emailVerifiedMode: "false" },
 };
 
 const renderForm = (overrides?: Partial<ClientAuthStrategies>) => {
@@ -156,7 +156,7 @@ describe("UpdateClientAuthStrategiesForm", () => {
         canEdit
         initialStrategies={{
           username: { enabled: true, subSource: "generated_uuid" },
-          email: { enabled: false, subSource: "entered" },
+          email: { enabled: false, subSource: "entered", emailVerifiedMode: "false" },
         }}
       />,
     );
@@ -178,7 +178,7 @@ describe("UpdateClientAuthStrategiesForm", () => {
       expect(mockUpdateClientAuthStrategiesAction).toHaveBeenCalledWith({
         clientId: "client_123",
         username: { enabled: true, subSource: "generated_uuid" },
-        email: { enabled: false, subSource: "entered" },
+        email: { enabled: false, subSource: "entered", emailVerifiedMode: "false" },
       });
     });
   });

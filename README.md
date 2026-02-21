@@ -130,7 +130,8 @@ updates). CI runs this script automatically before executing E2E specs.
   own subject-source selector (`entered` reuses the typed identifier, `generated_uuid` rotates a random UUID each
   session).
 - Username strategy returns `preferred_username` when `profile` is requested. Email strategy requires the `email` scope
-  and emits `email` + `email_verified=false`; it never exposes `preferred_username`.
+  and emits `email` + `email_verified` according to the configured mode (always true, always false, or QA-selected at
+  login). It never exposes `preferred_username`.
 - All subject decisions are stored on the session + authorization code so every token and `userinfo` response reflects
   the strategy that was used during login.
 

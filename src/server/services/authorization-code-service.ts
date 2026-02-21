@@ -15,6 +15,7 @@ export const createAuthorizationCode = async (params: {
   userId: string;
   loginStrategy: $Enums.LoginStrategy;
   subject: string;
+  emailVerifiedOverride?: boolean;
   redirectUri: string;
   scope: string;
   nonce?: string;
@@ -31,6 +32,7 @@ export const createAuthorizationCode = async (params: {
       userId: params.userId,
       loginStrategy: params.loginStrategy,
       subject: params.subject,
+      emailVerifiedOverride: params.emailVerifiedOverride ?? null,
       redirectUri: params.redirectUri,
       scope: params.scope,
       nonce: params.nonce,

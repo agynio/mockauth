@@ -1,7 +1,12 @@
 import type { MockUser } from "@/generated/prisma/client";
 import type { ClientAuthStrategy } from "@/server/oidc/auth-strategy";
 
-export const claimsForScopes = (user: MockUser, scopes: string[], strategy: ClientAuthStrategy) => {
+export const claimsForScopes = (
+  user: MockUser,
+  scopes: string[],
+  strategy: ClientAuthStrategy,
+  options?: { emailVerified?: boolean },
+) => {
   const claims: Record<string, unknown> = {};
   if (scopes.includes("profile")) {
     claims.name = user.displayName ?? user.username;
@@ -12,7 +17,7 @@ export const claimsForScopes = (user: MockUser, scopes: string[], strategy: Clie
 
   if (strategy === "email" && scopes.includes("email") && user.email) {
     claims.email = user.email;
-    claims.email_verified = false;
+    claims.email_verified = options?.emailVerified ?? false;
   }
 
   return claims;
