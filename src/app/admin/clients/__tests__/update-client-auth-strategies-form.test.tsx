@@ -28,92 +28,7 @@ vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-vi.mock("@/components/ui/select", async () => {
-  const React = await import("react");
-  type Option = { value: string; label: string };
-  const SelectContext = React.createContext<{
-    value: string;
-    onValueChange: (next: string) => void;
-    registerOption: (option: Option) => void;
-    options: Option[];
-    disabled: boolean;
-  } | null>(null);
-
-  const Select = ({ value, defaultValue, onValueChange, disabled = false, children }: any) => {
-    const [options, setOptions] = React.useState<Option[]>([]);
-    const [currentValue, setCurrentValue] = React.useState<string>(value ?? defaultValue ?? "");
-    React.useEffect(() => {
-      if (value !== undefined) {
-        setCurrentValue(value);
-      }
-    }, [value]);
-    const registerOption = (option: Option) => {
-      setOptions((prev) => {
-        const existing = prev.find((item) => item.value === option.value);
-        if (existing && existing.label === option.label) {
-          return prev;
-        }
-        const next = prev.filter((item) => item.value !== option.value);
-        return [...next, option];
-      });
-    };
-    const handleChange = (next: string) => {
-      setCurrentValue(next);
-      onValueChange?.(next);
-    };
-    return (
-      <SelectContext.Provider value={{ value: currentValue, onValueChange: handleChange, registerOption, options, disabled }}>
-        {children}
-      </SelectContext.Provider>
-    );
-  };
-
-  const SelectTrigger = ({ "data-testid": dataTestId, "aria-label": ariaLabel }: any) => {
-    const context = React.useContext(SelectContext);
-    if (!context) return null;
-    return (
-      <select
-        data-testid={dataTestId}
-        aria-label={ariaLabel}
-        value={context.value ?? ""}
-        onChange={(event) => context.onValueChange(event.target.value)}
-        disabled={context.disabled}
-      >
-        {context.options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
-  };
-
-  const SelectContent = ({ children }: any) => <>{children}</>;
-
-  const SelectItem = ({ value, children }: any) => {
-    const context = React.useContext(SelectContext);
-    React.useEffect(() => {
-      context?.registerOption({ value, label: String(children) });
-    }, [context, value, children]);
-    return null;
-  };
-
-  const SelectValue = ({ children }: any) => <>{children}</>;
-  const SelectGroup = ({ children }: any) => <>{children}</>;
-  const SelectLabel = ({ children }: any) => <>{children}</>;
-  const SelectSeparator = () => null;
-
-  return {
-    Select,
-    SelectTrigger,
-    SelectContent,
-    SelectItem,
-    SelectValue,
-    SelectGroup,
-    SelectLabel,
-    SelectSeparator,
-  };
-});
+vi.mock("@/components/ui/select", () => import("@/test-utils/mocks/shadcn-select"));
 
 const defaultStrategies: ClientAuthStrategies = {
   username: { enabled: true, subSource: "entered" },
@@ -179,6 +94,25 @@ describe("UpdateClientAuthStrategiesForm", () => {
         clientId: "client_123",
         username: { enabled: true, subSource: "generated_uuid" },
         email: { enabled: false, subSource: "entered", emailVerifiedMode: "false" },
+      });
+    });
+  });
+
+  it("persists email verified mode selections", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      email: { enabled: true, subSource: "entered", emailVerifiedMode: "false" },
+    });
+
+    const trigger = screen.getByTestId("strategy-email-verified-mode");
+    await user.selectOptions(trigger, "user_choice");
+    await user.click(screen.getByRole("button", { name: /Save strategies/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateClientAuthStrategiesAction).toHaveBeenCalledWith({
+        clientId: "client_123",
+        username: { enabled: true, subSource: "entered" },
+        email: { enabled: true, subSource: "entered", emailVerifiedMode: "user_choice" },
       });
     });
   });
