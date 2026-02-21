@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
-import { UpdateAuthStrategiesForm } from "../[clientId]/client-forms";
+import { SUBJECT_SOURCE_HELP_TEXT, UpdateAuthStrategiesForm } from "../[clientId]/client-forms";
 
 const mockUpdateClientAuthStrategiesAction = vi.hoisted(() => vi.fn().mockResolvedValue({ success: "saved" }));
 
@@ -77,8 +77,16 @@ describe("UpdateClientAuthStrategiesForm", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("strategy-username-subsource")).toHaveTextContent("Generate UUID per session");
+      expect(screen.getByTestId("strategy-username-subsource")).toHaveTextContent("Generate UUID (stable per identity)");
     });
+  });
+
+  it("renders the stable identity label and help text", () => {
+    renderForm();
+    const options = screen.getAllByRole("option", { name: "Generate UUID (stable per identity)" });
+    expect(options).not.toHaveLength(0);
+    const descriptions = screen.getAllByText(SUBJECT_SOURCE_HELP_TEXT);
+    expect(descriptions).toHaveLength(2);
   });
 
   it("submits the selected subject source", async () => {

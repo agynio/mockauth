@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
@@ -246,8 +246,11 @@ const strategyMetadata: Record<keyof ClientAuthStrategies, { title: string; desc
 
 const SUBJECT_SOURCE_LABELS: Record<"entered" | "generated_uuid", string> = {
   entered: "Use entered value",
-  generated_uuid: "Generate UUID per session",
+  generated_uuid: "Generate UUID (stable per identity)",
 };
+
+export const SUBJECT_SOURCE_HELP_TEXT =
+  "Generate UUID (stable per identity) stores a persistent UUID per tenant + strategy + identifier combination.";
 
 const EMAIL_VERIFIED_LABELS: Record<"true" | "false" | "user_choice", string> = {
   true: "Always verified",
@@ -357,9 +360,10 @@ export function UpdateAuthStrategiesForm({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="entered">Use entered value</SelectItem>
-                      <SelectItem value="generated_uuid">Generate UUID per session</SelectItem>
+                      <SelectItem value="generated_uuid">Generate UUID (stable per identity)</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormDescription>{SUBJECT_SOURCE_HELP_TEXT}</FormDescription>
                   <FormMessage />
                 </FormItem>
               );

@@ -33,10 +33,10 @@ test.describe("auth strategy persistence", () => {
     await page.goto("/admin/clients");
     await selectTenant(page, tenantId);
     await page.getByRole("row", { name: /QA Client/i }).first().getByRole("link", { name: "Details →" }).click();
-    await updateSelect(page, page.getByTestId("strategy-username-subsource"), "Generate UUID per session");
+    await updateSelect(page, page.getByTestId("strategy-username-subsource"), "Generate UUID (stable per identity)");
     const emailToggle = page.getByTestId("strategy-email-enabled");
     await emailToggle.check();
-    await updateSelect(page, page.getByTestId("strategy-email-subsource"), "Generate UUID per session");
+    await updateSelect(page, page.getByTestId("strategy-email-subsource"), "Generate UUID (stable per identity)");
     await updateSelect(page, page.getByTestId("strategy-email-verified-mode"), "Allow QA to choose");
 
     const saveButton = page.getByRole("button", { name: "Save strategies" });
@@ -54,8 +54,8 @@ test.describe("auth strategy persistence", () => {
     );
 
     await page.reload();
-    await expect(page.getByTestId("strategy-username-subsource")).toHaveText("Generate UUID per session");
-    await expect(page.getByTestId("strategy-email-subsource")).toHaveText("Generate UUID per session");
+    await expect(page.getByTestId("strategy-username-subsource")).toHaveText("Generate UUID (stable per identity)");
+    await expect(page.getByTestId("strategy-email-subsource")).toHaveText("Generate UUID (stable per identity)");
     await expect(page.getByTestId("strategy-email-verified-mode")).toHaveText("Allow QA to choose");
     await expect(page.getByTestId("strategy-email-enabled")).toBeChecked();
 

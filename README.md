@@ -127,8 +127,8 @@ updates). CI runs this script automatically before executing E2E specs.
 ### Per-client auth strategies
 
 - Username and email sign-in flows are configured per client. Both are enabled/disabled independently and expose their
-  own subject-source selector (`entered` reuses the typed identifier, `generated_uuid` rotates a random UUID each
-  session).
+  own subject-source selector (`entered` reuses the typed identifier, `generated_uuid` ("Generate UUID (stable per identity)")
+  stores a persistent UUID per tenant + strategy + identifier).
 - Username strategy returns `preferred_username` when `profile` is requested. Email strategy requires the `email` scope
   and emits `email` + `email_verified` according to the configured mode (always true, always false, or QA-selected at
   login). It never exposes `preferred_username`.
