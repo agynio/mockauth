@@ -29,14 +29,13 @@ export const withSessionCookies = (jar: ReturnType<typeof cookieJar>) => {
 };
 
 export const buildAuthorizeUrl = (
-  tenantId: string,
   resourceId: string,
   clientId: string,
   codeChallenge: string,
   state: string,
   nonce: string,
 ) => {
-  const url = new URL(`http://127.0.0.1:3000/t/${tenantId}/r/${resourceId}/oidc/authorize`);
+  const url = new URL(`http://127.0.0.1:3000/r/${resourceId}/oidc/authorize`);
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
@@ -49,7 +48,6 @@ export const buildAuthorizeUrl = (
 };
 
 type RunEmailFlowOptions = {
-  tenantId: string;
   resourceId: string;
   clientId: string;
   email: string;
@@ -64,13 +62,13 @@ export type UserInfoClaims = {
   preferred_username?: string;
 };
 
-export const runEmailFlow = async ({ tenantId, resourceId, clientId, email, emailVerifiedPreference }: RunEmailFlowOptions) => {
+export const runEmailFlow = async ({ resourceId, clientId, email, emailVerifiedPreference }: RunEmailFlowOptions) => {
   const jar = cookieJar();
   const codeVerifier = randomPKCECodeVerifier();
   const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
   const state = randomState();
   const nonce = randomNonce();
-  const authorizeUrl = buildAuthorizeUrl(tenantId, resourceId, clientId, codeChallenge, state, nonce);
+  const authorizeUrl = buildAuthorizeUrl(resourceId, clientId, codeChallenge, state, nonce);
   const authorizeResponse = await fetch(authorizeUrl, { redirect: "manual", headers: withSessionCookies(jar) });
   jar.addFrom(authorizeResponse);
   if (authorizeResponse.status !== 302) {
@@ -117,7 +115,7 @@ export const runEmailFlow = async ({ tenantId, resourceId, clientId, email, emai
   if (!code) {
     throw new Error("authorization_code_missing");
   }
-  const tokenResponse = await fetch(`http://127.0.0.1:3000/t/${tenantId}/r/${resourceId}/oidc/token`, {
+  const tokenResponse = await fetch(`http://127.0.0.1:3000/r/${resourceId}/oidc/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -137,12 +135,12 @@ export const runEmailFlow = async ({ tenantId, resourceId, clientId, email, emai
     throw new Error("token_response_missing_tokens");
   }
   const idToken = decodeJwt(payload.id_token) as DecodedIdToken;
-  const userinfo = await fetchUserInfoClaims(payload.access_token, tenantId, resourceId);
+  const userinfo = await fetchUserInfoClaims(payload.access_token, resourceId);
   return { idToken, userinfo };
 };
 
-export const fetchUserInfoClaims = async (accessToken: string, tenantId: string, resourceId: string): Promise<UserInfoClaims> => {
-  const response = await fetch(`http://127.0.0.1:3000/t/${tenantId}/r/${resourceId}/oidc/userinfo`, {
+export const fetchUserInfoClaims = async (accessToken: string, resourceId: string): Promise<UserInfoClaims> => {
+  const response = await fetch(`http://127.0.0.1:3000/r/${resourceId}/oidc/userinfo`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {

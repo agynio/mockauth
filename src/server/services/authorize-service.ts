@@ -3,12 +3,10 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createAuthorizationCode } from "@/server/services/authorization-code-service";
 import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
-import { getActiveTenantById } from "@/server/services/tenant-service";
-import { getApiResourceForTenant } from "@/server/services/api-resource-service";
+import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 type AuthorizeParams = {
-  tenantId: string;
   apiResourceId: string;
   clientId: string;
   redirectUri: string;
@@ -42,8 +40,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     throw new DomainError("Only PKCE S256 is supported", { status: 400, code: "invalid_request" });
   }
 
-  const tenant = await getActiveTenantById(params.tenantId);
-  const resource = await getApiResourceForTenant(tenant.id, params.apiResourceId);
+  const { tenant, resource } = await getApiResourceWithTenant(params.apiResourceId);
   const client = await getClientForTenant(tenant.id, params.clientId);
   const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
   if (clientResourceId !== resource.id) {
@@ -63,7 +60,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   if (shouldLogin) {
     return {
       type: "login" as const,
-      redirectTo: `/t/${tenant.id}/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
+      redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
     };
   }
 

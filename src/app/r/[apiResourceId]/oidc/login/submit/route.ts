@@ -6,9 +6,8 @@ import { z } from "zod";
 import { toResponse } from "@/server/errors";
 import { findOrCreateMockUser } from "@/server/services/mock-user-service";
 import { createSession, MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
-import { getActiveTenantById } from "@/server/services/tenant-service";
 import { resolveUrl } from "@/server/http/origin";
-import type { TenantResourceRouteContext } from "@/types/tenant-route";
+import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { getClientForTenant } from "@/server/services/client-service";
 import {
   DEFAULT_CLIENT_AUTH_STRATEGIES,
@@ -17,6 +16,7 @@ import {
   toPrismaLoginStrategy,
 } from "@/server/oidc/auth-strategy";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
@@ -42,9 +42,9 @@ const sanitizeReturnTo = (value: string | undefined, fallback: URL, currentUrl: 
   }
 };
 
-export async function POST(request: NextRequest, context: TenantResourceRouteContext) {
-  const { tenantId, apiResourceId } = await context.params;
-  const tenant = await getActiveTenantById(tenantId);
+export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
+  const { apiResourceId } = await context.params;
+  const { tenant, resource } = await getApiResourceWithTenant(apiResourceId);
   const currentUrl = resolveUrl(request);
   const form = await request.formData();
   const data = loginSchema.safeParse({
@@ -105,14 +105,14 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
       subject,
       emailVerifiedOverride,
     });
-    const fallback = new URL(`/t/${tenant.id}/r/${apiResourceId}/oidc/authorize`, currentUrl.origin);
+    const fallback = new URL(`/r/${resource.id}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
     const response = NextResponse.redirect(redirectUrl, 303);
     const isSecure = currentUrl.protocol === "https:";
     response.cookies.set({
       name: MOCK_SESSION_COOKIE,
       value: token,
-      path: `/t/${tenant.id}`,
+      path: "/r",
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure,

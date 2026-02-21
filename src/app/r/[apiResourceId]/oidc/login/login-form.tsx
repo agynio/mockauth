@@ -14,18 +14,17 @@ type StrategyOption = {
 };
 
 type LoginFormProps = {
-  tenantId: string;
   apiResourceId: string;
   returnTo: string;
   strategies: StrategyOption[];
 };
 
-export function LoginForm({ tenantId, apiResourceId, returnTo, strategies }: LoginFormProps) {
+export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProps) {
   const [selectedStrategy, setSelectedStrategy] = useState<"username" | "email">(strategies[0]?.key ?? "username");
   const [emailVerifiedPreference, setEmailVerifiedPreference] = useState<"true" | "false">("true");
 
   return (
-    <form method="POST" action={`/t/${tenantId}/r/${apiResourceId}/oidc/login/submit`} className="space-y-4">
+    <form method="POST" action={`/r/${apiResourceId}/oidc/login/submit`} className="space-y-4">
       <input type="hidden" name="strategy" value={selectedStrategy} />
       <input type="hidden" name="return_to" value={returnTo} />
       {strategies.length > 1 ? (

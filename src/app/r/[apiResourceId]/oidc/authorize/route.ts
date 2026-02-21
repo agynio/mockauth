@@ -5,7 +5,7 @@ import { toResponse } from "@/server/errors";
 import { handleAuthorize } from "@/server/services/authorize-service";
 import { MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
 import { resolveUrl } from "@/server/http/origin";
-import type { TenantResourceRouteContext } from "@/types/tenant-route";
+import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 
 const authorizeSchema = z.object({
   client_id: z.string().min(1),
@@ -19,7 +19,7 @@ const authorizeSchema = z.object({
   code_challenge_method: z.string().default("S256"),
 });
 
-export async function GET(request: NextRequest, context: TenantResourceRouteContext) {
+export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
   const normalizedUrl = resolveUrl(request);
   const origin = normalizedUrl.origin;
   const validation = authorizeSchema.safeParse(Object.fromEntries(normalizedUrl.searchParams.entries()));
@@ -29,11 +29,10 @@ export async function GET(request: NextRequest, context: TenantResourceRouteCont
   }
 
   try {
-    const { tenantId, apiResourceId } = await context.params;
+    const { apiResourceId } = await context.params;
     const sessionToken = request.cookies.get(MOCK_SESSION_COOKIE)?.value;
     const result = await handleAuthorize(
       {
-        tenantId,
         apiResourceId,
         clientId: validation.data.client_id,
         redirectUri: validation.data.redirect_uri,

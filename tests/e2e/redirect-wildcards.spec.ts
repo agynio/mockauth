@@ -87,7 +87,7 @@ const expectRedirectRejected = async (
 };
 
 const authorize = (request: APIRequestContext, tenant: TenantContext, clientId: string, redirectUri: string) => {
-  const url = new URL(`http://127.0.0.1:3000/t/${tenant.tenantId}/r/${tenant.resourceId}/oidc/authorize`);
+  const url = new URL(`http://127.0.0.1:3000/r/${tenant.resourceId}/oidc/authorize`);
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");

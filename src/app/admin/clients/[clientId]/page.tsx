@@ -58,7 +58,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const authStrategies = parseClientAuthStrategies(client.authStrategies);
 
   const origin = await getRequestOrigin();
-  const urls = buildOidcUrls(origin, activeTenant.id, currentResourceId);
+  const urls = buildOidcUrls(origin, currentResourceId);
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
   const requiredFields: FieldDefinition[] = [
@@ -252,8 +252,8 @@ const MetadataRow = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const buildOidcUrls = (origin: string, tenantId: string, apiResourceId: string) => {
-  const base = `${origin}/t/${tenantId}/r/${apiResourceId}/oidc`;
+const buildOidcUrls = (origin: string, apiResourceId: string) => {
+  const base = `${origin}/r/${apiResourceId}/oidc`;
   return {
     issuer: base,
     discovery: `${base}/.well-known/openid-configuration`,

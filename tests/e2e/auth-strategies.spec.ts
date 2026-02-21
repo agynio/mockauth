@@ -72,7 +72,6 @@ test.describe("auth strategy persistence", () => {
     expect(usernameFlow.userinfo.sub).toBe(usernameFlow.idToken.sub);
 
     const emailFlowVerified = await runEmailFlow({
-      tenantId,
       resourceId,
       clientId,
       email: "choice@example.test",
@@ -82,7 +81,6 @@ test.describe("auth strategy persistence", () => {
     expect(emailFlowVerified.userinfo.email_verified).toBe(true);
 
     const emailFlowUnverified = await runEmailFlow({
-      tenantId,
       resourceId,
       clientId,
       email: "choice@example.test",
@@ -119,7 +117,7 @@ const runUsernameFlow = async ({
   const challenge = await calculatePKCECodeChallenge(verifier);
   const state = randomState();
   const nonce = randomNonce();
-  const authorizeUrl = buildAuthorizeUrl(tenantId, resourceId, clientId, challenge, state, nonce);
+  const authorizeUrl = buildAuthorizeUrl(resourceId, clientId, challenge, state, nonce);
   const authorizeResponse = await fetch(authorizeUrl, { redirect: "manual", headers: withSessionCookies(jar) });
   jar.addFrom(authorizeResponse);
   if (authorizeResponse.status !== 302) {
@@ -158,7 +156,7 @@ const runUsernameFlow = async ({
   if (!code) {
     throw new Error("missing_code");
   }
-  const tokenResponse = await fetch(`http://127.0.0.1:3000/t/${tenantId}/r/${resourceId}/oidc/token`, {
+  const tokenResponse = await fetch(`http://127.0.0.1:3000/r/${resourceId}/oidc/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -175,7 +173,7 @@ const runUsernameFlow = async ({
   }
   const payload = (await tokenResponse.json()) as { id_token: string; access_token: string };
   const idToken = decodeJwt(payload.id_token) as DecodedIdToken;
-  const userinfo = await fetchUserInfoClaims(payload.access_token, tenantId, resourceId);
+  const userinfo = await fetchUserInfoClaims(payload.access_token, resourceId);
   return { idToken, userinfo };
 };
 

@@ -5,7 +5,7 @@ import { toResponse } from "@/server/errors";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { issueTokensFromCode } from "@/server/services/token-service";
 import { resolveOrigin } from "@/server/http/origin";
-import type { TenantResourceRouteContext } from "@/types/tenant-route";
+import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 
 const tokenSchema = z.object({
   grant_type: z.literal("authorization_code"),
@@ -31,7 +31,7 @@ const parseBasicAuth = (header: string | null) => {
   return { clientId: id, clientSecret: secret };
 };
 
-export async function POST(request: NextRequest, context: TenantResourceRouteContext) {
+export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
   const entries = Object.fromEntries((await request.clone().formData()).entries());
   const validation = tokenSchema.safeParse(entries);
 
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
     const clientId = basic?.clientId ?? validation.data.client_id;
     const clientSecret = basic?.clientSecret ?? validation.data.client_secret;
 
-    const { tenantId, apiResourceId } = await context.params;
+    const { apiResourceId } = await context.params;
     const codeRecord = await consumeAuthorizationCode(validation.data.code);
-    if (codeRecord.tenantId !== tenantId || codeRecord.apiResourceId !== apiResourceId) {
+    if (codeRecord.apiResourceId !== apiResourceId) {
       return Response.json({ error: "invalid_grant" }, { status: 400 });
     }
 

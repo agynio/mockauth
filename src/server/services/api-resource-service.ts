@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
+import { getActiveTenantById } from "@/server/services/tenant-service";
 
 export const listApiResources = async (tenantId: string) => {
   return prisma.apiResource.findMany({
@@ -15,6 +16,20 @@ export const getApiResourceForTenant = async (tenantId: string, apiResourceId: s
     throw new DomainError("API resource not found", { status: 404, code: "api_resource_not_found" });
   }
   return resource;
+};
+
+export const getApiResourceById = async (apiResourceId: string) => {
+  const resource = await prisma.apiResource.findUnique({ where: { id: apiResourceId } });
+  if (!resource) {
+    throw new DomainError("API resource not found", { status: 404, code: "api_resource_not_found" });
+  }
+  return resource;
+};
+
+export const getApiResourceWithTenant = async (apiResourceId: string) => {
+  const resource = await getApiResourceById(apiResourceId);
+  const tenant = await getActiveTenantById(resource.tenantId);
+  return { resource, tenant };
 };
 
 export const getTenantDefaultApiResource = async (tenantId: string) => {
