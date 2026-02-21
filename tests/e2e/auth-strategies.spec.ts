@@ -37,7 +37,7 @@ test.describe("auth strategy persistence", () => {
     const emailToggle = page.getByTestId("strategy-email-enabled");
     await emailToggle.check();
     await updateSelect(page, page.getByTestId("strategy-email-subsource"), "Generate UUID per session");
-    await updateSelect(page, page.getByLabel("Email verified mode"), "Allow QA to choose");
+    await updateSelect(page, page.getByTestId("strategy-email-verified-mode"), "Allow QA to choose");
 
     const saveButton = page.getByRole("button", { name: "Save strategies" });
     await expect(saveButton).toBeEnabled();
@@ -54,9 +54,9 @@ test.describe("auth strategy persistence", () => {
     );
 
     await page.reload();
-    await expect(page.getByTestId("strategy-username-subsource")).toHaveValue("generated_uuid");
-    await expect(page.getByTestId("strategy-email-subsource")).toHaveValue("generated_uuid");
-    await expect(page.getByLabel("Email verified mode")).toHaveValue("user_choice");
+    await expect(page.getByTestId("strategy-username-subsource")).toHaveText("Generate UUID per session");
+    await expect(page.getByTestId("strategy-email-subsource")).toHaveText("Generate UUID per session");
+    await expect(page.getByTestId("strategy-email-verified-mode")).toHaveText("Allow QA to choose");
     await expect(page.getByTestId("strategy-email-enabled")).toBeChecked();
 
     const latestStrategies = await getClientStrategies(page);
@@ -92,7 +92,8 @@ test.describe("auth strategy persistence", () => {
 });
 
 const updateSelect = async (page: Page, trigger: Locator, optionLabel: string) => {
-  await trigger.selectOption({ label: optionLabel });
+  await trigger.click();
+  await page.getByRole("option", { name: optionLabel }).click();
 };
 
 const selectTenant = async (page: Page, id: string) => {

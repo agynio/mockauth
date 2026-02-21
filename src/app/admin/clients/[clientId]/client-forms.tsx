@@ -24,6 +24,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { cn } from "@/lib/utils";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
 const redirectSchema = z.object({
@@ -243,6 +244,17 @@ const strategyMetadata: Record<keyof ClientAuthStrategies, { title: string; desc
   },
 };
 
+const SUBJECT_SOURCE_LABELS: Record<"entered" | "generated_uuid", string> = {
+  entered: "Use entered value",
+  generated_uuid: "Generate UUID per session",
+};
+
+const EMAIL_VERIFIED_LABELS: Record<"true" | "false" | "user_choice", string> = {
+  true: "Always verified",
+  false: "Always unverified",
+  user_choice: "Allow QA to choose",
+};
+
 export function UpdateAuthStrategiesForm({
   clientId,
   canEdit,
@@ -311,50 +323,91 @@ export function UpdateAuthStrategiesForm({
           />
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-         <FormField
+          <FormField
             control={form.control}
             name={`${key}.subSource` as const}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Subject source</FormLabel>
-                <FormControl>
-                  <select
-                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            render={({ field }) => {
+              const selectDisabled = !canEdit || pending || !isStrategyEnabled;
+              const handleChange = (nextValue: string) => {
+                if (!nextValue) {
+                  return;
+                }
+                field.onChange(nextValue);
+              };
+              return (
+                <FormItem>
+                  <FormLabel htmlFor={triggerTestId}>Subject source</FormLabel>
+                  <Select
                     value={field.value}
-                    onChange={(event) => field.onChange(event.target.value)}
-                    disabled={!canEdit || pending || !isStrategyEnabled}
-                    data-testid={triggerTestId}
+                    defaultValue={field.value}
+                    onValueChange={handleChange}
+                    disabled={selectDisabled}
                   >
-                    <option value="entered">Use entered value</option>
-                    <option value="generated_uuid">Generate UUID per session</option>
-                  </select>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+                    <FormControl>
+                      <SelectTrigger
+                        id={triggerTestId}
+                        data-testid={triggerTestId}
+                        aria-label={`${strategyMetadata[key].title} subject source`}
+                        disabled={selectDisabled}
+                      >
+                        <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+                          {field.value ? SUBJECT_SOURCE_LABELS[field.value] : "Select subject source"}
+                        </span>
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="entered">Use entered value</SelectItem>
+                      <SelectItem value="generated_uuid">Generate UUID per session</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
           {key === "email" ? (
             <FormField
               control={form.control}
               name={"email.emailVerifiedMode" as const}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email verified mode</FormLabel>
-                  <FormControl>
-                    <select
-                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              render={({ field }) => {
+                const selectDisabled = !canEdit || pending || !isStrategyEnabled;
+                const handleChange = (nextValue: string) => {
+                  if (!nextValue) {
+                    return;
+                  }
+                  field.onChange(nextValue);
+                };
+                return (
+                  <FormItem>
+                    <FormLabel htmlFor="strategy-email-verified-mode">Email verified mode</FormLabel>
+                    <Select
                       value={field.value}
-                      onChange={(event) => field.onChange(event.target.value)}
-                      disabled={!canEdit || pending || !isStrategyEnabled}
+                      defaultValue={field.value}
+                      onValueChange={handleChange}
+                      disabled={selectDisabled}
                     >
-                      <option value="true">Always verified</option>
-                      <option value="false">Always unverified</option>
-                      <option value="user_choice">Allow QA to choose</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+                      <FormControl>
+                      <SelectTrigger
+                        id="strategy-email-verified-mode"
+                        data-testid="strategy-email-verified-mode"
+                        aria-label="Email verified mode"
+                        disabled={selectDisabled}
+                      >
+                        <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+                          {field.value ? EMAIL_VERIFIED_LABELS[field.value] : "Select email verified mode"}
+                        </span>
+                      </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="true">Always verified</SelectItem>
+                        <SelectItem value="false">Always unverified</SelectItem>
+                        <SelectItem value="user_choice">Allow QA to choose</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
           ) : null}
         </div>
