@@ -50,6 +50,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const defaultResourceId = activeTenant.defaultApiResourceId!;
   const clientUsesDefault = !client.apiResourceId;
   const currentResourceId = client.apiResourceId ?? defaultResourceId;
+  const storedClientResourceId = client.apiResourceId;
   const defaultResource = resources.find((resource) => resource.id === defaultResourceId);
   const currentResourceName = client.apiResource?.name ?? defaultResource?.name ?? "Default resource";
   const issuerOptions = resources
@@ -164,7 +165,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             canEdit={canManageClients}
             defaultResourceId={defaultResourceId}
             defaultResourceName={defaultResource?.name ?? "Default resource"}
-            currentResourceId={currentResourceId}
+            currentResourceId={storedClientResourceId}
             usesDefault={clientUsesDefault}
             resources={issuerOptions}
           />
