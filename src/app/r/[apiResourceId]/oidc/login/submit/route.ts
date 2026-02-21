@@ -112,7 +112,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     response.cookies.set({
       name: MOCK_SESSION_COOKIE,
       value: token,
-      path: `/r/${resource.id}`,
+      path: "/r",
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure,
