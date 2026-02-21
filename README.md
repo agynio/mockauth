@@ -45,6 +45,21 @@ signing keys.
    (`pnpm prisma:migrate` targets the local dev database via `prisma migrate dev`. For deploys, use
    `pnpm db:migrate`, which wraps `prisma migrate deploy`.)
 
+### Supabase configuration
+
+- `DATABASE_URL` should point at the Supabase **pooler** (port `6543`) so the runtime benefits from connection
+  multiplexing. Example:
+  ```
+  DATABASE_URL=postgres://<user>:<password>@db.<hash>.supabase.co:6543/postgres?sslmode=require
+  ```
+- `DATABASE_DIRECT_URL` should point at the direct Postgres instance (port `5432`) so Prisma migrations bypass the
+  pooler. Example:
+  ```
+  DATABASE_DIRECT_URL=postgres://<user>:<password>@db.<hash>.supabase.co:5432/postgres?sslmode=require
+  ```
+- Always include `sslmode=require` for hosted Supabase projects; Vercel builds read both variables (Prisma prefers
+  `directUrl` for `prisma migrate deploy`).
+
 ## Common Commands
 
 | Command | Description |
