@@ -1,8 +1,6 @@
 import { decodeJwt, decodeProtectedHeader, importJWK, jwtVerify } from "jose";
 
-import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
-import { claimsForScopes } from "@/server/oidc/claims";
 import { issuerForResource, legacyTenantIssuer, parseIssuerSegments } from "@/server/oidc/issuer";
 import { getPublicJwkByKid } from "@/server/services/key-service";
 import { getActiveTenantById } from "@/server/services/tenant-service";
@@ -64,15 +62,19 @@ export const getUserInfo = async (
     expectedIssuer = issuerForResource(origin, tenant.id, issuerContext.apiResourceId);
   }
   const { payload } = await jwtVerify(token, key, { issuer: expectedIssuer });
-
-  const user = await prisma.mockUser.findUnique({ where: { id: payload.sub as string } });
-  if (!user) {
-    throw new DomainError("Unknown user", { status: 400, code: "invalid_token" });
+  const claims: Record<string, unknown> = { sub: payload.sub };
+  if (typeof payload.name === "string") {
+    claims.name = payload.name;
+  }
+  if (typeof payload.preferred_username === "string") {
+    claims.preferred_username = payload.preferred_username;
+  }
+  if (typeof payload.email === "string") {
+    claims.email = payload.email;
+    if (typeof payload.email_verified === "boolean") {
+      claims.email_verified = payload.email_verified;
+    }
   }
 
-  const scopes = (payload.scope as string | undefined)?.split(" ").filter(Boolean) ?? [];
-  return {
-    sub: user.id,
-    ...claimsForScopes(user, scopes),
-  };
+  return claims;
 };

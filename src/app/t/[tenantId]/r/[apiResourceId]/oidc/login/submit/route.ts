@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -7,9 +9,18 @@ import { createSession, MOCK_SESSION_COOKIE } from "@/server/services/mock-sessi
 import { getActiveTenantById } from "@/server/services/tenant-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { TenantResourceRouteContext } from "@/types/tenant-route";
+import { getClientForTenant } from "@/server/services/client-service";
+import {
+  DEFAULT_CLIENT_AUTH_STRATEGIES,
+  hasEnabledStrategy,
+  parseClientAuthStrategies,
+  toPrismaLoginStrategy,
+} from "@/server/oidc/auth-strategy";
 
 const loginSchema = z.object({
-  username: z.string().min(1),
+  strategy: z.enum(["username", "email"]).default("username"),
+  username: z.string().optional(),
+  email: z.string().email().optional(),
   return_to: z.string().optional(),
 });
 
@@ -35,7 +46,9 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
   const currentUrl = resolveUrl(request);
   const form = await request.formData();
   const data = loginSchema.safeParse({
-    username: form.get("username"),
+    strategy: form.get("strategy")?.toString(),
+    username: form.get("username")?.toString(),
+    email: form.get("email")?.toString(),
     return_to: form.get("return_to")?.toString(),
   });
 
@@ -43,9 +56,41 @@ export async function POST(request: NextRequest, context: TenantResourceRouteCon
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
 
+  const authorizeUrl = data.data.return_to ? new URL(data.data.return_to, currentUrl.origin) : null;
+  const clientId = authorizeUrl?.searchParams.get("client_id");
+  if (!clientId) {
+    return Response.json({ error: "invalid_client" }, { status: 400 });
+  }
+
   try {
-    const user = await findOrCreateMockUser(tenant.id, data.data.username);
-    const token = await createSession(tenant.id, user.id);
+    const client = await getClientForTenant(tenant.id, clientId);
+    const strategies = parseClientAuthStrategies(client.authStrategies ?? DEFAULT_CLIENT_AUTH_STRATEGIES);
+    if (!hasEnabledStrategy(strategies)) {
+      return Response.json({ error: "strategy_disabled" }, { status: 400 });
+    }
+
+    const selectedConfig = strategies[data.data.strategy];
+    if (!selectedConfig?.enabled) {
+      return Response.json({ error: "invalid_strategy" }, { status: 400 });
+    }
+
+    const rawIdentifier = data.data.strategy === "username" ? data.data.username : data.data.email;
+    const trimmedIdentifier = rawIdentifier?.trim();
+    if (!trimmedIdentifier) {
+      return Response.json({ error: "missing_identifier" }, { status: 400 });
+    }
+
+    const normalizedIdentifier =
+      data.data.strategy === "email" ? trimmedIdentifier.toLowerCase() : trimmedIdentifier;
+    const subject = selectedConfig.subSource === "entered" ? trimmedIdentifier : randomUUID();
+    const user = await findOrCreateMockUser(tenant.id, normalizedIdentifier, {
+      displayName: trimmedIdentifier,
+      email: data.data.strategy === "email" ? normalizedIdentifier : null,
+    });
+    const token = await createSession(tenant.id, user.id, {
+      strategy: toPrismaLoginStrategy(data.data.strategy),
+      subject,
+    });
     const fallback = new URL(`/t/${tenant.id}/r/${apiResourceId}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
     const response = NextResponse.redirect(redirectUrl, 303);

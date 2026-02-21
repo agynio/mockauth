@@ -8,6 +8,7 @@ import {
   AddRedirectForm,
   DeleteRedirectButton,
   RotateSecretForm,
+  UpdateAuthStrategiesForm,
   UpdateClientIssuerForm,
   UpdateClientNameForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
@@ -20,6 +21,7 @@ import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
 import { listApiResources } from "@/server/services/api-resource-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
+import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 type PageParams = Promise<{ clientId: string }>;
 
@@ -53,6 +55,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const issuerOptions = resources
     .filter((resource) => resource.id !== defaultResourceId)
     .map((resource) => ({ id: resource.id, label: resource.name }));
+  const authStrategies = parseClientAuthStrategies(client.authStrategies);
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, activeTenant.id, currentResourceId);
@@ -168,6 +171,20 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           <p className="text-xs text-muted-foreground">
             Selecting the default keeps this client aligned with tenant-level issuer changes.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Auth strategies</CardTitle>
+          <CardDescription>Enable username or email flows and decide how the OIDC subject is derived.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UpdateAuthStrategiesForm
+            clientId={client.id}
+            canEdit={canManageClients}
+            initialStrategies={authStrategies}
+          />
         </CardContent>
       </Card>
 

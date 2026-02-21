@@ -67,6 +67,8 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     clientId: client.id,
     apiResourceId: resource.id,
     userId: session.userId,
+    loginStrategy: session.loginStrategy,
+    subject: session.subject,
     redirectUri: redirect,
     scope: params.scope,
     nonce: params.nonce,

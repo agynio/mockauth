@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { LoginForm } from "@/app/t/[tenantId]/r/[apiResourceId]/oidc/login/login-form";
+import { DEFAULT_CLIENT_AUTH_STRATEGIES, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { getClientForTenant } from "@/server/services/client-service";
 import { getActiveTenantById } from "@/server/services/tenant-service";
 
 type LoginPageProps = {
@@ -13,33 +16,49 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
   const tenant = await getActiveTenantById(tenantId);
   const fallbackReturnTo = `/t/${tenantId}/r/${apiResourceId}/oidc/authorize`;
   const returnTo = resolvedSearchParams?.return_to ?? fallbackReturnTo;
+  let strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
+  try {
+    const authorizeUrl = new URL(returnTo, "http://localhost");
+    const clientId = authorizeUrl.searchParams.get("client_id");
+    if (clientId) {
+      const client = await getClientForTenant(tenant.id, clientId);
+      strategyConfig = parseClientAuthStrategies(client.authStrategies);
+    }
+  } catch {
+    strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
+  }
+
+  const enabledStrategies = (Object.entries(strategyConfig) as ["username" | "email", (typeof strategyConfig)["username"]][])
+    .filter(([, cfg]) => cfg.enabled)
+    .map(([key, cfg]) => ({
+      key,
+      cfg,
+    }));
+
+  if (!enabledStrategies.length) {
+    enabledStrategies.push({ key: "username", cfg: DEFAULT_CLIENT_AUTH_STRATEGIES.username });
+  }
+
+  const strategies = enabledStrategies.map(({ key, cfg }) => ({
+    key,
+    title: key === "username" ? "Username" : "Email",
+    description:
+      key === "username"
+        ? "Enter any username to simulate an end-user."
+        : "Enter any email to simulate an email-based login.",
+    placeholder: key === "username" ? "qa-user" : "qa-user@example.test",
+    subSource: cfg.subSource,
+  }));
+  const strategySummary = strategies.map((strategy) => strategy.title.toLowerCase()).join(" or ");
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl">
         <h1 className="text-2xl font-semibold mb-2">Log in to {tenant.name}</h1>
         <p className="text-sm text-slate-300 mb-6">
-          Enter any username to simulate an end-user signing in. The session is scoped to tenant {tenant.id}.
+          Enter any {strategySummary} to simulate an end-user signing in. The session is scoped to tenant {tenant.id}.
         </p>
-        <form method="POST" action={`/t/${tenant.id}/r/${apiResourceId}/oidc/login/submit`} className="space-y-4">
-          <input type="hidden" name="return_to" value={returnTo} />
-          <label className="space-y-2 block text-sm">
-            <span className="text-slate-200">Username</span>
-            <input
-              type="text"
-              name="username"
-              required
-              className="w-full rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="qa-user"
-            />
-          </label>
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-slate-950 hover:bg-amber-300"
-          >
-            Continue
-          </button>
-        </form>
+        <LoginForm tenantId={tenant.id} apiResourceId={apiResourceId} returnTo={returnTo} strategies={strategies} />
         <p className="mt-4 text-xs text-slate-400">
           Need to manage tenants? Visit the <Link href="/admin" className="underline">admin console</Link>.
         </p>

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 
 import { describe, expect, it } from "vitest";
 
+import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { createClient } from "@/server/services/client-service";
 import { createTenant, deleteTenant } from "@/server/services/tenant-service";
@@ -36,6 +37,8 @@ describe("tenant service", () => {
       data: {
         tenantId: tenant.id,
         userId: mockUser.id,
+        loginStrategy: $Enums.LoginStrategy.USERNAME,
+        subject: mockUser.username,
         sessionTokenHash: randomUUID(),
         expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       },
@@ -46,6 +49,8 @@ describe("tenant service", () => {
         clientId: client.id,
         apiResourceId: apiResource.id,
         userId: mockUser.id,
+        loginStrategy: $Enums.LoginStrategy.USERNAME,
+        subject: mockUser.username,
         codeHash: randomUUID(),
         redirectUri: "https://cascade.example/callback",
         scope: "openid",

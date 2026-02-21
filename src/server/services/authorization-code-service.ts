@@ -1,6 +1,7 @@
 import { addMinutes } from "date-fns";
 
 import type { Prisma } from "@/generated/prisma/client";
+import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { generateOpaqueToken, hashOpaqueToken } from "@/server/crypto/opaque-token";
 import { DomainError } from "@/server/errors";
@@ -12,6 +13,8 @@ export const createAuthorizationCode = async (params: {
   clientId: string;
   apiResourceId: string;
   userId: string;
+  loginStrategy: $Enums.LoginStrategy;
+  subject: string;
   redirectUri: string;
   scope: string;
   nonce?: string;
@@ -26,6 +29,8 @@ export const createAuthorizationCode = async (params: {
       clientId: params.clientId,
       apiResourceId: params.apiResourceId,
       userId: params.userId,
+      loginStrategy: params.loginStrategy,
+      subject: params.subject,
       redirectUri: params.redirectUri,
       scope: params.scope,
       nonce: params.nonce,
