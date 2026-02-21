@@ -132,7 +132,6 @@ export const createTenantAction = async (input: z.infer<typeof tenantSchema>): P
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath("/admin/members");
-    revalidatePath("/admin/tenants");
     return { success: "Tenant created" };
   } catch (error) {
     console.error(error);
@@ -149,7 +148,6 @@ export const setActiveTenantAction = async (input: z.infer<typeof setTenantSchem
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath("/admin/members");
-    revalidatePath("/admin/tenants");
     return { success: "Active tenant updated" };
   } catch (error) {
     console.error(error);
@@ -473,7 +471,6 @@ export const deleteTenantAction = async (
     revalidatePath("/admin/clients");
     revalidatePath("/admin/api-resources");
     revalidatePath("/admin/members");
-    revalidatePath("/admin/tenants");
     return {
       success: "Tenant deleted",
       data: { activeTenantId: resultingActiveTenantId ?? null, remainingTenants: remainingMemberships.length },
