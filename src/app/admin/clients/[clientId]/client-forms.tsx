@@ -265,17 +265,20 @@ export function UpdateAuthStrategiesForm({
     form.reset(initialStrategies);
   }, [initialStrategies, form]);
 
-  const onSubmit = (values: z.infer<typeof authStrategiesSchema>) => {
-    startTransition(async () => {
-      const result = await updateClientAuthStrategiesAction({ clientId, ...values });
-      if (result.error) {
-        toast({ variant: "destructive", title: "Unable to update", description: result.error });
-        return;
-      }
-      router.refresh();
-      toast({ title: "Auth strategies updated" });
-    });
-  };
+  const handleSubmit = form.handleSubmit(
+    (values) => {
+      startTransition(async () => {
+        const result = await updateClientAuthStrategiesAction({ clientId, ...values });
+        if (result.error) {
+          toast({ variant: "destructive", title: "Unable to update", description: result.error });
+          return;
+        }
+        router.refresh();
+        toast({ title: "Auth strategies updated" });
+      });
+    },
+    () => undefined,
+  );
 
   const renderStrategySection = (key: keyof ClientAuthStrategies) => {
     const isStrategyEnabled = watchedStrategies?.[key]?.enabled ?? false;
@@ -299,6 +302,7 @@ export function UpdateAuthStrategiesForm({
                     checked={field.value}
                     onChange={(event) => field.onChange(event.target.checked)}
                     disabled={!canEdit || pending}
+                    data-testid={`strategy-${key}-enabled`}
                   />
                 </FormControl>
                 <FormLabel className="text-xs text-muted-foreground">Enabled</FormLabel>
@@ -307,39 +311,27 @@ export function UpdateAuthStrategiesForm({
           />
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <FormField
+         <FormField
             control={form.control}
             name={`${key}.subSource` as const}
-            render={({ field }) => {
-              const subjectSourceLabel =
-                field.value === "generated_uuid"
-                  ? "Generate UUID per session"
-                  : field.value === "entered"
-                    ? "Use entered value"
-                    : "Select subject source";
-              return (
-                <FormItem>
-                  <FormLabel>Subject source</FormLabel>
-                  <Select
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Subject source</FormLabel>
+                <FormControl>
+                  <select
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={field.value}
-                    defaultValue={field.value}
-                    onValueChange={field.onChange}
+                    onChange={(event) => field.onChange(event.target.value)}
                     disabled={!canEdit || pending || !isStrategyEnabled}
+                    data-testid={triggerTestId}
                   >
-                    <FormControl>
-                      <SelectTrigger data-testid={triggerTestId} aria-label={subjectSourceLabel}>
-                        <span className="truncate text-left">{subjectSourceLabel}</span>
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="entered">Use entered value</SelectItem>
-                      <SelectItem value="generated_uuid">Generate UUID per session</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+                    <option value="entered">Use entered value</option>
+                    <option value="generated_uuid">Generate UUID per session</option>
+                  </select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
           {key === "email" ? (
             <FormField
@@ -348,22 +340,18 @@ export function UpdateAuthStrategiesForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email verified mode</FormLabel>
-                  <Select
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    disabled={!canEdit || pending || !isStrategyEnabled}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select mode" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="true">Always verified</SelectItem>
-                      <SelectItem value="false">Always unverified</SelectItem>
-                      <SelectItem value="user_choice">Allow QA to choose</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <select
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={field.value}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      disabled={!canEdit || pending || !isStrategyEnabled}
+                    >
+                      <option value="true">Always verified</option>
+                      <option value="false">Always unverified</option>
+                      <option value="user_choice">Allow QA to choose</option>
+                    </select>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -381,7 +369,7 @@ export function UpdateAuthStrategiesForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid gap-4 lg:grid-cols-2">{(Object.keys(strategyMetadata) as (keyof ClientAuthStrategies)[]).map(renderStrategySection)}</div>
         {form.formState.errors.root?.message ? (
           <p className="text-sm text-destructive">{form.formState.errors.root.message}</p>
