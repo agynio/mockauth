@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { $Enums } from "@/generated/prisma/client";
 import { decodeJwt } from "jose";
 
@@ -160,5 +162,71 @@ describe("OIDC flow", () => {
     );
     expect(userinfo.email).toBe("email-user@example.test");
     await clearSession(tenantId, emailSessionToken);
+  });
+
+  it("persists subject source selection and uses stored subjects in tokens", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: {
+        authStrategies: {
+          username: { enabled: true, subSource: "generated_uuid" },
+          email: { enabled: false, subSource: "entered" },
+        },
+      },
+    });
+    const updatedClient = await prisma.client.findUniqueOrThrow({
+      where: { id: clientInternalId },
+      select: { authStrategies: true },
+    });
+    expect(updatedClient.authStrategies).toMatchObject({
+      username: { subSource: "generated_uuid" },
+    });
+
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { id: tenantId }, include: { mockUsers: true } });
+    const subject = randomUUID();
+    const sessionTokenOverride = await createSession(tenant.id, tenant.mockUsers[0]!.id, {
+      strategy: $Enums.LoginStrategy.USERNAME,
+      subject,
+    });
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        tenantId,
+        apiResourceId,
+        clientId: "qa-client",
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile email",
+        state: "generated-uuid",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken: sessionTokenOverride,
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/t/${DEFAULT_TENANT_ID}/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+    );
+
+    expect(authorize.type).toBe("redirect");
+    const code = new URL(authorize.redirectTo).searchParams.get("code");
+    const consumed = await consumeAuthorizationCode(code!);
+    const tokenResponse = await issueTokensFromCode({
+      code: consumed,
+      codeVerifier,
+      redirectUri: "https://client.example.test/callback",
+      origin: "https://mockauth.test",
+      clientSecret: "qa-secret",
+    });
+
+    const idToken = decodeJwt(tokenResponse.id_token);
+    expect(idToken.sub).toBe(subject);
+
+    const userinfo = await getUserInfo(
+      `Bearer ${tokenResponse.access_token}`,
+      "https://mockauth.test",
+      tenantId,
+      apiResourceId,
+    );
+    expect(userinfo.sub).toBe(subject);
+    await clearSession(tenantId, sessionTokenOverride);
   });
 });
