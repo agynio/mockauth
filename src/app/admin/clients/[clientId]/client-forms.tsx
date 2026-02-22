@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
@@ -249,9 +249,6 @@ const SUBJECT_SOURCE_LABELS: Record<"entered" | "generated_uuid", string> = {
   generated_uuid: "Generate UUID (stable per identity)",
 };
 
-export const SUBJECT_SOURCE_HELP_TEXT =
-  "Generate UUID (stable per identity) stores a persistent UUID per tenant + strategy + identifier combination.";
-
 const EMAIL_VERIFIED_LABELS: Record<"true" | "false" | "user_choice", string> = {
   true: "Always verified",
   false: "Always unverified",
@@ -363,7 +360,6 @@ export function UpdateAuthStrategiesForm({
                       <SelectItem value="generated_uuid">Generate UUID (stable per identity)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription>{SUBJECT_SOURCE_HELP_TEXT}</FormDescription>
                   <FormMessage />
                 </FormItem>
               );
@@ -557,12 +553,13 @@ export function UpdateClientIssuerForm({
               >
                 <FormControl>
                   <SelectTrigger
+                    className="text-left"
                     id="client-issuer-select"
                     aria-label="API resource"
                     data-testid="client-issuer-trigger"
                   >
                     <SelectValue aria-hidden="true" className="sr-only" />
-                    <span className="truncate" data-testid="client-issuer-value">{selectedLabel}</span>
+                    <span className="flex-1 truncate text-left" data-testid="client-issuer-value">{selectedLabel}</span>
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
