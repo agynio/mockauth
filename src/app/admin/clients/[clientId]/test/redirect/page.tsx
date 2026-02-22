@@ -3,12 +3,14 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
 import { CopyField } from "@/app/admin/_components/copy-field";
+import { TestSecretCleanup } from "@/app/admin/clients/[clientId]/test/test-secret-cleanup";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { consumeOauthTestSession } from "@/server/services/oauth-test-service";
+import { readOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -79,6 +81,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
   const urls = buildOidcUrls(origin, resourceId);
   const testRedirectUri = `${origin}/admin/clients/${client.id}/test/redirect`;
 
+  const cookieSecret = state ? await readOauthTestSecretCookie(client.id, state) : null;
   const sessionRecord = state ? await consumeOauthTestSession(state) : null;
   const now = new Date();
   let result: TokenResult | ErrorResult;
@@ -100,6 +103,8 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
     result = { status: "error", message: "Test session expired. Start a new test." };
   } else if (!code) {
     result = { status: "error", message: "Authorization code missing from redirect." };
+  } else if (client.tokenEndpointAuthMethod !== "none" && !cookieSecret) {
+    result = { status: "error", message: "Client secret expired. Start a new test." };
   } else {
     const exchange = await exchangeAuthorizationCode({
       tokenUrl: urls.token,
@@ -107,7 +112,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
       code,
       redirectUri: sessionRecord.redirectUri,
       codeVerifier: sessionRecord.codeVerifier,
-      clientSecret: sessionRecord.clientSecret ?? null,
+      clientSecret: cookieSecret,
       tokenAuthMethod: client.tokenEndpointAuthMethod,
       requestedScope: sessionRecord.scopes,
     });
@@ -125,6 +130,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
+      <TestSecretCleanup clientId={client.id} state={state} enabled={client.tokenEndpointAuthMethod !== "none"} />
       <Button asChild variant="ghost" size="sm">
         <Link href={`/admin/clients/${client.id}/test`}>← Back to test config</Link>
       </Button>

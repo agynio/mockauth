@@ -6,7 +6,6 @@ CREATE TABLE "OAuthTestSession" (
     "codeVerifier" TEXT NOT NULL,
     "redirectUri" TEXT NOT NULL,
     "scopes" TEXT NOT NULL,
-    "clientSecret" TEXT,
     "nonce" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3) NOT NULL,

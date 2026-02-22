@@ -219,7 +219,6 @@ model OAuthTestSession {
   codeVerifier String
   redirectUri  String
   scopes       String
-  clientSecret String?
   nonce        String?
   createdAt    DateTime @default(now())
   expiresAt    DateTime

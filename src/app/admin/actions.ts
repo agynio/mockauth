@@ -47,6 +47,7 @@ import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession } from "@/server/services/oauth-test-service";
+import { setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
@@ -360,10 +361,13 @@ export const prepareClientOauthTestAction = async (
       redirectUri,
       scopes: normalizedScopes,
       codeVerifier,
-      clientSecret,
       nonce,
       expiresAt,
     });
+
+    if (clientSecret) {
+      await setOauthTestSecretCookie(client.id, state, clientSecret);
+    }
 
     const origin = await getRequestOrigin();
     const resourceId = client.apiResourceId ?? client.tenant.defaultApiResourceId;

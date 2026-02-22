@@ -7,13 +7,12 @@ type CreateSessionInput = {
   redirectUri: string;
   scopes: string;
   codeVerifier: string;
-  clientSecret?: string | null;
   nonce?: string | null;
   expiresAt: Date;
 };
 
 export const createOauthTestSession = async (input: CreateSessionInput) => {
-  const { id, clientId, tenantId, redirectUri, scopes, codeVerifier, clientSecret, nonce, expiresAt } = input;
+  const { id, clientId, tenantId, redirectUri, scopes, codeVerifier, nonce, expiresAt } = input;
   await prisma.oAuthTestSession.create({
     data: {
       id,
@@ -22,7 +21,6 @@ export const createOauthTestSession = async (input: CreateSessionInput) => {
       redirectUri,
       scopes,
       codeVerifier,
-      clientSecret: clientSecret ?? null,
       nonce: nonce ?? null,
       expiresAt,
     },
