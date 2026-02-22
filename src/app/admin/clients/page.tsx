@@ -56,7 +56,6 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
           <div className="w-full sm:max-w-xs lg:w-72">
             <ClientSearchInput initialQuery={query} />
-            <p className="mt-1 text-xs text-muted-foreground">Filters apply automatically.</p>
           </div>
           {canManageClients ? (
             <Button asChild>

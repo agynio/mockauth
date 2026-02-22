@@ -62,6 +62,12 @@ describe("UpdateClientIssuerForm", () => {
     expect(screen.getByLabelText("API resource")).toHaveDisplayValue("Tenant default (Primary API)");
   });
 
+  it("left-aligns the collapsed trigger label", () => {
+    renderForm();
+    const trigger = screen.getByTestId("client-issuer-trigger");
+    expect(trigger).toHaveClass("text-left");
+  });
+
   it("updates the trigger text when a resource is selected", async () => {
     const user = userEvent.setup();
     renderForm();
