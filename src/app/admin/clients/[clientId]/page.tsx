@@ -23,6 +23,7 @@ import { listApiResources } from "@/server/services/api-resource-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { decrypt } from "@/server/crypto/key-vault";
 
 type PageParams = Promise<{ clientId: string }>;
 
@@ -58,14 +59,28 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     .filter((resource) => resource.id !== defaultResourceId)
     .map((resource) => ({ id: resource.id, label: resource.name }));
   const authStrategies = parseClientAuthStrategies(client.authStrategies);
+  const clientSecretValue = (() => {
+    if (client.clientType !== "CONFIDENTIAL" || !client.clientSecretEncrypted) {
+      return null;
+    }
+    try {
+      return decrypt(client.clientSecretEncrypted);
+    } catch (error) {
+      console.error("Unable to decrypt client secret", error);
+      return null;
+    }
+  })();
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
   const testFlowHref = `/admin/clients/${client.id}/test`;
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
-  const requiredFields: FieldDefinition[] = [
-    { label: "Client ID", value: client.clientId, testId: "oauth-field-client-id" },
+  const clientIdField: FieldDefinition = { label: "Client ID", value: client.clientId, testId: "oauth-field-client-id" };
+  const secretField: FieldDefinition | null = clientSecretValue
+    ? { label: "Client secret", value: clientSecretValue, testId: "oauth-field-client-secret" }
+    : null;
+  const protocolFields: FieldDefinition[] = [
     { label: "Issuer", value: urls.issuer, testId: "oauth-field-issuer" },
     { label: "Authorization endpoint", value: urls.authorize, testId: "oauth-field-authorization" },
     { label: "Token endpoint", value: urls.token, testId: "oauth-field-token" },
@@ -75,7 +90,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     { label: "JWKS", value: urls.jwks, testId: "oauth-field-jwks" },
     { label: "Userinfo", value: urls.userinfo, testId: "oauth-field-userinfo" },
   ];
-  const requiredBundleItems = [tenantField, ...requiredFields].map(({ label, value }) => ({ label, value }));
+  const requiredBundleItems = [tenantField, clientIdField, ...(secretField ? [secretField] : []), ...protocolFields].map(
+    ({ label, value }) => ({ label, value }),
+  );
 
   return (
     <div className="space-y-8">
@@ -123,18 +140,26 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               </div>
               <div className="space-y-3">
                 <CopyField key={tenantField.label} label={tenantField.label} value={tenantField.value} testId={tenantField.testId} />
-                <CopyField
-                  key={requiredFields[0].label}
-                  label={requiredFields[0].label}
-                  value={requiredFields[0].value}
-                  testId={requiredFields[0].testId}
-                />
+                <CopyField key={clientIdField.label} label={clientIdField.label} value={clientIdField.value} testId={clientIdField.testId} />
                 {client.clientType === "CONFIDENTIAL" ? (
-                  <RotateSecretForm clientId={client.id} canRotate={canManageClients} />
+                  <div className="space-y-3">
+                    {secretField ? (
+                      <CopyField
+                        key={secretField.label}
+                        label={secretField.label}
+                        value={secretField.value}
+                        testId={secretField.testId}
+                        description="Treat as confidential; rotate when compromised."
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Rotate the client to generate a new secret.</p>
+                    )}
+                    <RotateSecretForm clientId={client.id} canRotate={canManageClients} />
+                  </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
                 )}
-                {requiredFields.slice(1).map((item) => (
+                {protocolFields.map((item) => (
                   <CopyField key={item.label} label={item.label} value={item.value} testId={item.testId} />
                 ))}
               </div>
