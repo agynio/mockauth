@@ -19,6 +19,7 @@ import {
   updateClientName,
   updateClientApiResource,
   updateClientAuthStrategies,
+  getConfidentialClientSecret,
 } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
 import {
@@ -68,7 +69,6 @@ const oauthTestSchema = z.object({
   clientId: z.string().min(1),
   redirectUri: z.string().min(1),
   scopes: z.string().min(1),
-  clientSecret: z.string().optional().nullable(),
 });
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
@@ -343,9 +343,9 @@ export const prepareClientOauthTestAction = async (
     }
 
     const requiresSecret = client.tokenEndpointAuthMethod !== "none";
-    const clientSecret = parsed.clientSecret?.trim() || null;
+    const clientSecret = requiresSecret ? await getConfidentialClientSecret(client.id) : null;
     if (requiresSecret && !clientSecret) {
-      return { error: "Client secret is required for this client" };
+      return { error: "Client secret unavailable. Rotate the secret and try again." };
     }
 
     const codeVerifier = randomBytes(32).toString("base64url");

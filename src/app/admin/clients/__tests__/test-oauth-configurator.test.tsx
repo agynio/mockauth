@@ -61,7 +61,7 @@ describe("TestOAuthConfigurator", () => {
       />,
     );
 
-    await user.type(screen.getByTestId("test-oauth-secret"), "qa-secret");
+    expect(screen.getByTestId("test-oauth-secret-info")).toBeVisible();
     await user.click(screen.getByTestId("test-oauth-start"));
 
     await waitFor(() => {
@@ -69,7 +69,6 @@ describe("TestOAuthConfigurator", () => {
         clientId: "client_123",
         scopes: "openid profile",
         redirectUri: "https://admin.example.test/callback",
-        clientSecret: "qa-secret",
       });
       expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
     });

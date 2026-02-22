@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { hashSecret } from "@/server/crypto/hash";
-import { encrypt } from "@/server/crypto/key-vault";
+import { encrypt, decrypt } from "@/server/crypto/key-vault";
 import { generateOpaqueToken } from "@/server/crypto/opaque-token";
 import { DomainError } from "@/server/errors";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
@@ -156,4 +156,20 @@ export const updateClientApiResource = async (clientId: string, apiResourceId: s
 
 export const updateClientAuthStrategies = async (clientId: string, strategies: ClientAuthStrategies) => {
   return prisma.client.update({ where: { id: clientId }, data: { authStrategies: strategies } });
+};
+
+export const getConfidentialClientSecret = async (clientId: string): Promise<string | null> => {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { clientSecretEncrypted: true, clientType: true },
+  });
+  if (!client || client.clientType !== "CONFIDENTIAL" || !client.clientSecretEncrypted) {
+    return null;
+  }
+  try {
+    return decrypt(client.clientSecretEncrypted);
+  } catch (error) {
+    console.error("Unable to decrypt client secret", error);
+    return null;
+  }
 };

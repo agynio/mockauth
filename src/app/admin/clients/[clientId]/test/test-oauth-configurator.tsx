@@ -27,7 +27,6 @@ const schema = z.object({
         return false;
       }
     }, "Enter an absolute http(s) URL"),
-  clientSecret: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -58,7 +57,7 @@ export function TestOAuthConfigurator({
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { scopes: defaultScopes, redirectUri: defaultRedirectUri, clientSecret: "" },
+    defaultValues: { scopes: defaultScopes, redirectUri: defaultRedirectUri },
   });
 
   const scopesValue = useWatch({ control: form.control, name: "scopes" }) ?? "";
@@ -84,10 +83,6 @@ export function TestOAuthConfigurator({
   };
 
   const onSubmit = form.handleSubmit((values) => {
-    if (requiresClientSecret && !values.clientSecret?.trim()) {
-      form.setError("clientSecret", { type: "manual", message: "Client secret is required" });
-      return;
-    }
     if (!redirectAllowed) {
       toast({
         variant: "destructive",
@@ -101,7 +96,6 @@ export function TestOAuthConfigurator({
         clientId,
         scopes: values.scopes,
         redirectUri: values.redirectUri,
-        clientSecret: values.clientSecret,
       });
       if (result.error || !result.data) {
         toast({ variant: "destructive", title: "Unable to generate URL", description: result.error });
@@ -172,20 +166,12 @@ export function TestOAuthConfigurator({
             )}
           />
           {requiresClientSecret ? (
-            <FormField
-              control={form.control}
-              name="clientSecret"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client secret</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="password" data-testid="test-oauth-secret" autoComplete="off" />
-                  </FormControl>
-                  <FormMessage />
-                  <p className="text-xs text-muted-foreground">Paste the most recent secret for this client.</p>
-                </FormItem>
-              )}
-            />
+            <Alert data-testid="test-oauth-secret-info">
+              <AlertTitle>Confidential client</AlertTitle>
+              <AlertDescription>
+                The stored client secret is applied automatically for admin test runs.
+              </AlertDescription>
+            </Alert>
           ) : null}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {authorizationUrl ? (

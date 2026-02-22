@@ -18,7 +18,7 @@ test.describe("Client Test OAuth", () => {
     await page.getByTestId("test-oauth-add-redirect").click();
     await expect(warning).toHaveCount(0);
 
-    await page.getByTestId("test-oauth-secret").fill("qa-secret");
+    await expect(page.getByTestId("test-oauth-secret-info")).toContainText("stored client secret is applied automatically");
     await page.getByTestId("test-oauth-start").click();
 
     await page.waitForURL(/\/r\/.*\/oidc\/login/);
