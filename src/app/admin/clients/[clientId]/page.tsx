@@ -21,6 +21,7 @@ import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
 import { listApiResources } from "@/server/services/api-resource-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
+import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 
 type PageParams = Promise<{ clientId: string }>;
@@ -60,6 +61,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
+  const testFlowHref = `/admin/clients/${client.id}/test`;
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
   const requiredFields: FieldDefinition[] = [
@@ -96,9 +98,14 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
       <div className="space-y-6">
         <Card>
-          <CardHeader>
-            <CardTitle>OAuth parameters</CardTitle>
-            <CardDescription>Copy issuer metadata for relying parties. Currently issuing for {currentResourceName}.</CardDescription>
+          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>OAuth parameters</CardTitle>
+              <CardDescription>Copy issuer metadata for relying parties. Currently issuing for {currentResourceName}.</CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm" data-testid="test-oauth-link">
+              <Link href={testFlowHref}>Test OAuth</Link>
+            </Button>
           </CardHeader>
           <CardContent className="space-y-8">
             <section className="space-y-4" data-testid="oauth-required">
@@ -252,15 +259,3 @@ const MetadataRow = ({ label, value }: { label: string; value: string }) => (
     <span className="text-foreground">{value}</span>
   </div>
 );
-
-const buildOidcUrls = (origin: string, apiResourceId: string) => {
-  const base = `${origin}/r/${apiResourceId}/oidc`;
-  return {
-    issuer: base,
-    discovery: `${base}/.well-known/openid-configuration`,
-    jwks: `${base}/jwks.json`,
-    authorize: `${base}/authorize`,
-    token: `${base}/token`,
-    userinfo: `${base}/userinfo`,
-  };
-};

@@ -79,14 +79,16 @@ test.describe("admin console", () => {
     await row.getByRole("link", { name: "Details →" }).click();
     await expect(page.getByText("Redirect URIs")).toBeVisible();
 
-    const requiredLabels = await page
-      .getByTestId("oauth-required")
+    const requiredSection = page.getByTestId("oauth-required");
+    await expect(requiredSection.locator("[data-field-label]").first()).toBeVisible();
+    const requiredLabels = await requiredSection
       .locator("[data-field-label]")
       .evaluateAll((nodes) => nodes.map((node) => node?.getAttribute("data-field-label") ?? ""));
     expect(requiredLabels).toEqual(["Tenant ID", "Client ID", "Issuer", "Authorization endpoint", "Token endpoint"]);
 
-    const optionalLabels = await page
-      .getByTestId("oauth-optional")
+    const optionalSection = page.getByTestId("oauth-optional");
+    await expect(optionalSection.locator("[data-field-label]").first()).toBeVisible();
+    const optionalLabels = await optionalSection
       .locator("[data-field-label]")
       .evaluateAll((nodes) => nodes.map((node) => node?.getAttribute("data-field-label") ?? ""));
     expect(optionalLabels).toEqual(["Discovery (.well-known)", "JWKS", "Userinfo"]);
@@ -108,10 +110,8 @@ test.describe("admin console", () => {
     await page.getByRole("button", { name: "Rotate secret" }).click();
     await expect(page.getByText("New client secret")).toBeVisible();
 
-    const requiredSection = page.getByTestId("oauth-required");
     await expect(requiredSection.getByText(/^Required$/)).toBeVisible();
     await expect(requiredSection.getByText(/^Client ID$/)).toBeVisible();
-    const optionalSection = page.getByTestId("oauth-optional");
     await expect(optionalSection.getByText(/^JWKS$/)).toBeVisible();
 
     const copyRequiredButton = page.getByTestId("oauth-copy-required-btn");
