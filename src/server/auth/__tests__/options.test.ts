@@ -16,6 +16,7 @@ const baseEnv: AppEnv = {
   MOCKAUTH_ALLOW_ANY_REDIRECT: false,
   ENABLE_TEST_ROUTES: true,
   ALLOW_EMAIL_LINKING: false,
+  MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE: false,
 };
 
 describe("createAuthOptions", () => {

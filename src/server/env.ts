@@ -24,6 +24,11 @@ const envSchema = z.object({
     .optional()
     .default("false")
     .transform((value) => value === "true"),
+  MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export const env = envSchema.parse({
@@ -38,6 +43,7 @@ export const env = envSchema.parse({
   MOCKAUTH_ALLOW_ANY_REDIRECT: process.env.MOCKAUTH_ALLOW_ANY_REDIRECT,
   ENABLE_TEST_ROUTES: process.env.ENABLE_TEST_ROUTES,
   ALLOW_EMAIL_LINKING: process.env.ALLOW_EMAIL_LINKING,
+  MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE: process.env.MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE,
 });
 
 export const isProd = env.NODE_ENV === "production";

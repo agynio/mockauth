@@ -145,6 +145,7 @@ model Client {
   tokenEndpointAuthMethod  TokenEndpointAuthMethod  @default(client_secret_basic)
   authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\",\"emailVerifiedMode\":\"false\"}}")
   redirectUris             RedirectUri[]
+  oauthTestSessions        OAuthTestSession[]
   authorizationCodes       AuthorizationCode[]
   accessTokens             AccessToken[]
   createdAt                DateTime                 @default(now())
@@ -208,6 +209,21 @@ model MockIdentity {
   updatedAt   DateTime      @updatedAt
 
   @@unique([tenantId, strategy, identifier])
+}
+
+model OAuthTestSession {
+  id           String   @id @default(uuid())
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String
+  tenantId     String
+  codeVerifier String
+  redirectUri  String
+  scopes       String
+  nonce        String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([clientId])
 }
 
 model MockSession {

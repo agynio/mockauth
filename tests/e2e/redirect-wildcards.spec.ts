@@ -37,7 +37,8 @@ test.describe("redirect wildcard policy", () => {
 });
 
 const createIsolatedTenant = async (request: APIRequestContext): Promise<TenantContext> => {
-  const response = await request.post("/admin/api/test/seed-tenants-clients", { data: {} });
+  const uniqueAdminEmail = `pw-admin+${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
+  const response = await request.post("/admin/api/test/seed-tenants-clients", { data: { adminEmail: uniqueAdminEmail } });
   expect(response.ok()).toBeTruthy();
   const payload = (await response.json()) as { tenantAId: string; tenantAResourceId: string };
   if (!payload.tenantAId || !payload.tenantAResourceId) {

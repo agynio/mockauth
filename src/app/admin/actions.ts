@@ -1,11 +1,13 @@
 "use server";
 
+import { randomBytes, randomUUID } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 
-import { addHours } from "date-fns";
+import { addHours, addMinutes } from "date-fns";
 
 import type { MembershipRole } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
@@ -40,6 +42,12 @@ import {
   getApiResourceForTenant,
 } from "@/server/services/api-resource-service";
 import { hasEnabledStrategy } from "@/server/oidc/auth-strategy";
+import { computeS256Challenge } from "@/server/crypto/pkce";
+import { getRequestOrigin } from "@/server/utils/request-origin";
+import { buildOidcUrls } from "@/server/oidc/url-builder";
+import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
+import { createOauthTestSession } from "@/server/services/oauth-test-service";
+import { setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
@@ -56,6 +64,12 @@ const keySchema = z.object({ tenantId: z.string().min(1) });
 const setTenantSchema = z.object({ tenantId: z.string().min(1) });
 const rotateSecretSchema = z.object({ clientId: z.string().min(1) });
 const redirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
+const oauthTestSchema = z.object({
+  clientId: z.string().min(1),
+  redirectUri: z.string().min(1),
+  scopes: z.string().min(1),
+  clientSecret: z.string().optional().nullable(),
+});
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
 const membershipRoleSchema = z.enum(["OWNER", "WRITER", "READER"]);
@@ -284,10 +298,97 @@ export const addRedirectUriAction = async (input: z.infer<typeof redirectSchema>
     }
     await addRedirectUri(client.id, parsed.uri);
     revalidatePath(clientPath(client.id));
+    revalidatePath(`${clientPath(client.id)}/test`);
     return { success: "Redirect URI saved" };
   } catch (error) {
     console.error(error);
     return { error: "Failed to add redirect" };
+  }
+};
+
+export const prepareClientOauthTestAction = async (
+  input: z.infer<typeof oauthTestSchema>,
+): Promise<ActionState<{ authorizationUrl: string }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = oauthTestSchema.parse(input);
+    const client = await prisma.client.findUnique({
+      where: { id: parsed.clientId },
+      include: {
+        tenant: { include: { defaultApiResource: true } },
+        apiResource: true,
+        redirectUris: true,
+      },
+    });
+    if (!client) {
+      return { error: "Client not found" };
+    }
+
+    await assertTenantMembership(adminId, client.tenantId);
+
+    const redirectUri = parsed.redirectUri.trim();
+    const normalizedScopes = parsed.scopes
+      .split(/\s+/)
+      .map((scope) => scope.trim())
+      .filter(Boolean)
+      .join(" ");
+    if (!normalizedScopes) {
+      return { error: "Enter at least one scope" };
+    }
+
+    try {
+      resolveRedirectUri(redirectUri, client.redirectUris);
+    } catch {
+      return { error: "Redirect URI must be saved on the client before testing" };
+    }
+
+    const requiresSecret = client.tokenEndpointAuthMethod !== "none";
+    const clientSecret = parsed.clientSecret?.trim() || null;
+    if (requiresSecret && !clientSecret) {
+      return { error: "Client secret is required for this client" };
+    }
+
+    const codeVerifier = randomBytes(32).toString("base64url");
+    const codeChallenge = computeS256Challenge(codeVerifier);
+    const state = randomUUID();
+    const nonce = randomBytes(16).toString("base64url");
+    const expiresAt = addMinutes(new Date(), 10);
+
+    await createOauthTestSession({
+      id: state,
+      clientId: client.id,
+      tenantId: client.tenantId,
+      redirectUri,
+      scopes: normalizedScopes,
+      codeVerifier,
+      nonce,
+      expiresAt,
+    });
+
+    if (clientSecret) {
+      await setOauthTestSecretCookie(client.id, state, clientSecret);
+    }
+
+    const origin = await getRequestOrigin();
+    const resourceId = client.apiResourceId ?? client.tenant.defaultApiResourceId;
+    if (!resourceId) {
+      return { error: "Client is missing a default API resource" };
+    }
+    const { authorize } = buildOidcUrls(origin, resourceId);
+    const authorizeUrl = new URL(authorize);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("client_id", client.clientId);
+    authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+    authorizeUrl.searchParams.set("scope", normalizedScopes);
+    authorizeUrl.searchParams.set("state", state);
+    authorizeUrl.searchParams.set("code_challenge", codeChallenge);
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    authorizeUrl.searchParams.set("nonce", nonce);
+
+    return { success: "Authorization URL generated", data: { authorizationUrl: authorizeUrl.toString() } };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to start OAuth test" };
   }
 };
 
