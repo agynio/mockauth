@@ -35,3 +35,12 @@ export const consumeOauthTestSession = async (id: string) => {
   await prisma.oAuthTestSession.delete({ where: { id } });
   return session;
 };
+
+export const resetOauthTestSessionsForClient = async (clientId: string): Promise<string[]> => {
+  const sessions = await prisma.oAuthTestSession.findMany({ where: { clientId }, select: { id: true } });
+  if (sessions.length === 0) {
+    return [];
+  }
+  await prisma.oAuthTestSession.deleteMany({ where: { id: { in: sessions.map((session) => session.id) } } });
+  return sessions.map((session) => session.id);
+};

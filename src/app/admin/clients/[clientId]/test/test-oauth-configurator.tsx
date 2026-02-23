@@ -10,6 +10,7 @@ import { CopyField } from "@/app/admin/_components/copy-field";
 import { prepareClientOauthTestAction, addRedirectUriAction } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
@@ -67,6 +68,7 @@ export function TestOAuthConfigurator({
     },
   });
   const [secretCopied, setSecretCopied] = useState(false);
+  const [authorizationCopied, setAuthorizationCopied] = useState(false);
 
   const scopesValue = useWatch({ control: form.control, name: "scopes" }) ?? "";
   const clientSecretValue = useWatch({ control: form.control, name: "clientSecret" }) ?? "";
@@ -105,6 +107,8 @@ export function TestOAuthConfigurator({
       return;
     }
     startTransition(async () => {
+      setAuthorizationUrl(null);
+      setAuthorizationCopied(false);
       const result = await prepareClientOauthTestAction({
         clientId,
         scopes: values.scopes,
@@ -116,9 +120,31 @@ export function TestOAuthConfigurator({
         return;
       }
       setAuthorizationUrl(result.data.authorizationUrl);
-      router.push(result.data.authorizationUrl);
     });
   });
+
+  const handleAuthorizationCopy = async () => {
+    if (!authorizationUrl) {
+      return;
+    }
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(authorizationUrl);
+      setAuthorizationCopied(true);
+      setTimeout(() => setAuthorizationCopied(false), 1500);
+    } catch (error) {
+      console.error("Unable to copy authorization URL", error);
+    }
+  };
+
+  const handleAuthorizationOpen = () => {
+    if (!authorizationUrl) {
+      return;
+    }
+    router.push(authorizationUrl);
+  };
 
   return (
     <div className="space-y-6">
@@ -227,14 +253,45 @@ export function TestOAuthConfigurator({
               )}
             />
           ) : null}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             {authorizationUrl ? (
-              <CopyField
-                label="Authorization URL"
-                value={authorizationUrl}
-                testId="test-oauth-authorization-url"
-                description="Share this URL if you prefer to test outside the admin UI."
-              />
+              <div className="w-full space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-foreground">Authorization URL</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAuthorizationCopy}
+                      disabled={!authorizationUrl}
+                      data-testid="test-oauth-authorization-copy"
+                    >
+                      {authorizationCopied ? "Copied" : "Copy"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAuthorizationOpen}
+                      disabled={!authorizationUrl}
+                      data-testid="test-oauth-authorization-open"
+                    >
+                      Open
+                    </Button>
+                  </div>
+                </div>
+                <Textarea
+                  readOnly
+                  spellCheck={false}
+                  rows={3}
+                  className="font-mono text-xs"
+                  value={authorizationUrl}
+                  data-testid="test-oauth-authorization-textarea"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Share this URL if you prefer to complete the flow outside the admin UI.
+                </p>
+              </div>
             ) : (
               <p className="text-xs text-muted-foreground">Start a test to generate the authorization URL.</p>
             )}
