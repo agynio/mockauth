@@ -77,10 +77,15 @@ describe("TestOAuthConfigurator", () => {
         redirectUri: "https://admin.example.test/callback",
         clientSecret: "override-secret",
       });
-      expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
     });
 
-    expect(screen.getByTestId("test-oauth-authorization-url")).toHaveTextContent("https://auth.example.test");
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId("test-oauth-authorization-textarea")).toHaveValue("https://auth.example.test");
+
+    await user.click(screen.getByTestId("test-oauth-authorization-open"));
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
+    });
   });
 
   it("prevents confidential runs without a secret", async () => {
@@ -105,13 +110,12 @@ describe("TestOAuthConfigurator", () => {
   });
 
   it("copies the client secret", async () => {
-    const originalNavigator = navigator;
+    const originalClipboard = navigator.clipboard;
     const writeText = vi.fn().mockResolvedValue(undefined);
-    const navigatorMock = { ...originalNavigator, clipboard: { writeText } } as unknown as Navigator;
-    vi.stubGlobal("navigator", navigatorMock);
-    Object.defineProperty(window, "navigator", { configurable: true, value: navigatorMock });
-    expect(typeof navigator.clipboard?.writeText).toBe("function");
-    expect(window.navigator).toBe(navigatorMock);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } as unknown as Navigator["clipboard"],
+    });
     const user = userEvent.setup();
     render(
       <TestOAuthConfigurator
@@ -129,8 +133,30 @@ describe("TestOAuthConfigurator", () => {
     await waitFor(() => {
       expect(copyButton).toHaveTextContent("Copied");
     });
-    vi.stubGlobal("navigator", originalNavigator);
-    Object.defineProperty(window, "navigator", { configurable: true, value: originalNavigator });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: originalClipboard });
+  });
+
+  it("copies the authorization URL", async () => {
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } as unknown as Navigator["clipboard"],
+    });
+    const user = userEvent.setup();
+    render(<TestOAuthConfigurator {...defaultProps} redirectAllowed />);
+
+    await user.click(screen.getByTestId("test-oauth-start"));
+    await waitFor(() => {
+      expect(screen.getByTestId("test-oauth-authorization-textarea")).toHaveValue("https://auth.example.test");
+    });
+    const copyButton = screen.getByTestId("test-oauth-authorization-copy");
+    await user.click(copyButton);
+
+    await waitFor(() => {
+      expect(copyButton).toHaveTextContent("Copied");
+    });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: originalClipboard });
   });
 
   it("surfaces action errors via toast", async () => {

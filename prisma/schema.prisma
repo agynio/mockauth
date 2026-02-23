@@ -96,6 +96,7 @@ model AdminUser {
   acceptedInvites Invite[]      @relation("InviteUsedBy")
   accounts    Account[]
   sessions    Session[]
+  oauthTestSessions OAuthTestSession[]
   @@map("User")
 }
 
@@ -216,6 +217,8 @@ model OAuthTestSession {
   id           String   @id @default(uuid())
   client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId     String
+  adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUserId  String
   tenantId     String
   codeVerifier String
   redirectUri  String
@@ -225,6 +228,7 @@ model OAuthTestSession {
   expiresAt    DateTime
 
   @@index([clientId])
+  @@index([clientId, adminUserId])
 }
 
 model MockSession {

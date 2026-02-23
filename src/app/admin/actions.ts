@@ -47,8 +47,8 @@ import { computeS256Challenge } from "@/server/crypto/pkce";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
-import { createOauthTestSession } from "@/server/services/oauth-test-service";
-import { setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
+import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/server/services/oauth-test-service";
+import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -329,6 +329,11 @@ export const prepareClientOauthTestAction = async (
 
     await assertTenantMembership(adminId, client.tenantId);
 
+    const clearedStates = await resetOauthTestSessionsForClient(client.id, adminId);
+    if (clearedStates.length && client.tokenEndpointAuthMethod !== "none") {
+      await Promise.all(clearedStates.map((stateId) => clearOauthTestSecretCookie(client.id, stateId)));
+    }
+
     const redirectUri = parsed.redirectUri.trim();
     const normalizedScopes = parsed.scopes
       .split(/\s+/)
@@ -366,6 +371,7 @@ export const prepareClientOauthTestAction = async (
     await createOauthTestSession({
       id: state,
       clientId: client.id,
+      adminUserId: adminId,
       tenantId: client.tenantId,
       redirectUri,
       scopes: normalizedScopes,

@@ -161,6 +161,18 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
               <Alert variant="destructive" data-testid="test-oauth-error">
                 <AlertTitle>Token exchange failed</AlertTitle>
                 <AlertDescription>{errorMessage}</AlertDescription>
+                <div className="mt-4">
+                  <TestRunAgainButton
+                    clientId={client.id}
+                    scopes={rerunScopes}
+                    redirectUri={rerunRedirectUri}
+                    variant="secondary"
+                    size="sm"
+                    testId="test-oauth-reset"
+                  >
+                    Reset test
+                  </TestRunAgainButton>
+                </div>
               </Alert>
               {errorDetails ? (
                 <pre className="overflow-auto rounded-md border bg-muted/50 p-3 text-xs" data-testid="test-oauth-error-details">

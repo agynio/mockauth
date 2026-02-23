@@ -77,5 +77,20 @@ describe("TestRunAgainButton", () => {
       expect(mockPush).not.toHaveBeenCalled();
     });
   });
-});
 
+  it("supports custom labels and test ids", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestRunAgainButton clientId="client_123" scopes="openid" redirectUri="https://admin.example.test/callback" testId="test-reset">
+        Reset test
+      </TestRunAgainButton>,
+    );
+
+    await user.click(screen.getByTestId("test-reset"));
+
+    await waitFor(() => {
+      expect(mockPrepare).toHaveBeenCalled();
+      expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
+    });
+  });
+});

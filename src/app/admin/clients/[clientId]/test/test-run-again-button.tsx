@@ -2,21 +2,27 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { prepareClientOauthTestAction } from "@/app/admin/actions";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
 type Props = {
   clientId: string;
   scopes: string;
   redirectUri: string;
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
+  testId?: string;
+  children?: ReactNode;
 };
 
-export function TestRunAgainButton({ clientId, scopes, redirectUri }: Props) {
+export function TestRunAgainButton({ clientId, scopes, redirectUri, variant, size, testId, children }: Props) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
+  const label = children ?? "Run again";
 
   const handleClick = () => {
     startTransition(async () => {
@@ -40,8 +46,15 @@ export function TestRunAgainButton({ clientId, scopes, redirectUri }: Props) {
   };
 
   return (
-    <Button type="button" onClick={handleClick} disabled={pending} data-testid="test-oauth-run-again">
-      {pending ? "Starting..." : "Run again"}
+    <Button
+      type="button"
+      onClick={handleClick}
+      disabled={pending}
+      data-testid={testId ?? "test-oauth-run-again"}
+      variant={variant}
+      size={size}
+    >
+      {pending ? "Starting..." : label}
     </Button>
   );
 }
