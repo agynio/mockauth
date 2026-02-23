@@ -29,6 +29,34 @@ test.describe("Client Test OAuth", () => {
     expect(secondState).not.toEqual(firstState);
   });
 
+  test("requires a new login even when a previous session exists", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+
+    await completeRunAndReturnToConfigurator(page, clientId);
+
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+    await page.goto(authorizationUrl);
+    await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+  });
+
+  test("ignores manual reauth query parameters on subsequent authorizations", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+
+    await completeRunAndReturnToConfigurator(page, clientId);
+
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+    const bypassUrl = new URL(authorizationUrl);
+    bypassUrl.searchParams.set("reauth", "1");
+    await page.goto(bypassUrl.toString());
+    await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+  });
+
   test("runs two Test OAuth sessions back-to-back from the configurator", async ({ page }) => {
     const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
     await authenticate(page, sessionToken);
@@ -72,6 +100,20 @@ test.describe("Client Test OAuth", () => {
     await loginNavigation;
     await completeProviderLogin(page, clientId);
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+  });
+
+  test("returns login_required when prompt=none", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true });
+    const silentUrl = new URL(authorizationUrl);
+    silentUrl.searchParams.set("prompt", "none");
+    await page.goto(silentUrl.toString());
+
+    await expect(page).toHaveURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+    await expect(page.getByTestId("test-oauth-error")).toContainText("login_required");
   });
 
   test("surfaces authorization errors on the redirect page", async ({ page }) => {
@@ -130,6 +172,13 @@ test.describe("Client Test OAuth", () => {
     await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
   });
 });
+
+const completeRunAndReturnToConfigurator = async (page: Page, clientId: string) => {
+  await startOauthTest(page, clientId);
+  await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+  await page.getByRole("link", { name: "← Back to test config" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/clients/${clientId}/test`));
+};
 
 const openClientDetail = async (page: Page, tenantId: string, clientName: string) => {
   await page.goto("/admin/clients");

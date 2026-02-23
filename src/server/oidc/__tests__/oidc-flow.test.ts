@@ -59,6 +59,7 @@ describe("OIDC flow", () => {
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken,
+        reauthenticated: true,
       },
       "https://mockauth.test",
       `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
@@ -87,6 +88,82 @@ describe("OIDC flow", () => {
     expect(idToken.sub).toBe("demo");
     expect(idToken.preferred_username).toBe("demo");
     expect(idToken.email).toBeUndefined();
+  });
+
+  it("requires an explicit login step before issuing codes", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const returnTo = `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`;
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: "qa-client",
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile email",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        reauthenticated: false,
+      },
+      "https://mockauth.test",
+      returnTo,
+    );
+
+    expect(authorize.type).toBe("login");
+    expect(authorize.redirectTo).toContain("return_to=");
+    expect(decodeURIComponent(authorize.redirectTo.split("return_to=")[1]!)).toBe(returnTo);
+  });
+
+  it("does not trust reauth query parameters without the cookie handshake", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const forgedReturnTo = new URL(
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client&state=manual`,
+    );
+    forgedReturnTo.searchParams.set("reauth", "1");
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: "qa-client",
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile email",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        reauthenticated: false,
+      },
+      "https://mockauth.test",
+      forgedReturnTo.toString(),
+    );
+
+    expect(authorize.type).toBe("login");
+    const decodedReturn = decodeURIComponent(authorize.redirectTo.split("return_to=")[1]!);
+    expect(decodedReturn).toBe(forgedReturnTo.toString());
+  });
+
+  it("redirects with login_required when prompt=none", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: "qa-client",
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        state: "prompt-none",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        prompt: "none",
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+    );
+
+    expect(authorize.type).toBe("redirect");
+    const redirected = new URL(authorize.redirectTo);
+    expect(redirected.origin).toBe("https://client.example.test");
+    expect(redirected.searchParams.get("error")).toBe("login_required");
+    expect(redirected.searchParams.get("state")).toBe("prompt-none");
   });
 
   it("issues email-specific claims when email strategy is enabled", async () => {
@@ -125,6 +202,7 @@ describe("OIDC flow", () => {
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken: emailSessionToken,
+        reauthenticated: true,
       },
       "https://mockauth.test",
       `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
@@ -188,6 +266,7 @@ describe("OIDC flow", () => {
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken: sessionTokenOverride,
+        reauthenticated: true,
       },
       "https://mockauth.test",
       `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
@@ -242,6 +321,7 @@ describe("OIDC flow", () => {
         codeChallenge: computeS256Challenge(codeVerifier),
         codeChallengeMethod: "S256",
         sessionToken: verifiedSession,
+        reauthenticated: true,
       },
       "https://mockauth.test",
       `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
@@ -293,6 +373,7 @@ describe("OIDC flow", () => {
           codeChallenge: computeS256Challenge(codeVerifier),
           codeChallengeMethod: "S256",
           sessionToken: sessionTokenChoice,
+          reauthenticated: true,
         },
         "https://mockauth.test",
         `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,

@@ -16,6 +16,7 @@ import {
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { resolveStableSubject } from "@/server/services/mock-identity-service";
+import { buildReauthCookiePath, MOCK_REAUTH_COOKIE, REAUTH_COOKIE_TTL_SECONDS } from "@/server/oidc/reauth-cookie";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
@@ -124,6 +125,15 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       sameSite: "lax",
       secure: isSecure,
       maxAge: 60 * 60 * 12,
+    });
+    response.cookies.set({
+      name: MOCK_REAUTH_COOKIE,
+      value: token,
+      path: buildReauthCookiePath(resource.id),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isSecure,
+      maxAge: REAUTH_COOKIE_TTL_SECONDS,
     });
     return response;
   } catch (error) {
