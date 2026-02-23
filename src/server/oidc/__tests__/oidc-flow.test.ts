@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { vi } from "vitest";
 
 import { $Enums } from "@/generated/prisma/client";
 import { decodeJwt } from "jose";
 
 import { prisma } from "@/server/db/client";
 import { computeS256Challenge } from "@/server/crypto/pkce";
+import { hashOpaqueToken } from "@/server/crypto/opaque-token";
+import { createReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { handleAuthorize } from "@/server/services/authorize-service";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { createSession, clearSession } from "@/server/services/mock-session-service";
@@ -12,6 +15,9 @@ import { issueTokensFromCode } from "@/server/services/token-service";
 import { getUserInfo } from "@/server/services/userinfo-service";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
+const CLIENT_ID = "qa-client";
+const CLIENT_SECRET = "qa-secret";
+const DEFAULT_REAUTH_TTL_SECONDS = 600;
 
 describe("OIDC flow", () => {
   let tenantId: string;
@@ -20,6 +26,21 @@ describe("OIDC flow", () => {
   let codeVerifier: string;
   let clientInternalId: string;
   let originalStrategies: unknown;
+  let originalReauthTtlSeconds: number;
+
+  const buildReauthCookie = (token: string, ttlSeconds = DEFAULT_REAUTH_TTL_SECONDS) => {
+    const cookie = createReauthCookieValue({
+      tenantId,
+      apiResourceId,
+      clientId: CLIENT_ID,
+      sessionHash: hashOpaqueToken(token),
+      ttlSeconds,
+    });
+    if (!cookie) {
+      throw new Error("Unable to create reauth cookie");
+    }
+    return cookie;
+  };
 
   beforeAll(async () => {
     const tenant = await prisma.tenant.findFirstOrThrow({ where: { id: DEFAULT_TENANT_ID }, include: { mockUsers: true } });
@@ -31,9 +52,14 @@ describe("OIDC flow", () => {
       subject: user.username,
     });
     codeVerifier = "verifier-1234567890123456789012345678901234567890";
-    const client = await prisma.client.findFirstOrThrow({ where: { tenantId: tenant.id, clientId: "qa-client" } });
+    const client = await prisma.client.findFirstOrThrow({ where: { tenantId: tenant.id, clientId: CLIENT_ID } });
     clientInternalId = client.id;
     originalStrategies = client.authStrategies;
+    originalReauthTtlSeconds = client.reauthTtlSeconds;
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS },
+    });
   });
 
   afterAll(async () => {
@@ -41,8 +67,14 @@ describe("OIDC flow", () => {
     if (tenant) {
       await clearSession(tenant.id, sessionToken);
     }
-    if (clientInternalId && originalStrategies) {
-      await prisma.client.update({ where: { id: clientInternalId }, data: { authStrategies: originalStrategies } });
+    if (clientInternalId) {
+      await prisma.client.update({
+        where: { id: clientInternalId },
+        data: {
+          ...(originalStrategies ? { authStrategies: originalStrategies } : {}),
+          ...(typeof originalReauthTtlSeconds === "number" ? { reauthTtlSeconds: originalReauthTtlSeconds } : {}),
+        },
+      });
     }
   });
 
@@ -51,7 +83,7 @@ describe("OIDC flow", () => {
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid profile email",
@@ -59,10 +91,10 @@ describe("OIDC flow", () => {
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken,
-        reauthenticated: true,
+        reauthCookie: buildReauthCookie(sessionToken),
       },
       "https://mockauth.test",
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -76,7 +108,7 @@ describe("OIDC flow", () => {
       codeVerifier,
       redirectUri: "https://client.example.test/callback",
       origin: "https://mockauth.test",
-      clientSecret: "qa-secret",
+      clientSecret: CLIENT_SECRET,
     });
 
     expect(tokenResponse.access_token).toBeTruthy();
@@ -92,18 +124,18 @@ describe("OIDC flow", () => {
 
   it("requires an explicit login step before issuing codes", async () => {
     const challenge = computeS256Challenge(codeVerifier);
-    const returnTo = `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`;
+    const returnTo = `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`;
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid profile email",
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken,
-        reauthenticated: false,
+        reauthCookie: undefined,
       },
       "https://mockauth.test",
       returnTo,
@@ -117,20 +149,20 @@ describe("OIDC flow", () => {
   it("does not trust reauth query parameters without the cookie handshake", async () => {
     const challenge = computeS256Challenge(codeVerifier);
     const forgedReturnTo = new URL(
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client&state=manual`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}&state=manual`,
     );
     forgedReturnTo.searchParams.set("reauth", "1");
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid profile email",
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken,
-        reauthenticated: false,
+        reauthCookie: "forged-cookie",
       },
       "https://mockauth.test",
       forgedReturnTo.toString(),
@@ -146,7 +178,7 @@ describe("OIDC flow", () => {
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid profile",
@@ -156,7 +188,7 @@ describe("OIDC flow", () => {
         prompt: "none",
       },
       "https://mockauth.test",
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -164,6 +196,83 @@ describe("OIDC flow", () => {
     expect(redirected.origin).toBe("https://client.example.test");
     expect(redirected.searchParams.get("error")).toBe("login_required");
     expect(redirected.searchParams.get("state")).toBe("prompt-none");
+  });
+
+  it("satisfies prompt=none when the reauth cookie is valid", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: CLIENT_ID,
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        state: "prompt-none-success",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        prompt: "none",
+        sessionToken,
+        reauthCookie: buildReauthCookie(sessionToken),
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+    );
+
+    expect(authorize.type).toBe("redirect");
+    const redirected = new URL(authorize.redirectTo);
+    expect(redirected.searchParams.get("code")).toBeTruthy();
+    expect(redirected.searchParams.get("state")).toBe("prompt-none-success");
+  });
+
+  it("forces login when prompt=login is requested", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: CLIENT_ID,
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        prompt: "login",
+        sessionToken,
+        reauthCookie: buildReauthCookie(sessionToken),
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+    );
+
+    expect(authorize.type).toBe("login");
+  });
+
+  it("requires login when the cookie is expired", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+      const cookie = buildReauthCookie(sessionToken, 1);
+      vi.setSystemTime(new Date("2024-01-01T00:00:02.000Z"));
+      const challenge = computeS256Challenge(codeVerifier);
+      const authorize = await handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid profile",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: cookie,
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+      );
+
+      expect(authorize.type).toBe("login");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("issues email-specific claims when email strategy is enabled", async () => {
@@ -194,7 +303,7 @@ describe("OIDC flow", () => {
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid profile email",
@@ -202,10 +311,10 @@ describe("OIDC flow", () => {
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken: emailSessionToken,
-        reauthenticated: true,
+        reauthCookie: buildReauthCookie(emailSessionToken),
       },
       "https://mockauth.test",
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -216,7 +325,7 @@ describe("OIDC flow", () => {
       codeVerifier,
       redirectUri: "https://client.example.test/callback",
       origin: "https://mockauth.test",
-      clientSecret: "qa-secret",
+      clientSecret: CLIENT_SECRET,
     });
 
     const idToken = decodeJwt(tokenResponse.id_token);
@@ -258,7 +367,7 @@ describe("OIDC flow", () => {
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid profile email",
@@ -266,10 +375,10 @@ describe("OIDC flow", () => {
         codeChallenge: challenge,
         codeChallengeMethod: "S256",
         sessionToken: sessionTokenOverride,
-        reauthenticated: true,
+        reauthCookie: buildReauthCookie(sessionTokenOverride),
       },
       "https://mockauth.test",
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
     );
 
     expect(authorize.type).toBe("redirect");
@@ -280,7 +389,7 @@ describe("OIDC flow", () => {
       codeVerifier,
       redirectUri: "https://client.example.test/callback",
       origin: "https://mockauth.test",
-      clientSecret: "qa-secret",
+      clientSecret: CLIENT_SECRET,
     });
 
     const idToken = decodeJwt(tokenResponse.id_token);
@@ -313,7 +422,7 @@ describe("OIDC flow", () => {
     const authorize = await handleAuthorize(
       {
         apiResourceId,
-        clientId: "qa-client",
+        clientId: CLIENT_ID,
         redirectUri: "https://client.example.test/callback",
         responseType: "code",
         scope: "openid email",
@@ -321,10 +430,10 @@ describe("OIDC flow", () => {
         codeChallenge: computeS256Challenge(codeVerifier),
         codeChallengeMethod: "S256",
         sessionToken: verifiedSession,
-        reauthenticated: true,
+        reauthCookie: buildReauthCookie(verifiedSession),
       },
       "https://mockauth.test",
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
     );
     const code = new URL(authorize.redirectTo).searchParams.get("code");
     const consumed = await consumeAuthorizationCode(code!);
@@ -333,7 +442,7 @@ describe("OIDC flow", () => {
       codeVerifier,
       redirectUri: "https://client.example.test/callback",
       origin: "https://mockauth.test",
-      clientSecret: "qa-secret",
+      clientSecret: CLIENT_SECRET,
     });
     const idToken = decodeJwt(tokens.id_token);
     expect(idToken.email_verified).toBe(true);
@@ -365,7 +474,7 @@ describe("OIDC flow", () => {
       const authorize = await handleAuthorize(
         {
           apiResourceId,
-          clientId: "qa-client",
+          clientId: CLIENT_ID,
           redirectUri: "https://client.example.test/callback",
           responseType: "code",
           scope: "openid email",
@@ -373,10 +482,10 @@ describe("OIDC flow", () => {
           codeChallenge: computeS256Challenge(codeVerifier),
           codeChallengeMethod: "S256",
           sessionToken: sessionTokenChoice,
-          reauthenticated: true,
+          reauthCookie: buildReauthCookie(sessionTokenChoice),
         },
         "https://mockauth.test",
-        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=qa-client`,
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
       );
       const code = new URL(authorize.redirectTo).searchParams.get("code");
       const consumed = await consumeAuthorizationCode(code!);
@@ -385,7 +494,7 @@ describe("OIDC flow", () => {
         codeVerifier,
         redirectUri: "https://client.example.test/callback",
         origin: "https://mockauth.test",
-        clientSecret: "qa-secret",
+        clientSecret: CLIENT_SECRET,
       });
       await clearSession(tenantId, sessionTokenChoice);
       return decodeJwt(tokens.id_token).email_verified;

@@ -9,6 +9,7 @@ import {
   DeleteRedirectButton,
   RotateSecretForm,
   UpdateAuthStrategiesForm,
+  UpdateClientReauthTtlForm,
   UpdateClientIssuerForm,
   UpdateClientNameForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
@@ -218,6 +219,20 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             canEdit={canManageClients}
             initialStrategies={authStrategies}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Re-authentication</CardTitle>
+          <CardDescription>Control how long Mockauth honors a previous sign-in for this client.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <UpdateClientReauthTtlForm clientId={client.id} initialTtl={client.reauthTtlSeconds} canEdit={canManageClients} />
+          <p className="text-xs text-muted-foreground">
+            0 seconds disables silent reuse. Higher values allow the authorize endpoint to skip the login form when the
+            same admin signs in again within the TTL window.
+          </p>
         </CardContent>
       </Card>
 

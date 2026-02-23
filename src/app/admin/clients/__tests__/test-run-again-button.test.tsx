@@ -39,6 +39,7 @@ describe("TestRunAgainButton", () => {
         clientId: "client_123",
         scopes: "openid",
         redirectUri: "https://admin.example.test/callback",
+        promptLogin: false,
       });
       expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
     });

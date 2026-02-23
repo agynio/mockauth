@@ -27,7 +27,7 @@ export function TestRunAgainButton({ clientId, scopes, redirectUri, variant, siz
   const handleClick = () => {
     startTransition(async () => {
       try {
-        const result = await prepareClientOauthTestAction({ clientId, scopes, redirectUri });
+        const result = await prepareClientOauthTestAction({ clientId, scopes, redirectUri, promptLogin: false });
         if (result.error || !result.data) {
           toast({
             variant: "destructive",

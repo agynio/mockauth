@@ -14,6 +14,7 @@ import {
   updateClientAuthStrategiesAction,
   updateClientIssuerAction,
   updateClientNameAction,
+  updateClientReauthTtlAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,42 @@ const authStrategiesSchema = z
     message: "Enable at least one strategy",
     path: ["root"],
   });
+const MAX_REAUTH_TTL_SECONDS = 86400;
+const reauthTtlSchema = z.object({
+  reauthTtlSeconds: z.coerce
+    .number()
+    .int("Enter a whole number"),
+});
+
+const formatReauthTtlSummary = (seconds: number) => {
+  if (!seconds) {
+    return "0 seconds = always require a fresh sign-in.";
+  }
+  if (seconds < 60) {
+    return `Allows reuse for ${seconds} second${seconds === 1 ? "" : "s"}.`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60 && remainingSeconds === 0) {
+    return `Allows reuse for ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  }
+  if (minutes < 60) {
+    return `Allows reuse for ${minutes} minute${minutes === 1 ? "" : "s"} ${remainingSeconds} second${remainingSeconds === 1 ? "" : "s"}.`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0 && remainingSeconds === 0) {
+    return `Allows reuse for ${hours} hour${hours === 1 ? "" : "s"}.`;
+  }
+  const parts = [`${hours} hour${hours === 1 ? "" : "s"}`];
+  if (remainingMinutes) {
+    parts.push(`${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`);
+  }
+  if (remainingSeconds) {
+    parts.push(`${remainingSeconds} second${remainingSeconds === 1 ? "" : "s"}`);
+  }
+  return `Allows reuse for ${parts.join(" ")}.`;
+};
 
 export function UpdateClientNameForm({
   clientId,
@@ -68,6 +105,7 @@ export function UpdateClientNameForm({
   const router = useRouter();
   const form = useForm<z.infer<typeof nameSchema>>({ resolver: zodResolver(nameSchema), defaultValues: { name: initialName } });
   const [pending, startTransition] = useTransition();
+  const [manualError, setManualError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -104,6 +142,92 @@ export function UpdateClientNameForm({
         />
         {canEdit ? (
           <Button type="submit" disabled={pending} className="self-end">
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled className="self-end">
+            Read-only
+          </Button>
+        )}
+      </form>
+    </Form>
+  );
+}
+
+export function UpdateClientReauthTtlForm({
+  clientId,
+  initialTtl,
+  canEdit,
+}: {
+  clientId: string;
+  initialTtl: number;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const form = useForm<z.infer<typeof reauthTtlSchema>>({
+    resolver: zodResolver(reauthTtlSchema),
+    defaultValues: { reauthTtlSeconds: initialTtl },
+  });
+  const ttlValue = useWatch({ control: form.control, name: "reauthTtlSeconds" }) ?? 0;
+
+  useEffect(() => {
+    form.reset({ reauthTtlSeconds: initialTtl });
+  }, [initialTtl, form]);
+
+  const onSubmit = form.handleSubmit((values) => {
+    if (values.reauthTtlSeconds < 0) {
+      form.setError("reauthTtlSeconds", { type: "manual", message: "Enter 0 or a positive number" });
+      return;
+    }
+    if (values.reauthTtlSeconds > MAX_REAUTH_TTL_SECONDS) {
+      form.setError("reauthTtlSeconds", {
+        type: "manual",
+        message: `Limit to ${MAX_REAUTH_TTL_SECONDS.toLocaleString()} seconds (24 hours)`,
+      });
+      return;
+    }
+    form.clearErrors("reauthTtlSeconds");
+    startTransition(async () => {
+      const result = await updateClientReauthTtlAction({ clientId, reauthTtlSeconds: values.reauthTtlSeconds });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Re-auth TTL updated", description: result.success ?? "Saved" });
+    });
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={onSubmit} noValidate className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <FormField
+          control={form.control}
+          name="reauthTtlSeconds"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel>Session reuse TTL (seconds)</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  type="number"
+                  min={0}
+                  max={MAX_REAUTH_TTL_SECONDS}
+                  inputMode="numeric"
+                  disabled={!canEdit || pending}
+                  data-testid="reauth-ttl-input"
+                />
+              </FormControl>
+              <FormMessage />
+              <p className="text-xs text-muted-foreground">{formatReauthTtlSummary(Number(ttlValue) || 0)}</p>
+              <p className="text-xs text-muted-foreground">Max {MAX_REAUTH_TTL_SECONDS.toLocaleString()} seconds (24 hours).</p>
+            </FormItem>
+          )}
+        />
+        {canEdit ? (
+          <Button type="submit" disabled={pending} className="self-end" data-testid="reauth-ttl-save">
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
           </Button>
         ) : (

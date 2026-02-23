@@ -19,6 +19,7 @@ import {
   updateClientName,
   updateClientApiResource,
   updateClientAuthStrategies,
+  updateClientReauthTtl,
   getConfidentialClientSecret,
 } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
@@ -72,6 +73,7 @@ const oauthTestSchema = z.object({
   redirectUri: z.string().min(1),
   scopes: z.string().min(1),
   clientSecret: z.string().optional(),
+  promptLogin: z.boolean().optional(),
 });
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
@@ -109,6 +111,10 @@ const updateClientStrategiesSchema = z.object({
   clientId: z.string().min(1),
   username: strategyConfigSchema,
   email: emailStrategyConfigSchema,
+});
+const updateClientReauthSchema = z.object({
+  clientId: z.string().min(1),
+  reauthTtlSeconds: z.number().int().min(0).max(86400),
 });
 
 const requireSession = async () => {
@@ -399,6 +405,9 @@ export const prepareClientOauthTestAction = async (
     authorizeUrl.searchParams.set("code_challenge", codeChallenge);
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
     authorizeUrl.searchParams.set("nonce", nonce);
+    if (parsed.promptLogin) {
+      authorizeUrl.searchParams.set("prompt", "login");
+    }
 
     return { success: "Authorization URL generated", data: { authorizationUrl: authorizeUrl.toString() } };
   } catch (error) {
@@ -422,6 +431,23 @@ export const updateClientNameAction = async (input: z.infer<typeof updateClientS
   } catch (error) {
     console.error(error);
     return { error: "Unable to update client" };
+  }
+};
+
+export const updateClientReauthTtlAction = async (input: z.infer<typeof updateClientReauthSchema>): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateClientReauthSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    await updateClientReauthTtl(client.id, parsed.reauthTtlSeconds);
+    revalidatePath(clientPath(client.id));
+    return { success: parsed.reauthTtlSeconds > 0 ? "Re-auth TTL updated" : "Re-auth disabled" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update re-auth TTL" };
   }
 };
 

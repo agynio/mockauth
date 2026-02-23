@@ -117,6 +117,64 @@ test.describe("Client Test OAuth", () => {
     await expect(page.getByTestId("test-oauth-error")).toContainText("login_required");
   });
 
+  test("reuses the previous login within the reauth TTL window", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+    await setClientReauthTtl(page, clientId, 180);
+
+    try {
+      await completeRunAndReturnToConfigurator(page, clientId);
+      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+      await page.goto(authorizationUrl);
+      await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    } finally {
+      await setClientReauthTtl(page, clientId, 0);
+    }
+  });
+
+  test("prompt=login toggle forces a credential screen even within the TTL", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+    await setClientReauthTtl(page, clientId, 300);
+
+    try {
+      await completeRunAndReturnToConfigurator(page, clientId);
+      await page.getByTestId("test-oauth-prompt-login").check();
+      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+      await page.goto(authorizationUrl);
+      await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+      await completeProviderLogin(page, clientId);
+      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    } finally {
+      await setClientReauthTtl(page, clientId, 0);
+    }
+  });
+
+  test("prompt=none succeeds silently when the TTL cookie is valid", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+    await setClientReauthTtl(page, clientId, 240);
+
+    try {
+      await completeRunAndReturnToConfigurator(page, clientId);
+      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+      const silentUrl = new URL(authorizationUrl);
+      silentUrl.searchParams.set("prompt", "none");
+      await page.goto(silentUrl.toString());
+      await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    } finally {
+      await setClientReauthTtl(page, clientId, 0);
+    }
+  });
+
   test("surfaces authorization errors on the redirect page", async ({ page }) => {
     const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
     await authenticate(page, sessionToken);
@@ -209,6 +267,15 @@ const completeRunAndReturnToConfigurator = async (page: Page, clientId: string) 
   await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   await page.getByRole("link", { name: "← Back to test config" }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/clients/${clientId}/test`));
+};
+
+const setClientReauthTtl = async (page: Page, clientId: string, ttlSeconds: number) => {
+  await page.goto(`/admin/clients/${clientId}`);
+  const input = page.getByTestId("reauth-ttl-input");
+  await expect(input).toBeVisible();
+  await input.fill(ttlSeconds.toString());
+  await page.getByTestId("reauth-ttl-save").click();
+  await expect(input).toHaveValue(ttlSeconds.toString());
 };
 
 const openClientDetail = async (page: Page, tenantId: string, clientName: string) => {

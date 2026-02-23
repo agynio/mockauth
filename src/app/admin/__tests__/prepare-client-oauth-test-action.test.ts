@@ -146,4 +146,15 @@ describe("prepareClientOauthTestAction", () => {
     expect(mockSetSecretCookie).toHaveBeenCalledWith("client_internal", "new_state", "stored-secret");
     expect(result?.data?.authorizationUrl).toContain("state=new_state");
   });
+
+  it("appends prompt=login when requested", async () => {
+    const result = await prepareClientOauthTestAction({
+      clientId: "client_internal",
+      redirectUri: "https://admin.example.test/callback",
+      scopes: "openid",
+      promptLogin: true,
+    });
+
+    expect(result.data?.authorizationUrl).toContain("prompt=login");
+  });
 });
