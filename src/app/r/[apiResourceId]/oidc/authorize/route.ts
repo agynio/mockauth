@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { toResponse } from "@/server/errors";
@@ -6,6 +6,7 @@ import { handleAuthorize } from "@/server/services/authorize-service";
 import { MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
+import { buildReauthCookiePath, MOCK_REAUTH_COOKIE } from "@/server/oidc/reauth-cookie";
 
 const authorizeSchema = z.object({
   client_id: z.string().min(1),
@@ -14,7 +15,7 @@ const authorizeSchema = z.object({
   scope: z.string().min(1),
   state: z.string().optional(),
   nonce: z.string().optional(),
-  prompt: z.enum(["login"]).optional(),
+  prompt: z.enum(["login", "none"]).optional(),
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.string().default("S256"),
 });
@@ -22,6 +23,7 @@ const authorizeSchema = z.object({
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
   const normalizedUrl = resolveUrl(request);
   const origin = normalizedUrl.origin;
+  const isSecure = normalizedUrl.protocol === "https:";
   const validation = authorizeSchema.safeParse(Object.fromEntries(normalizedUrl.searchParams.entries()));
 
   if (!validation.success) {
@@ -31,6 +33,8 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
   try {
     const { apiResourceId } = await context.params;
     const sessionToken = request.cookies.get(MOCK_SESSION_COOKIE)?.value;
+    const reauthCookie = request.cookies.get(MOCK_REAUTH_COOKIE)?.value;
+    const reauthenticated = Boolean(sessionToken && reauthCookie && sessionToken === reauthCookie);
     const result = await handleAuthorize(
       {
         apiResourceId,
@@ -44,16 +48,30 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
         codeChallengeMethod: validation.data.code_challenge_method,
         prompt: validation.data.prompt,
         sessionToken,
+        reauthenticated,
       },
       origin,
       normalizedUrl.toString(),
     );
 
-    if (result.type === "login") {
-      return Response.redirect(new URL(result.redirectTo, origin));
+    const response =
+      result.type === "login"
+        ? NextResponse.redirect(new URL(result.redirectTo, origin))
+        : NextResponse.redirect(result.redirectTo);
+
+    if (reauthenticated) {
+      response.cookies.set({
+        name: MOCK_REAUTH_COOKIE,
+        value: "",
+        path: buildReauthCookiePath(apiResourceId),
+        httpOnly: true,
+        sameSite: "lax",
+        secure: isSecure,
+        maxAge: 0,
+      });
     }
 
-    return Response.redirect(result.redirectTo);
+    return response;
   } catch (error) {
     return toResponse(error);
   }

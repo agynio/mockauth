@@ -18,6 +18,7 @@ type AuthorizeParams = {
   codeChallengeMethod: string;
   prompt?: string;
   sessionToken?: string;
+  reauthenticated?: boolean;
 };
 
 const ensureScopes = (requested: string[], allowed: string[]) => {
@@ -50,17 +51,28 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
 
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
 
+  if (params.prompt === "none") {
+    const redirectUrl = new URL(redirect);
+    redirectUrl.searchParams.set("error", "login_required");
+    if (params.state) {
+      redirectUrl.searchParams.set("state", params.state);
+    }
+    return { type: "redirect" as const, redirectTo: redirectUrl.toString() };
+  }
+
   const strategies = parseClientAuthStrategies(client.authStrategies);
-  const session = await getSessionUser(tenant.id, params.sessionToken);
+  const session = params.reauthenticated ? await getSessionUser(tenant.id, params.sessionToken) : null;
   const strategyAllowed = session
     ? strategies[fromPrismaLoginStrategy(session.loginStrategy)]?.enabled ?? false
-    : true;
-  const shouldLogin = params.prompt === "login" || !session || !strategyAllowed;
+    : false;
+  const mustPrompt = params.prompt === "login" && !params.reauthenticated;
+  const shouldLogin = !params.reauthenticated || mustPrompt || !session || !strategyAllowed;
 
   if (shouldLogin) {
+    const loginReturnUrl = new URL(returnTo);
     return {
       type: "login" as const,
-      redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(returnTo)}`,
+      redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(loginReturnUrl.toString())}`,
     };
   }
 
