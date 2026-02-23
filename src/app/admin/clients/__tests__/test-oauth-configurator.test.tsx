@@ -105,6 +105,13 @@ describe("TestOAuthConfigurator", () => {
   });
 
   it("copies the client secret", async () => {
+    const originalNavigator = navigator;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const navigatorMock = { ...originalNavigator, clipboard: { writeText } } as unknown as Navigator;
+    vi.stubGlobal("navigator", navigatorMock);
+    Object.defineProperty(window, "navigator", { configurable: true, value: navigatorMock });
+    expect(typeof navigator.clipboard?.writeText).toBe("function");
+    expect(window.navigator).toBe(navigatorMock);
     const user = userEvent.setup();
     render(
       <TestOAuthConfigurator
@@ -115,12 +122,15 @@ describe("TestOAuthConfigurator", () => {
       />,
     );
 
+    expect(screen.getByTestId("test-oauth-secret-input")).toHaveValue("stored-secret");
     const copyButton = screen.getByTestId("test-oauth-secret-copy");
     expect(copyButton).toBeEnabled();
     await user.click(copyButton);
     await waitFor(() => {
       expect(copyButton).toHaveTextContent("Copied");
     });
+    vi.stubGlobal("navigator", originalNavigator);
+    Object.defineProperty(window, "navigator", { configurable: true, value: originalNavigator });
   });
 
   it("surfaces action errors via toast", async () => {
