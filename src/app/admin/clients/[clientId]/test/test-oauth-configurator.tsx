@@ -27,6 +27,7 @@ const schema = z.object({
         return false;
       }
     }, "Enter an absolute http(s) URL"),
+  clientSecret: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -38,6 +39,7 @@ type TestOAuthConfiguratorProps = {
   canManageRedirects: boolean;
   redirectAllowed: boolean;
   requiresClientSecret: boolean;
+  defaultClientSecret?: string | null;
 };
 
 export function TestOAuthConfigurator({
@@ -47,6 +49,7 @@ export function TestOAuthConfigurator({
   canManageRedirects,
   redirectAllowed: redirectAllowedProp,
   requiresClientSecret,
+  defaultClientSecret,
 }: TestOAuthConfiguratorProps) {
   const { toast } = useToast();
   const router = useRouter();
@@ -57,10 +60,16 @@ export function TestOAuthConfigurator({
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { scopes: defaultScopes, redirectUri: defaultRedirectUri },
+    defaultValues: {
+      scopes: defaultScopes,
+      redirectUri: defaultRedirectUri,
+      clientSecret: defaultClientSecret ?? "",
+    },
   });
+  const [secretCopied, setSecretCopied] = useState(false);
 
   const scopesValue = useWatch({ control: form.control, name: "scopes" }) ?? "";
+  const clientSecretValue = useWatch({ control: form.control, name: "clientSecret" }) ?? "";
   const normalizedScopes = scopesValue
     .split(/\s+/)
     .map((scope) => scope.trim())
@@ -83,6 +92,10 @@ export function TestOAuthConfigurator({
   };
 
   const onSubmit = form.handleSubmit((values) => {
+    if (requiresClientSecret && !values.clientSecret?.trim()) {
+      form.setError("clientSecret", { type: "manual", message: "Client secret is required" });
+      return;
+    }
     if (!redirectAllowed) {
       toast({
         variant: "destructive",
@@ -96,6 +109,7 @@ export function TestOAuthConfigurator({
         clientId,
         scopes: values.scopes,
         redirectUri: values.redirectUri,
+        clientSecret: values.clientSecret?.trim() || undefined,
       });
       if (result.error || !result.data) {
         toast({ variant: "destructive", title: "Unable to generate URL", description: result.error });
@@ -166,12 +180,52 @@ export function TestOAuthConfigurator({
             )}
           />
           {requiresClientSecret ? (
-            <Alert data-testid="test-oauth-secret-info">
-              <AlertTitle>Confidential client</AlertTitle>
-              <AlertDescription>
-                The stored client secret is applied automatically for admin test runs.
-              </AlertDescription>
-            </Alert>
+            <FormField
+              control={form.control}
+              name="clientSecret"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between gap-2">
+                    <FormLabel className="mb-0">Client secret</FormLabel>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const secret = clientSecretValue.trim();
+                        if (!secret) {
+                          return;
+                        }
+                        try {
+                          if (!navigator.clipboard?.writeText) {
+                            throw new Error("Clipboard API unavailable");
+                          }
+                          await navigator.clipboard.writeText(secret);
+                          setSecretCopied(true);
+                          setTimeout(() => setSecretCopied(false), 1500);
+                        } catch (error) {
+                          console.error("Unable to copy client secret", error);
+                        }
+                      }}
+                      disabled={!clientSecretValue.trim()}
+                      data-testid="test-oauth-secret-copy"
+                    >
+                      {secretCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      autoComplete="off"
+                      spellCheck={false}
+                      data-testid="test-oauth-secret-input"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                  <p className="text-xs text-muted-foreground">This value stays local to the admin test run.</p>
+                </FormItem>
+              )}
+            />
           ) : null}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {authorizationUrl ? (

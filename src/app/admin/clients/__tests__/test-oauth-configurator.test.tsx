@@ -30,6 +30,7 @@ const defaultProps = {
   canManageRedirects: true,
   redirectAllowed: false,
   requiresClientSecret: false,
+  defaultClientSecret: undefined,
 };
 
 describe("TestOAuthConfigurator", () => {
@@ -45,23 +46,28 @@ describe("TestOAuthConfigurator", () => {
     render(<TestOAuthConfigurator {...defaultProps} />);
     const notice = screen.getByTestId("test-oauth-warning");
     expect(notice).toBeVisible();
+    expect(screen.queryByTestId("test-oauth-secret-input")).not.toBeInTheDocument();
     await user.click(screen.getByTestId("test-oauth-add-redirect"));
     await waitFor(() => {
       expect(mockAddRedirect).toHaveBeenCalledWith({ clientId: "client_123", uri: "https://admin.example.test/callback" });
     });
   });
 
-  it("submits the form and navigates to the authorization URL", async () => {
+  it("submits the form with the provided client secret", async () => {
     const user = userEvent.setup();
     render(
       <TestOAuthConfigurator
         {...defaultProps}
         redirectAllowed
         requiresClientSecret
+        defaultClientSecret="stored-secret"
       />,
     );
 
-    expect(screen.getByTestId("test-oauth-secret-info")).toBeVisible();
+    const secretInput = screen.getByTestId("test-oauth-secret-input") as HTMLInputElement;
+    expect(secretInput).toHaveValue("stored-secret");
+    await user.clear(secretInput);
+    await user.type(secretInput, "override-secret");
     await user.click(screen.getByTestId("test-oauth-start"));
 
     await waitFor(() => {
@@ -69,11 +75,52 @@ describe("TestOAuthConfigurator", () => {
         clientId: "client_123",
         scopes: "openid profile",
         redirectUri: "https://admin.example.test/callback",
+        clientSecret: "override-secret",
       });
       expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
     });
 
     expect(screen.getByTestId("test-oauth-authorization-url")).toHaveTextContent("https://auth.example.test");
+  });
+
+  it("prevents confidential runs without a secret", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestOAuthConfigurator
+        {...defaultProps}
+        redirectAllowed
+        requiresClientSecret
+        defaultClientSecret="stored-secret"
+      />,
+    );
+
+    const secretInput = screen.getByTestId("test-oauth-secret-input") as HTMLInputElement;
+    await user.clear(secretInput);
+    await user.click(screen.getByTestId("test-oauth-start"));
+
+    expect(mockPrepare).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText("Client secret is required")).toBeVisible();
+    });
+  });
+
+  it("copies the client secret", async () => {
+    const user = userEvent.setup();
+    render(
+      <TestOAuthConfigurator
+        {...defaultProps}
+        redirectAllowed
+        requiresClientSecret
+        defaultClientSecret="stored-secret"
+      />,
+    );
+
+    const copyButton = screen.getByTestId("test-oauth-secret-copy");
+    expect(copyButton).toBeEnabled();
+    await user.click(copyButton);
+    await waitFor(() => {
+      expect(copyButton).toHaveTextContent("Copied");
+    });
   });
 
   it("surfaces action errors via toast", async () => {
