@@ -64,6 +64,25 @@ test.describe("Client Test OAuth", () => {
 
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
+
+  test("hides the client secret input for public clients", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const publicName = `Public Client ${Date.now()}`;
+    const response = await page.request.post("/api/test/clients", {
+      data: { tenantId: QA_TENANT_ID, names: [publicName], clientType: "PUBLIC" },
+    });
+    const payload = (await response.json()) as { clients?: { id: string }[] };
+    if (!payload.clients?.[0]?.id) {
+      throw new Error("Failed to seed public client");
+    }
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, publicName);
+    await startOauthTest(page, clientId, { expectSecretField: false });
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
+  });
 });
 
 const openClientDetail = async (page: Page, tenantId: string, clientName: string) => {
@@ -85,10 +104,20 @@ const selectTenant = async (page: Page, tenantId: string) => {
   await option.click();
 };
 
-const startOauthTest = async (page: Page, clientId: string) => {
+const startOauthTest = async (page: Page, clientId: string, options?: { expectSecretField?: boolean }) => {
+  const expectSecretField = options?.expectSecretField ?? true;
   await page.getByTestId("test-oauth-link").click();
   await addTestRedirectIfNeeded(page);
-  await expect(page.getByTestId("test-oauth-secret-info")).toContainText("stored client secret is applied automatically");
+  const secretInput = page.getByTestId("test-oauth-secret-input");
+  if (expectSecretField) {
+    await expect(secretInput).toBeVisible();
+    const currentSecret = (await secretInput.inputValue()).trim();
+    expect(currentSecret.length).toBeGreaterThan(0);
+    await secretInput.fill(`${currentSecret} `);
+    await secretInput.fill(currentSecret);
+  } else {
+    await expect(secretInput).toHaveCount(0);
+  }
   await page.getByTestId("test-oauth-start").click();
   await completeProviderLogin(page, clientId);
 };

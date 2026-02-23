@@ -7,7 +7,7 @@ import { TestOAuthConfigurator } from "@/app/admin/clients/[clientId]/test/test-
 import { DEFAULT_TEST_SCOPES } from "@/app/admin/clients/[clientId]/test/constants";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
-import { getClientByIdForTenant } from "@/server/services/client-service";
+import { getClientByIdForTenant, getConfidentialClientSecret } from "@/server/services/client-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ export default async function ClientTestOAuthPage({ params }: { params: PagePara
   const viewerRole = activeMembership?.role ?? "READER";
   const canManageRedirects = viewerRole === "OWNER" || viewerRole === "WRITER";
   const requiresClientSecret = client.tokenEndpointAuthMethod !== "none";
+  const defaultClientSecret = requiresClientSecret ? await getConfidentialClientSecret(client.id) : null;
 
   return (
     <div className="space-y-8">
@@ -77,6 +78,7 @@ export default async function ClientTestOAuthPage({ params }: { params: PagePara
             canManageRedirects={canManageRedirects}
             redirectAllowed={redirectAllowed}
             requiresClientSecret={requiresClientSecret}
+            defaultClientSecret={defaultClientSecret ?? undefined}
           />
         </CardContent>
       </Card>

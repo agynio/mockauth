@@ -71,6 +71,7 @@ const oauthTestSchema = z.object({
   clientId: z.string().min(1),
   redirectUri: z.string().min(1),
   scopes: z.string().min(1),
+  clientSecret: z.string().optional(),
 });
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
@@ -345,8 +346,14 @@ export const prepareClientOauthTestAction = async (
     }
 
     const requiresSecret = client.tokenEndpointAuthMethod !== "none";
-    const clientSecret = requiresSecret ? await getConfidentialClientSecret(client.id) : null;
-    if (requiresSecret && !clientSecret) {
+    const submittedSecretProvided = typeof parsed.clientSecret === "string";
+    const submittedSecret = requiresSecret && submittedSecretProvided ? parsed.clientSecret?.trim() || null : null;
+    const storedSecret = requiresSecret ? await getConfidentialClientSecret(client.id) : null;
+    const cookieSecret = requiresSecret ? submittedSecret ?? storedSecret : null;
+    if (requiresSecret && submittedSecretProvided && !submittedSecret) {
+      return { error: "Enter the client secret before starting the test." };
+    }
+    if (requiresSecret && !cookieSecret) {
       return { error: "Client secret unavailable. Rotate the secret and try again." };
     }
 
@@ -367,8 +374,8 @@ export const prepareClientOauthTestAction = async (
       expiresAt,
     });
 
-    if (clientSecret) {
-      await setOauthTestSecretCookie(client.id, state, clientSecret);
+    if (cookieSecret) {
+      await setOauthTestSecretCookie(client.id, state, cookieSecret);
     }
 
     const origin = await getRequestOrigin();
