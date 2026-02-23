@@ -4,6 +4,7 @@ import { authenticate, createTestSession } from "./helpers/admin";
 
 const QA_TENANT_ID = "tenant_qa";
 const QA_CLIENT_NAME = "QA Client";
+const QA_CLIENT_ID = "qa-client";
 
 test.describe("Client Test OAuth", () => {
   test("runs the guided OAuth test flow", async ({ page }) => {
@@ -129,6 +130,36 @@ test.describe("Client Test OAuth", () => {
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
     await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
   });
+
+  test("shows tabs for multiple login strategies", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    await updateClientAuthStrategies(page, {
+      username: { enabled: true, subSource: "entered" },
+      email: { enabled: true, subSource: "entered", emailVerifiedMode: "user_choice" },
+    });
+
+    try {
+      const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true });
+      await page.goto(authorizationUrl);
+
+      await expect(page.getByTestId("login-strategy-tabs")).toBeVisible();
+      await page.getByRole("tab", { name: "Email" }).click();
+      await page.getByRole("textbox", { name: /^Email/ }).fill("tab-user@example.test");
+      await page.getByLabel("Unverified").click();
+      await page.getByRole("button", { name: "Continue" }).click();
+
+      await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+      await expect(page.getByTestId("test-oauth-decoded-id")).toContainText("tab-user@example.test");
+    } finally {
+      await updateClientAuthStrategies(page, {
+        username: { enabled: true, subSource: "entered" },
+        email: { enabled: false, subSource: "entered", emailVerifiedMode: "false" },
+      });
+    }
+  });
 });
 
 const openClientDetail = async (page: Page, tenantId: string, clientName: string) => {
@@ -148,6 +179,18 @@ const selectTenant = async (page: Page, tenantId: string) => {
   const option = page.getByTestId(`tenant-option-${tenantId}`);
   await expect(option).toBeVisible();
   await option.click();
+};
+
+const updateClientAuthStrategies = async (
+  page: Page,
+  strategies: {
+    username: { enabled: boolean; subSource: string };
+    email: { enabled: boolean; subSource: string; emailVerifiedMode: string };
+  },
+) => {
+  await page.request.post("/api/test/client-auth-strategies", {
+    data: { tenantId: QA_TENANT_ID, clientId: QA_CLIENT_ID, strategies },
+  });
 };
 
 type StartOptions = { expectSecretField?: boolean; skipOpen?: boolean; fromConfigPage?: boolean };
@@ -191,9 +234,34 @@ const addTestRedirectIfNeeded = async (page: Page) => {
   await expect(warning).toHaveCount(0);
 };
 
-const completeProviderLogin = async (page: Page, clientId: string) => {
+type LoginOptions = {
+  strategy?: "username" | "email";
+  identifier?: string;
+  emailVerifiedPreference?: "true" | "false";
+};
+
+const completeProviderLogin = async (page: Page, clientId: string, options?: LoginOptions) => {
   await page.waitForURL(/\/r\/.*\/oidc\/login/);
-  await page.getByRole("textbox", { name: /^Username/ }).fill("qa-user");
+  const strategy = options?.strategy ?? "username";
+  await selectLoginTabIfPresent(page, strategy);
+  const identifier = options?.identifier ?? (strategy === "email" ? "qa-user@example.test" : "qa-user");
+  const labelPattern = strategy === "email" ? /^Email/ : /^Username/;
+  await page.getByRole("textbox", { name: labelPattern }).fill(identifier);
+  if (strategy === "email" && options?.emailVerifiedPreference) {
+    const radioLabel = options.emailVerifiedPreference === "true" ? "Verified" : "Unverified";
+    const radio = page.getByLabel(radioLabel, { exact: true });
+    if (await radio.count()) {
+      await radio.click();
+    }
+  }
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+};
+
+const selectLoginTabIfPresent = async (page: Page, strategy: "username" | "email") => {
+  const tabName = strategy === "email" ? "Email" : "Username";
+  const tab = page.getByRole("tab", { name: tabName });
+  if ((await tab.count()) > 0) {
+    await tab.click();
+  }
 };
