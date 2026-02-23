@@ -1,4 +1,5 @@
 import { hashSecret } from "@/server/crypto/hash";
+import { encrypt } from "@/server/crypto/key-vault";
 import { prisma } from "@/server/db/client";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import { ensureActiveKey } from "@/server/services/key-service";
@@ -39,6 +40,7 @@ async function main() {
       name: "QA Client",
       clientId: DEFAULT_CLIENT_ID,
       clientSecretHash: await hashSecret(DEFAULT_CLIENT_SECRET),
+      clientSecretEncrypted: encrypt(DEFAULT_CLIENT_SECRET),
       tokenEndpointAuthMethod: "client_secret_post",
     },
   });

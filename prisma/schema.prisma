@@ -137,6 +137,7 @@ model Client {
   name                     String
   clientId                 String
   clientSecretHash         String?
+  clientSecretEncrypted    String?
   clientType               ClientType               @default(CONFIDENTIAL)
   allowedScopes            String[]                 @default(["openid", "profile", "email"])
   allowedGrantTypes        String[]                 @default(["authorization_code"])

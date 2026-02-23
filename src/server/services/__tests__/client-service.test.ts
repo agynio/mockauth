@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 
 import { prisma } from "@/server/db/client";
+import { decrypt } from "@/server/crypto/key-vault";
 import { createClient, getClientByIdForTenant, rotateClientSecret } from "@/server/services/client-service";
 import { describe, expect, it } from "vitest";
 
@@ -41,6 +42,8 @@ describe("client service", () => {
     });
     expect(stored?.redirectUris).toHaveLength(2);
     expect(stored?.clientSecretHash).toBeTruthy();
+    expect(stored?.clientSecretEncrypted).toBeTruthy();
+    expect(decrypt(stored?.clientSecretEncrypted as string)).toEqual(clientSecret);
   });
 
   it("fetches a client scoped to a tenant", async () => {
@@ -69,5 +72,7 @@ describe("client service", () => {
 
     const updated = await prisma.client.findUnique({ where: { id: client.id } });
     expect(updated?.clientSecretHash).not.toEqual(original?.clientSecretHash);
+    expect(updated?.clientSecretEncrypted).not.toEqual(original?.clientSecretEncrypted);
+    expect(decrypt(updated?.clientSecretEncrypted as string)).toEqual(nextSecret);
   });
 });

@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { hashSecret } from "@/server/crypto/hash";
+import { encrypt } from "@/server/crypto/key-vault";
 import { generateOpaqueToken } from "@/server/crypto/opaque-token";
 import { DomainError } from "@/server/errors";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
@@ -29,10 +30,12 @@ export const createClient = async (
   const clientId = `client_${nanoid(16)}`;
   let clientSecret: string | null = null;
   let clientSecretHash: string | null = null;
+  let clientSecretEncrypted: string | null = null;
 
   if (data.clientType === "CONFIDENTIAL") {
     clientSecret = generateOpaqueToken(24);
     clientSecretHash = await hashSecret(clientSecret);
+    clientSecretEncrypted = encrypt(clientSecret);
   }
 
   const client = await prisma.$transaction(async (tx) => {
@@ -43,6 +46,7 @@ export const createClient = async (
         clientId,
         clientType: data.clientType,
         clientSecretHash,
+        clientSecretEncrypted,
         tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
       },
@@ -132,10 +136,11 @@ export const getClientByIdForTenant = async (tenantId: string, clientInternalId:
 export const rotateClientSecret = async (clientId: string) => {
   const secret = generateOpaqueToken(24);
   const clientSecretHash = await hashSecret(secret);
+  const clientSecretEncrypted = encrypt(secret);
 
   await prisma.client.update({
     where: { id: clientId },
-    data: { clientSecretHash },
+    data: { clientSecretHash, clientSecretEncrypted },
   });
 
   return secret;

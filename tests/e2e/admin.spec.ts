@@ -84,7 +84,14 @@ test.describe("admin console", () => {
     const requiredLabels = await requiredSection
       .locator("[data-field-label]")
       .evaluateAll((nodes) => nodes.map((node) => node?.getAttribute("data-field-label") ?? ""));
-    expect(requiredLabels).toEqual(["Tenant ID", "Client ID", "Issuer", "Authorization endpoint", "Token endpoint"]);
+    expect(requiredLabels).toEqual([
+      "Tenant ID",
+      "Client ID",
+      "Client secret",
+      "Issuer",
+      "Authorization endpoint",
+      "Token endpoint",
+    ]);
 
     const optionalSection = page.getByTestId("oauth-optional");
     await expect(optionalSection.locator("[data-field-label]").first()).toBeVisible();
