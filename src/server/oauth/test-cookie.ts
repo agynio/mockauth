@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { env } from "@/server/env";
 
 const COOKIE_PREFIX = "oauth-test-secret";
-const COOKIE_TTL_SECONDS = 60 * 10;
+const COOKIE_TTL_SECONDS = 60 * 15;
 
 export const buildTestSecretCookieName = (state: string) => `${COOKIE_PREFIX}-${state}`;
 export const buildTestSecretCookiePath = (clientId: string) => `/admin/clients/${clientId}/test/redirect`;

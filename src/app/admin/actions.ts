@@ -50,6 +50,8 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession } from "@/server/services/oauth-test-service";
 import { setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 
+const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
+
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
 });
@@ -352,7 +354,7 @@ export const prepareClientOauthTestAction = async (
     const codeChallenge = computeS256Challenge(codeVerifier);
     const state = randomUUID();
     const nonce = randomBytes(16).toString("base64url");
-    const expiresAt = addMinutes(new Date(), 10);
+    const expiresAt = addMinutes(new Date(), OAUTH_TEST_SESSION_TTL_MINUTES);
 
     await createOauthTestSession({
       id: state,

@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { TestSecretCleanup } from "@/app/admin/clients/[clientId]/test/test-secret-cleanup";
+import { TestRunAgainButton } from "@/app/admin/clients/[clientId]/test/test-run-again-button";
+import { DEFAULT_TEST_SCOPES } from "@/app/admin/clients/[clientId]/test/constants";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
@@ -28,6 +30,8 @@ type TokenResult = {
 };
 
 type ErrorResult = { status: "error"; message: string; details?: unknown };
+
+const RERUN_HINT = 'Use "Run again" to start a new test.';
 
 const decodeJwtPayload = (token?: unknown) => {
   if (typeof token !== "string") {
@@ -84,6 +88,14 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
   const cookieSecret = state ? await readOauthTestSecretCookie(client.id, state) : null;
   const sessionRecord = state ? await consumeOauthTestSession(state) : null;
   const now = new Date();
+  let rerunScopes = DEFAULT_TEST_SCOPES;
+  let rerunRedirectUri = testRedirectUri;
+  if (sessionRecord?.scopes?.trim()) {
+    rerunScopes = sessionRecord.scopes;
+  }
+  if (sessionRecord?.redirectUri) {
+    rerunRedirectUri = sessionRecord.redirectUri;
+  }
   let result: TokenResult | ErrorResult;
 
   if (error) {
@@ -92,19 +104,19 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
       message: `${error}${error_description ? `: ${error_description}` : ""}`,
     };
   } else if (!state) {
-    result = { status: "error", message: "Missing state parameter." };
+    result = { status: "error", message: `Missing state parameter. ${RERUN_HINT}` };
   } else if (!sessionRecord) {
-    result = { status: "error", message: "Test session expired or already used." };
+    result = { status: "error", message: `Test session expired or already used. ${RERUN_HINT}` };
   } else if (sessionRecord.clientId !== client.id) {
     result = { status: "error", message: "State does not belong to this client." };
   } else if (sessionRecord.tenantId !== activeTenant.id) {
     result = { status: "error", message: "State is scoped to a different tenant." };
   } else if (sessionRecord.expiresAt < now) {
-    result = { status: "error", message: "Test session expired. Start a new test." };
+    result = { status: "error", message: `Test session expired. ${RERUN_HINT}` };
   } else if (!code) {
     result = { status: "error", message: "Authorization code missing from redirect." };
   } else if (client.tokenEndpointAuthMethod !== "none" && !cookieSecret) {
-    result = { status: "error", message: "Client secret expired. Start a new test." };
+    result = { status: "error", message: `Client secret expired. ${RERUN_HINT}` };
   } else {
     const exchange = await exchangeAuthorizationCode({
       tokenUrl: urls.token,
@@ -197,9 +209,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
             </div>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
-            <Button asChild>
-              <Link href={`/admin/clients/${client.id}/test`}>Start another test</Link>
-            </Button>
+            <TestRunAgainButton clientId={client.id} scopes={rerunScopes} redirectUri={rerunRedirectUri} />
             <CopyField label="Test redirect" value={testRedirectUri} />
           </div>
         </CardContent>
