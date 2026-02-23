@@ -3,11 +3,15 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/server/env";
 
 export const MOCK_REAUTH_COOKIE = "mockauth_reauth_ok" as const;
+export const MOCK_FRESH_LOGIN_COOKIE = "mockauth_fresh_login" as const;
 export const buildReauthCookiePath = (apiResourceId: string) => `/r/${apiResourceId}/oidc`;
 
-const VERSION = "v1" as const;
+const enum CookieVersion {
+  REAUTH = "reauth-v1",
+  FRESH_LOGIN = "fresh-v1",
+}
 
-type ReauthClaims = {
+type CookieClaims = {
   tenantId: string;
   apiResourceId: string;
   clientId: string;
@@ -15,53 +19,46 @@ type ReauthClaims = {
   exp: number;
 };
 
-const encodePayload = (payload: ReauthClaims) => Buffer.from(JSON.stringify(payload)).toString("base64url");
-const decodePayload = (encoded: string): ReauthClaims => JSON.parse(Buffer.from(encoded, "base64url").toString());
+const encodePayload = (payload: CookieClaims) => Buffer.from(JSON.stringify(payload)).toString("base64url");
+const decodePayload = (encoded: string): CookieClaims => JSON.parse(Buffer.from(encoded, "base64url").toString());
 
 const sign = (encodedPayload: string) =>
   createHmac("sha256", env.NEXTAUTH_SECRET).update(encodedPayload).digest("base64url");
 
-export const createReauthCookieValue = (input: {
-  tenantId: string;
-  apiResourceId: string;
-  clientId: string;
-  sessionHash: string;
-  ttlSeconds: number;
-}) => {
-  if (input.ttlSeconds <= 0) {
+const createCookieValue = (
+  version: CookieVersion,
+  payload: Omit<CookieClaims, "exp">,
+  ttlSeconds: number,
+): string | null => {
+  if (ttlSeconds <= 0) {
     return null;
   }
-  const expiresAt = Math.floor(Date.now() / 1000) + input.ttlSeconds;
-  const payload: ReauthClaims = {
-    tenantId: input.tenantId,
-    apiResourceId: input.apiResourceId,
-    clientId: input.clientId,
-    sessionHash: input.sessionHash,
-    exp: expiresAt,
-  };
-  const encoded = encodePayload(payload);
-  const signature = sign(encoded);
-  return `${VERSION}.${encoded}.${signature}`;
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const claims: CookieClaims = { ...payload, exp: expiresAt };
+  const encoded = encodePayload(claims);
+  const signature = sign(`${version}.${encoded}`);
+  return `${version}.${encoded}.${signature}`;
 };
 
-export const verifyReauthCookieValue = (
+const verifyCookieValue = (
+  version: CookieVersion,
   value: string | undefined,
   expected: { tenantId: string; apiResourceId: string; clientId: string; sessionHash: string },
 ) => {
   if (!value) {
     return false;
   }
-  const [version, encoded, providedSignature] = value.split(".");
-  if (version !== VERSION || !encoded || !providedSignature) {
+  const [providedVersion, encoded, providedSignature] = value.split(".");
+  if (providedVersion !== version || !encoded || !providedSignature) {
     return false;
   }
-  const expectedSignature = sign(encoded);
+  const expectedSignature = sign(`${version}.${encoded}`);
   const providedBuffer = Buffer.from(providedSignature);
   const expectedBuffer = Buffer.from(expectedSignature);
   if (providedBuffer.length !== expectedBuffer.length || !timingSafeEqual(providedBuffer, expectedBuffer)) {
     return false;
   }
-  let payload: ReauthClaims;
+  let payload: CookieClaims;
   try {
     payload = decodePayload(encoded);
   } catch {
@@ -78,3 +75,40 @@ export const verifyReauthCookieValue = (
     payload.sessionHash === expected.sessionHash
   );
 };
+
+export const FRESH_LOGIN_COOKIE_TTL_SECONDS = 60;
+
+export const createReauthCookieValue = (input: {
+  tenantId: string;
+  apiResourceId: string;
+  clientId: string;
+  sessionHash: string;
+  ttlSeconds: number;
+}) => {
+  return createCookieValue(CookieVersion.REAUTH, input, input.ttlSeconds);
+};
+
+export const verifyReauthCookieValue = (
+  value: string | undefined,
+  expected: { tenantId: string; apiResourceId: string; clientId: string; sessionHash: string },
+) => {
+  return verifyCookieValue(CookieVersion.REAUTH, value, expected);
+};
+
+export const createFreshLoginCookieValue = (input: {
+  tenantId: string;
+  apiResourceId: string;
+  clientId: string;
+  sessionHash: string;
+}) => {
+  const value = createCookieValue(CookieVersion.FRESH_LOGIN, input, FRESH_LOGIN_COOKIE_TTL_SECONDS);
+  if (!value) {
+    throw new Error("Failed to create fresh-login cookie value");
+  }
+  return value;
+};
+
+export const verifyFreshLoginCookieValue = (
+  value: string | undefined,
+  expected: { tenantId: string; apiResourceId: string; clientId: string; sessionHash: string },
+) => verifyCookieValue(CookieVersion.FRESH_LOGIN, value, expected);

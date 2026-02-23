@@ -17,7 +17,14 @@ import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { resolveStableSubject } from "@/server/services/mock-identity-service";
 import { hashOpaqueToken } from "@/server/crypto/opaque-token";
-import { buildReauthCookiePath, createReauthCookieValue, MOCK_REAUTH_COOKIE } from "@/server/oidc/reauth-cookie";
+import {
+  buildReauthCookiePath,
+  createFreshLoginCookieValue,
+  createReauthCookieValue,
+  FRESH_LOGIN_COOKIE_TTL_SECONDS,
+  MOCK_FRESH_LOGIN_COOKIE,
+  MOCK_REAUTH_COOKIE,
+} from "@/server/oidc/reauth-cookie";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
@@ -114,9 +121,11 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       subject,
       emailVerifiedOverride,
     });
+    const sessionHash = hashOpaqueToken(token);
     const reauthTtlSeconds = client.reauthTtlSeconds ?? 0;
     const fallback = new URL(`/r/${resource.id}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
+    redirectUrl.searchParams.set("fresh_login", "1");
     const response = NextResponse.redirect(redirectUrl, 303);
     const isSecure = currentUrl.protocol === "https:";
     response.cookies.set({
@@ -132,7 +141,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       tenantId: tenant.id,
       apiResourceId: resource.id,
       clientId: client.clientId,
-      sessionHash: hashOpaqueToken(token),
+      sessionHash,
       ttlSeconds: reauthTtlSeconds,
     });
     response.cookies.set({
@@ -143,6 +152,21 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       sameSite: "lax",
       secure: isSecure,
       maxAge: reauthCookieValue ? reauthTtlSeconds : 0,
+    });
+    const freshLoginCookieValue = createFreshLoginCookieValue({
+      tenantId: tenant.id,
+      apiResourceId: resource.id,
+      clientId: client.clientId,
+      sessionHash,
+    });
+    response.cookies.set({
+      name: MOCK_FRESH_LOGIN_COOKIE,
+      value: freshLoginCookieValue,
+      path: buildReauthCookiePath(resource.id),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isSecure,
+      maxAge: FRESH_LOGIN_COOKIE_TTL_SECONDS,
     });
     return response;
   } catch (error) {

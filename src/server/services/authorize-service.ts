@@ -5,7 +5,7 @@ import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
-import { verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
+import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { hashOpaqueToken } from "@/server/crypto/opaque-token";
 
 type AuthorizeParams = {
@@ -21,7 +21,13 @@ type AuthorizeParams = {
   prompt?: string;
   sessionToken?: string;
   reauthCookie?: string;
+  freshLoginCookie?: string;
+  freshLoginRequested?: boolean;
 };
+
+type AuthorizeResult =
+  | { type: "login"; redirectTo: string; consumeFreshLoginCookie?: boolean }
+  | { type: "redirect"; redirectTo: string; consumeFreshLoginCookie?: boolean };
 
 const ensureScopes = (requested: string[], allowed: string[]) => {
   if (!requested.includes("openid")) {
@@ -34,7 +40,7 @@ const ensureScopes = (requested: string[], allowed: string[]) => {
   }
 };
 
-export const handleAuthorize = async (params: AuthorizeParams, origin: string, returnTo: string) => {
+export const handleAuthorize = async (params: AuthorizeParams, origin: string, returnTo: string): Promise<AuthorizeResult> => {
   if (params.responseType !== "code") {
     throw new DomainError("Only response_type=code is supported", { status: 400, code: "unsupported_response_type" });
   }
@@ -70,10 +76,24 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
         sessionHash: sessionTokenHash,
       }),
   );
-  const hasReusableLogin = Boolean(cookieValid && session && strategyAllowed);
+  const freshLoginCookieValid = Boolean(
+    params.freshLoginRequested &&
+      sessionTokenHash &&
+      params.freshLoginCookie &&
+      verifyFreshLoginCookieValue(params.freshLoginCookie, {
+        tenantId: tenant.id,
+        apiResourceId: resource.id,
+        clientId: client.clientId,
+        sessionHash: sessionTokenHash,
+      }),
+  );
 
-  const buildLoginRedirect = () => ({
-    type: "login" as const,
+  const reusedViaFreshLogin = Boolean(freshLoginCookieValid && session && strategyAllowed);
+  const reusedViaReauthCookie = Boolean(cookieValid && session && strategyAllowed);
+  const hasReusableLogin = reusedViaFreshLogin || reusedViaReauthCookie;
+
+  const buildLoginRedirect = (): AuthorizeResult => ({
+    type: "login",
     redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
   });
 
@@ -87,7 +107,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     if (params.state) {
       redirectUrl.searchParams.set("state", params.state);
     }
-    return { type: "redirect" as const, redirectTo: redirectUrl.toString() };
+    return { type: "redirect" as const, redirectTo: redirectUrl.toString(), consumeFreshLoginCookie: reusedViaFreshLogin };
   }
 
   if (!hasReusableLogin) {
@@ -120,5 +140,5 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     redirectUrl.searchParams.set("state", params.state);
   }
 
-  return { type: "redirect" as const, redirectTo: redirectUrl.toString() };
+  return { type: "redirect" as const, redirectTo: redirectUrl.toString(), consumeFreshLoginCookie: reusedViaFreshLogin };
 };
