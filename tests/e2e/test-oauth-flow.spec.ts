@@ -12,23 +12,21 @@ test.describe("Client Test OAuth", () => {
 
     const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
 
-    await page.getByTestId("test-oauth-link").click();
-    const warning = page.getByTestId("test-oauth-warning");
-    await expect(warning).toBeVisible();
-    await page.getByTestId("test-oauth-add-redirect").click();
-    await expect(warning).toHaveCount(0);
-
-    await expect(page.getByTestId("test-oauth-secret-info")).toContainText("stored client secret is applied automatically");
-    await page.getByTestId("test-oauth-start").click();
-
-    await page.waitForURL(/\/r\/.*\/oidc\/login/);
-    await page.getByRole("textbox", { name: /^Username/ }).fill("qa-user");
-    await page.getByRole("button", { name: "Continue" }).click();
-
-    await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+    await startOauthTest(page, clientId);
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
     await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
     await expect(page.getByTestId("test-oauth-decoded-id")).toContainText("\"sub\"");
+
+    const firstState = (await page.getByTestId("test-oauth-state").textContent())?.trim();
+    await page.getByTestId("test-oauth-run-again").click();
+    await completeProviderLogin(page, clientId);
+
+    const secondState = (await page.getByTestId("test-oauth-state").textContent())?.trim();
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
+    expect(firstState).toBeTruthy();
+    expect(secondState).toBeTruthy();
+    expect(secondState).not.toEqual(firstState);
   });
 
   test("surfaces authorization errors on the redirect page", async ({ page }) => {
@@ -42,6 +40,29 @@ test.describe("Client Test OAuth", () => {
     );
 
     await expect(page.getByTestId("test-oauth-error")).toContainText("access_denied: Denied");
+  });
+
+  test("prompts to rerun when the session is expired", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+
+    await startOauthTest(page, clientId);
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    const expiredUrl = page.url();
+
+    await page.goto(`/admin/clients/${clientId}/test`);
+    await page.goto(expiredUrl);
+
+    const errorAlert = page.getByTestId("test-oauth-error");
+    await expect(errorAlert).toContainText("Test session expired or already used.");
+    await expect(errorAlert).toContainText("Run again");
+
+    await page.getByTestId("test-oauth-run-again").click();
+    await completeProviderLogin(page, clientId);
+
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 });
 
@@ -62,4 +83,29 @@ const selectTenant = async (page: Page, tenantId: string) => {
   const option = page.getByTestId(`tenant-option-${tenantId}`);
   await expect(option).toBeVisible();
   await option.click();
+};
+
+const startOauthTest = async (page: Page, clientId: string) => {
+  await page.getByTestId("test-oauth-link").click();
+  await addTestRedirectIfNeeded(page);
+  await expect(page.getByTestId("test-oauth-secret-info")).toContainText("stored client secret is applied automatically");
+  await page.getByTestId("test-oauth-start").click();
+  await completeProviderLogin(page, clientId);
+};
+
+const addTestRedirectIfNeeded = async (page: Page) => {
+  const warning = page.getByTestId("test-oauth-warning");
+  if ((await warning.count()) === 0) {
+    return;
+  }
+  await expect(warning).toBeVisible();
+  await page.getByTestId("test-oauth-add-redirect").click();
+  await expect(warning).toHaveCount(0);
+};
+
+const completeProviderLogin = async (page: Page, clientId: string) => {
+  await page.waitForURL(/\/r\/.*\/oidc\/login/);
+  await page.getByRole("textbox", { name: /^Username/ }).fill("qa-user");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
 };

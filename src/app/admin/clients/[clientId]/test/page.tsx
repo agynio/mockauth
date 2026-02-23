@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { TestOAuthConfigurator } from "@/app/admin/clients/[clientId]/test/test-oauth-configurator";
+import { DEFAULT_TEST_SCOPES } from "@/app/admin/clients/[clientId]/test/constants";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
@@ -13,8 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type PageParams = Promise<{ clientId: string }>;
-
-const DEFAULT_SCOPES = "openid profile email";
 
 export default async function ClientTestOAuthPage({ params }: { params: PageParams }) {
   const session = await getServerSession(authOptions);
@@ -73,7 +72,7 @@ export default async function ClientTestOAuthPage({ params }: { params: PagePara
           </p>
           <TestOAuthConfigurator
             clientId={client.id}
-            defaultScopes={DEFAULT_SCOPES}
+            defaultScopes={DEFAULT_TEST_SCOPES}
             defaultRedirectUri={testRedirectUri}
             canManageRedirects={canManageRedirects}
             redirectAllowed={redirectAllowed}
