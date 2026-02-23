@@ -175,6 +175,25 @@ test.describe("Client Test OAuth", () => {
     }
   });
 
+  test("fresh login handshake completes authorize once when TTL is zero", async ({ page }) => {
+    const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
+    await authenticate(page, sessionToken);
+
+    const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
+    await setClientReauthTtl(page, clientId, 0);
+
+    await startOauthTest(page, clientId);
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+    await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
+
+    await page.getByRole("link", { name: "← Back to test config" }).click();
+    await expect(page).toHaveURL(new RegExp(`/admin/clients/${clientId}/test`));
+
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+    await page.goto(authorizationUrl);
+    await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+  });
+
   test("surfaces authorization errors on the redirect page", async ({ page }) => {
     const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
     await authenticate(page, sessionToken);

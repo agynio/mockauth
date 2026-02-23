@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { toResponse } from "@/server/errors";
@@ -6,7 +6,7 @@ import { handleAuthorize } from "@/server/services/authorize-service";
 import { MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
-import { MOCK_REAUTH_COOKIE } from "@/server/oidc/reauth-cookie";
+import { buildReauthCookiePath, MOCK_FRESH_LOGIN_COOKIE, MOCK_REAUTH_COOKIE } from "@/server/oidc/reauth-cookie";
 
 const authorizeSchema = z.object({
   client_id: z.string().min(1),
@@ -18,6 +18,7 @@ const authorizeSchema = z.object({
   prompt: z.enum(["login", "none"]).optional(),
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.string().default("S256"),
+  fresh_login: z.string().optional(),
 });
 
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
@@ -33,6 +34,8 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
     const { apiResourceId } = await context.params;
     const sessionToken = request.cookies.get(MOCK_SESSION_COOKIE)?.value;
     const reauthCookie = request.cookies.get(MOCK_REAUTH_COOKIE)?.value;
+    const freshLoginCookie = request.cookies.get(MOCK_FRESH_LOGIN_COOKIE)?.value;
+    const freshLoginRequested = validation.data.fresh_login === "1";
     const result = await handleAuthorize(
       {
         apiResourceId,
@@ -47,16 +50,42 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
         prompt: validation.data.prompt,
         sessionToken,
         reauthCookie,
+        freshLoginCookie,
+        freshLoginRequested,
       },
       origin,
       normalizedUrl.toString(),
     );
 
     if (result.type === "login") {
-      return Response.redirect(new URL(result.redirectTo, origin));
+      const response = NextResponse.redirect(new URL(result.redirectTo, origin));
+      if (result.consumeFreshLoginCookie) {
+        response.cookies.set({
+          name: MOCK_FRESH_LOGIN_COOKIE,
+          value: "",
+          path: buildReauthCookiePath(apiResourceId),
+          httpOnly: true,
+          sameSite: "lax",
+          secure: normalizedUrl.protocol === "https:",
+          maxAge: 0,
+        });
+      }
+      return response;
     }
 
-    return Response.redirect(result.redirectTo);
+    const response = NextResponse.redirect(result.redirectTo);
+    if (result.consumeFreshLoginCookie) {
+      response.cookies.set({
+        name: MOCK_FRESH_LOGIN_COOKIE,
+        value: "",
+        path: buildReauthCookiePath(apiResourceId),
+        httpOnly: true,
+        sameSite: "lax",
+        secure: normalizedUrl.protocol === "https:",
+        maxAge: 0,
+      });
+    }
+    return response;
   } catch (error) {
     return toResponse(error);
   }

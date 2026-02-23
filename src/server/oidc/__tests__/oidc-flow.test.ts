@@ -7,7 +7,7 @@ import { decodeJwt } from "jose";
 import { prisma } from "@/server/db/client";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { hashOpaqueToken } from "@/server/crypto/opaque-token";
-import { createReauthCookieValue } from "@/server/oidc/reauth-cookie";
+import { createFreshLoginCookieValue, createReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { handleAuthorize } from "@/server/services/authorize-service";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { createSession, clearSession } from "@/server/services/mock-session-service";
@@ -41,6 +41,14 @@ describe("OIDC flow", () => {
     }
     return cookie;
   };
+
+  const buildFreshLoginCookie = (token: string) =>
+    createFreshLoginCookieValue({
+      tenantId,
+      apiResourceId,
+      clientId: CLIENT_ID,
+      sessionHash: hashOpaqueToken(token),
+    });
 
   beforeAll(async () => {
     const tenant = await prisma.tenant.findFirstOrThrow({ where: { id: DEFAULT_TENANT_ID }, include: { mockUsers: true } });
@@ -171,6 +179,68 @@ describe("OIDC flow", () => {
     expect(authorize.type).toBe("login");
     const decodedReturn = decodeURIComponent(authorize.redirectTo.split("return_to=")[1]!);
     expect(decodedReturn).toBe(forgedReturnTo.toString());
+  });
+
+  it("completes authorize immediately after a fresh login even when TTL is zero", async () => {
+    await prisma.client.update({ where: { id: clientInternalId }, data: { reauthTtlSeconds: 0 } });
+    try {
+      const challenge = computeS256Challenge(codeVerifier);
+      const authorize = await handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid profile",
+          state: "fresh-login",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: undefined,
+          freshLoginCookie: buildFreshLoginCookie(sessionToken),
+          freshLoginRequested: true,
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}&fresh_login=1`,
+      );
+
+      expect(authorize.type).toBe("redirect");
+      expect(authorize.consumeFreshLoginCookie).toBe(true);
+      const redirected = new URL(authorize.redirectTo);
+      expect(redirected.searchParams.get("code")).toBeTruthy();
+      expect(redirected.searchParams.get("state")).toBe("fresh-login");
+    } finally {
+      await prisma.client.update({ where: { id: clientInternalId }, data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS } });
+    }
+  });
+
+  it("ignores forged fresh_login flags when the cookie is missing", async () => {
+    await prisma.client.update({ where: { id: clientInternalId }, data: { reauthTtlSeconds: 0 } });
+    try {
+      const challenge = computeS256Challenge(codeVerifier);
+      const forgedReturnTo = `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}&fresh_login=1`;
+      const authorize = await handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid profile",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: undefined,
+          freshLoginRequested: true,
+        },
+        "https://mockauth.test",
+        forgedReturnTo,
+      );
+
+      expect(authorize.type).toBe("login");
+      expect(authorize.consumeFreshLoginCookie).toBeUndefined();
+    } finally {
+      await prisma.client.update({ where: { id: clientInternalId }, data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS } });
+    }
   });
 
   it("redirects with login_required when prompt=none", async () => {
