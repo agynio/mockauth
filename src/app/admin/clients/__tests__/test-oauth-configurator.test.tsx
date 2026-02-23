@@ -76,6 +76,7 @@ describe("TestOAuthConfigurator", () => {
         scopes: "openid profile",
         redirectUri: "https://admin.example.test/callback",
         clientSecret: "override-secret",
+        promptLogin: false,
       });
     });
 
@@ -171,6 +172,24 @@ describe("TestOAuthConfigurator", () => {
         variant: "destructive",
         title: "Unable to generate URL",
         description: "Redirect missing",
+      });
+    });
+  });
+
+  it("sends promptLogin when the toggle is enabled", async () => {
+    const user = userEvent.setup();
+    render(<TestOAuthConfigurator {...defaultProps} redirectAllowed />);
+
+    await user.click(screen.getByTestId("test-oauth-prompt-login"));
+    await user.click(screen.getByTestId("test-oauth-start"));
+
+    await waitFor(() => {
+      expect(mockPrepare).toHaveBeenCalledWith({
+        clientId: "client_123",
+        scopes: "openid profile",
+        redirectUri: "https://admin.example.test/callback",
+        clientSecret: undefined,
+        promptLogin: true,
       });
     });
   });

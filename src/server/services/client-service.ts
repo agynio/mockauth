@@ -158,6 +158,10 @@ export const updateClientAuthStrategies = async (clientId: string, strategies: C
   return prisma.client.update({ where: { id: clientId }, data: { authStrategies: strategies } });
 };
 
+export const updateClientReauthTtl = async (clientId: string, reauthTtlSeconds: number) => {
+  return prisma.client.update({ where: { id: clientId }, data: { reauthTtlSeconds } });
+};
+
 export const getConfidentialClientSecret = async (clientId: string): Promise<string | null> => {
   const client = await prisma.client.findUnique({
     where: { id: clientId },

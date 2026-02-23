@@ -5,6 +5,8 @@ import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
+import { hashOpaqueToken } from "@/server/crypto/opaque-token";
 
 type AuthorizeParams = {
   apiResourceId: string;
@@ -18,7 +20,7 @@ type AuthorizeParams = {
   codeChallengeMethod: string;
   prompt?: string;
   sessionToken?: string;
-  reauthenticated?: boolean;
+  reauthCookie?: string;
 };
 
 const ensureScopes = (requested: string[], allowed: string[]) => {
@@ -50,8 +52,36 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
 
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
+  const strategies = parseClientAuthStrategies(client.authStrategies);
+  const session = params.sessionToken ? await getSessionUser(tenant.id, params.sessionToken) : null;
+  const strategyAllowed = session
+    ? strategies[fromPrismaLoginStrategy(session.loginStrategy)]?.enabled ?? false
+    : false;
+  const reauthTtlSeconds = client.reauthTtlSeconds ?? 0;
+  const sessionTokenHash = params.sessionToken ? hashOpaqueToken(params.sessionToken) : null;
+  const cookieValid = Boolean(
+    reauthTtlSeconds > 0 &&
+      sessionTokenHash &&
+      params.reauthCookie &&
+      verifyReauthCookieValue(params.reauthCookie, {
+        tenantId: tenant.id,
+        apiResourceId: resource.id,
+        clientId: client.clientId,
+        sessionHash: sessionTokenHash,
+      }),
+  );
+  const hasReusableLogin = Boolean(cookieValid && session && strategyAllowed);
 
-  if (params.prompt === "none") {
+  const buildLoginRedirect = () => ({
+    type: "login" as const,
+    redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
+  });
+
+  if (params.prompt === "login") {
+    return buildLoginRedirect();
+  }
+
+  if (params.prompt === "none" && !hasReusableLogin) {
     const redirectUrl = new URL(redirect);
     redirectUrl.searchParams.set("error", "login_required");
     if (params.state) {
@@ -60,20 +90,12 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     return { type: "redirect" as const, redirectTo: redirectUrl.toString() };
   }
 
-  const strategies = parseClientAuthStrategies(client.authStrategies);
-  const session = params.reauthenticated ? await getSessionUser(tenant.id, params.sessionToken) : null;
-  const strategyAllowed = session
-    ? strategies[fromPrismaLoginStrategy(session.loginStrategy)]?.enabled ?? false
-    : false;
-  const mustPrompt = params.prompt === "login" && !params.reauthenticated;
-  const shouldLogin = !params.reauthenticated || mustPrompt || !session || !strategyAllowed;
+  if (!hasReusableLogin) {
+    return buildLoginRedirect();
+  }
 
-  if (shouldLogin) {
-    const loginReturnUrl = new URL(returnTo);
-    return {
-      type: "login" as const,
-      redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(loginReturnUrl.toString())}`,
-    };
+  if (!session) {
+    throw new Error("Session is required when reusing login");
   }
 
   const code = await createAuthorizationCode({

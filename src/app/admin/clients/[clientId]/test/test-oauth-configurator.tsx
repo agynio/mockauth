@@ -11,7 +11,7 @@ import { prepareClientOauthTestAction, addRedirectUriAction } from "@/app/admin/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -29,6 +29,7 @@ const schema = z.object({
       }
     }, "Enter an absolute http(s) URL"),
   clientSecret: z.string().optional(),
+  enforcePromptLogin: z.boolean().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -65,6 +66,7 @@ export function TestOAuthConfigurator({
       scopes: defaultScopes,
       redirectUri: defaultRedirectUri,
       clientSecret: defaultClientSecret ?? "",
+      enforcePromptLogin: false,
     },
   });
   const [secretCopied, setSecretCopied] = useState(false);
@@ -114,6 +116,7 @@ export function TestOAuthConfigurator({
         scopes: values.scopes,
         redirectUri: values.redirectUri,
         clientSecret: values.clientSecret?.trim() || undefined,
+        promptLogin: values.enforcePromptLogin ?? false,
       });
       if (result.error || !result.data) {
         toast({ variant: "destructive", title: "Unable to generate URL", description: result.error });
@@ -202,6 +205,32 @@ export function TestOAuthConfigurator({
                   <Input {...field} data-testid="test-oauth-redirect-input" />
                 </FormControl>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="enforcePromptLogin"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-start gap-3 rounded-md border border-dashed p-3">
+                  <FormControl>
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border border-muted"
+                      checked={field.value ?? false}
+                      onChange={(event) => field.onChange(event.target.checked)}
+                      disabled={pending}
+                      data-testid="test-oauth-prompt-login"
+                    />
+                  </FormControl>
+                  <div>
+                    <FormLabel className="mb-1 block">Enforce sign-in (prompt=login)</FormLabel>
+                    <FormDescription>
+                      Always show the credential screen, even when the re-authentication cookie is valid.
+                    </FormDescription>
+                  </div>
+                </div>
               </FormItem>
             )}
           />

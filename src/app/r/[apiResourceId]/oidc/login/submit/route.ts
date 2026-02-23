@@ -16,7 +16,8 @@ import {
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { resolveStableSubject } from "@/server/services/mock-identity-service";
-import { buildReauthCookiePath, MOCK_REAUTH_COOKIE, REAUTH_COOKIE_TTL_SECONDS } from "@/server/oidc/reauth-cookie";
+import { hashOpaqueToken } from "@/server/crypto/opaque-token";
+import { buildReauthCookiePath, createReauthCookieValue, MOCK_REAUTH_COOKIE } from "@/server/oidc/reauth-cookie";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       subject,
       emailVerifiedOverride,
     });
+    const reauthTtlSeconds = client.reauthTtlSeconds ?? 0;
     const fallback = new URL(`/r/${resource.id}/oidc/authorize`, currentUrl.origin);
     const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
     const response = NextResponse.redirect(redirectUrl, 303);
@@ -126,14 +128,21 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       secure: isSecure,
       maxAge: 60 * 60 * 12,
     });
+    const reauthCookieValue = createReauthCookieValue({
+      tenantId: tenant.id,
+      apiResourceId: resource.id,
+      clientId: client.clientId,
+      sessionHash: hashOpaqueToken(token),
+      ttlSeconds: reauthTtlSeconds,
+    });
     response.cookies.set({
       name: MOCK_REAUTH_COOKIE,
-      value: token,
+      value: reauthCookieValue ?? "",
       path: buildReauthCookiePath(resource.id),
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure,
-      maxAge: REAUTH_COOKIE_TTL_SECONDS,
+      maxAge: reauthCookieValue ? reauthTtlSeconds : 0,
     });
     return response;
   } catch (error) {
