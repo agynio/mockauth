@@ -3,6 +3,7 @@ import { prisma } from "@/server/db/client";
 type CreateSessionInput = {
   id: string;
   clientId: string;
+  adminUserId: string;
   tenantId: string;
   redirectUri: string;
   scopes: string;
@@ -12,11 +13,12 @@ type CreateSessionInput = {
 };
 
 export const createOauthTestSession = async (input: CreateSessionInput) => {
-  const { id, clientId, tenantId, redirectUri, scopes, codeVerifier, nonce, expiresAt } = input;
+  const { id, clientId, adminUserId, tenantId, redirectUri, scopes, codeVerifier, nonce, expiresAt } = input;
   await prisma.oAuthTestSession.create({
     data: {
       id,
       clientId,
+      adminUserId,
       tenantId,
       redirectUri,
       scopes,
@@ -36,8 +38,8 @@ export const consumeOauthTestSession = async (id: string) => {
   return session;
 };
 
-export const resetOauthTestSessionsForClient = async (clientId: string): Promise<string[]> => {
-  const sessions = await prisma.oAuthTestSession.findMany({ where: { clientId }, select: { id: true } });
+export const resetOauthTestSessionsForClient = async (clientId: string, adminUserId: string): Promise<string[]> => {
+  const sessions = await prisma.oAuthTestSession.findMany({ where: { clientId, adminUserId }, select: { id: true } });
   if (sessions.length === 0) {
     return [];
   }

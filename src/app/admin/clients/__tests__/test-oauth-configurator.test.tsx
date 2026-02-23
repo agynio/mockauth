@@ -112,7 +112,10 @@ describe("TestOAuthConfigurator", () => {
   it("copies the client secret", async () => {
     const originalClipboard = navigator.clipboard;
     const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } as Navigator["clipboard"] });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } as unknown as Navigator["clipboard"],
+    });
     const user = userEvent.setup();
     render(
       <TestOAuthConfigurator
@@ -136,7 +139,10 @@ describe("TestOAuthConfigurator", () => {
   it("copies the authorization URL", async () => {
     const originalClipboard = navigator.clipboard;
     const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } as Navigator["clipboard"] });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } as unknown as Navigator["clipboard"],
+    });
     const user = userEvent.setup();
     render(<TestOAuthConfigurator {...defaultProps} redirectAllowed />);
 

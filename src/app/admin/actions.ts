@@ -329,7 +329,7 @@ export const prepareClientOauthTestAction = async (
 
     await assertTenantMembership(adminId, client.tenantId);
 
-    const clearedStates = await resetOauthTestSessionsForClient(client.id);
+    const clearedStates = await resetOauthTestSessionsForClient(client.id, adminId);
     if (clearedStates.length && client.tokenEndpointAuthMethod !== "none") {
       await Promise.all(clearedStates.map((stateId) => clearOauthTestSecretCookie(client.id, stateId)));
     }
@@ -371,6 +371,7 @@ export const prepareClientOauthTestAction = async (
     await createOauthTestSession({
       id: state,
       clientId: client.id,
+      adminUserId: adminId,
       tenantId: client.tenantId,
       redirectUri,
       scopes: normalizedScopes,

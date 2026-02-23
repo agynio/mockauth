@@ -133,10 +133,15 @@ describe("prepareClientOauthTestAction", () => {
       scopes: "openid profile",
     });
 
-    expect(mockResetSessions).toHaveBeenCalledWith("client_internal");
+    expect(mockResetSessions).toHaveBeenCalledWith("client_internal", "admin_1");
     expect(mockClearSecretCookie).toHaveBeenCalledWith("client_internal", "stale_state");
     expect(mockCreateSession).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "new_state", clientId: "client_internal", scopes: "openid profile" }),
+      expect.objectContaining({
+        id: "new_state",
+        clientId: "client_internal",
+        adminUserId: "admin_1",
+        scopes: "openid profile",
+      }),
     );
     expect(mockSetSecretCookie).toHaveBeenCalledWith("client_internal", "new_state", "stored-secret");
     expect(result?.data?.authorizationUrl).toContain("state=new_state");
