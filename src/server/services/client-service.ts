@@ -9,6 +9,7 @@ import { DomainError } from "@/server/errors";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
+import { isSupportedScope, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 
 export const getClientForTenant = async (tenantId: string, clientId: string) => {
   const client = await prisma.client.findFirst({
@@ -25,12 +26,22 @@ export const getClientForTenant = async (tenantId: string, clientId: string) => 
 
 export const createClient = async (
   tenantId: string,
-  data: { name: string; clientType: "PUBLIC" | "CONFIDENTIAL"; redirectUris?: string[] },
+  data: {
+    name: string;
+    clientType: "PUBLIC" | "CONFIDENTIAL";
+    redirectUris?: string[];
+    allowedScopes?: string[];
+  },
 ) => {
   const clientId = `client_${nanoid(16)}`;
   let clientSecret: string | null = null;
   let clientSecretHash: string | null = null;
   let clientSecretEncrypted: string | null = null;
+  const allowedScopes = data.allowedScopes ? normalizeScopes(data.allowedScopes) : Array.from(SUPPORTED_SCOPES);
+
+  if (!allowedScopes.includes("openid")) {
+    throw new Error("Allowed scopes must include openid");
+  }
 
   if (data.clientType === "CONFIDENTIAL") {
     clientSecret = generateOpaqueToken(24);
@@ -49,6 +60,7 @@ export const createClient = async (
         clientSecretEncrypted,
         tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
+        allowedScopes,
       },
     });
 
@@ -156,6 +168,19 @@ export const updateClientApiResource = async (clientId: string, apiResourceId: s
 
 export const updateClientAuthStrategies = async (clientId: string, strategies: ClientAuthStrategies) => {
   return prisma.client.update({ where: { id: clientId }, data: { authStrategies: strategies } });
+};
+
+export const updateClientAllowedScopes = async (clientId: string, scopes: string[]) => {
+  const normalized = normalizeScopes(scopes);
+  if (!normalized.includes("openid")) {
+    throw new Error("Allowed scopes must include openid");
+  }
+  for (const scope of normalized) {
+    if (!isSupportedScope(scope)) {
+      throw new Error(`Unsupported scope configured: ${scope}`);
+    }
+  }
+  return prisma.client.update({ where: { id: clientId }, data: { allowedScopes: normalized } });
 };
 
 export const updateClientReauthTtl = async (clientId: string, reauthTtlSeconds: number) => {

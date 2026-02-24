@@ -5,6 +5,7 @@ import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { isSupportedScope, normalizeScopes } from "@/server/oidc/scopes";
 import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { hashOpaqueToken } from "@/server/crypto/opaque-token";
 
@@ -29,14 +30,25 @@ type AuthorizeResult =
   | { type: "login"; redirectTo: string; consumeFreshLoginCookie?: boolean }
   | { type: "redirect"; redirectTo: string; consumeFreshLoginCookie?: boolean };
 
-const ensureScopes = (requested: string[], allowed: string[]) => {
+const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
+  const requested = normalizeScopes(requestedScopes);
+  const allowed = new Set(normalizeScopes(allowedScopes));
+
   if (!requested.includes("openid")) {
     throw new DomainError("scope must include openid", { status: 400, code: "invalid_scope" });
   }
 
-  const invalid = requested.filter((scope) => !allowed.includes(scope));
-  if (invalid.length > 0) {
-    throw new DomainError(`Unsupported scopes: ${invalid.join(", ")}`, { status: 400, code: "invalid_scope" });
+  const unsupported = requested.filter((scope) => !isSupportedScope(scope));
+  if (unsupported.length > 0) {
+    throw new DomainError(`Unsupported scopes: ${unsupported.join(", ")}`, { status: 400, code: "invalid_scope" });
+  }
+
+  const notAllowed = requested.filter((scope) => !allowed.has(scope));
+  if (notAllowed.length > 0) {
+    throw new DomainError(`Client does not allow scopes: ${notAllowed.join(", ")}`, {
+      status: 400,
+      code: "invalid_scope",
+    });
   }
 };
 

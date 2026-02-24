@@ -20,6 +20,7 @@ import {
   updateClientApiResource,
   updateClientAuthStrategies,
   updateClientReauthTtl,
+  updateClientAllowedScopes,
   getConfidentialClientSecret,
 } from "@/server/services/client-service";
 import { rotateKey } from "@/server/services/key-service";
@@ -50,6 +51,7 @@ import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/server/services/oauth-test-service";
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
+import { isSupportedScope, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -62,6 +64,7 @@ const clientSchema = z.object({
   name: z.string().min(2),
   type: z.enum(["PUBLIC", "CONFIDENTIAL"]),
   redirects: z.array(z.string().min(1)).optional(),
+  scopes: z.array(z.string().min(1)).optional(),
 });
 
 const keySchema = z.object({ tenantId: z.string().min(1) });
@@ -102,6 +105,10 @@ const setDefaultResourceSchema = z.object({ tenantId: z.string().min(1), apiReso
 const updateClientIssuerSchema = z.object({
   clientId: z.string().min(1),
   apiResourceId: z.union([z.literal("default"), z.string().min(1)]),
+});
+const updateClientScopesSchema = z.object({
+  clientId: z.string().min(1),
+  scopes: z.array(z.string().min(1)),
 });
 const subjectSourceSchema = z.enum(["entered", "generated_uuid"]);
 const emailVerifiedModeSchema = z.enum(["true", "false", "user_choice"]);
@@ -189,10 +196,20 @@ export const createClientAction = async (
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
     const redirectEntries = parsed.redirects?.filter(Boolean);
+    const normalizedScopes = parsed.scopes ? normalizeScopes(parsed.scopes) : Array.from(SUPPORTED_SCOPES);
+    if (!normalizedScopes.includes("openid")) {
+      return { error: "Scopes must include openid" };
+    }
+    const unsupported = normalizedScopes.filter((scope) => !isSupportedScope(scope));
+    if (unsupported.length > 0) {
+      return { error: `Unsupported scopes: ${unsupported.join(", ")}` };
+    }
+    const canonicalScopes = SUPPORTED_SCOPES.filter((scope) => normalizedScopes.includes(scope));
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
       clientType: parsed.type,
       redirectUris: redirectEntries,
+      allowedScopes: canonicalScopes,
     });
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
@@ -475,6 +492,36 @@ export const updateClientIssuerAction = async (
   } catch (error) {
     console.error(error);
     return { error: "Unable to update issuer" };
+  }
+};
+
+export const updateClientScopesAction = async (
+  input: z.infer<typeof updateClientScopesSchema>,
+): Promise<ActionState<{ allowedScopes: string[] }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateClientScopesSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+
+    const normalized = normalizeScopes(parsed.scopes);
+    if (!normalized.includes("openid")) {
+      return { error: "Scopes must include openid" };
+    }
+    const unsupported = normalized.filter((scope) => !isSupportedScope(scope));
+    if (unsupported.length > 0) {
+      return { error: `Unsupported scopes: ${unsupported.join(", ")}` };
+    }
+
+    const canonical = SUPPORTED_SCOPES.filter((scope) => normalized.includes(scope));
+    await updateClientAllowedScopes(client.id, canonical);
+    revalidatePath(clientPath(client.id));
+    return { success: "Scopes updated", data: { allowedScopes: canonical } };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update scopes" };
   }
 };
 

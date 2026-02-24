@@ -27,6 +27,7 @@ describe("OIDC flow", () => {
   let clientInternalId: string;
   let originalStrategies: unknown;
   let originalReauthTtlSeconds: number;
+  let originalAllowedScopes: string[];
 
   const buildReauthCookie = (token: string, ttlSeconds = DEFAULT_REAUTH_TTL_SECONDS) => {
     const cookie = createReauthCookieValue({
@@ -64,10 +65,20 @@ describe("OIDC flow", () => {
     clientInternalId = client.id;
     originalStrategies = client.authStrategies;
     originalReauthTtlSeconds = client.reauthTtlSeconds;
+    originalAllowedScopes = client.allowedScopes;
     await prisma.client.update({
       where: { id: client.id },
       data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS },
     });
+  });
+
+  beforeEach(async () => {
+    if (clientInternalId) {
+      await prisma.client.update({
+        where: { id: clientInternalId },
+        data: { allowedScopes: originalAllowedScopes },
+      });
+    }
   });
 
   afterAll(async () => {
@@ -81,6 +92,7 @@ describe("OIDC flow", () => {
         data: {
           ...(originalStrategies ? { authStrategies: originalStrategies } : {}),
           ...(typeof originalReauthTtlSeconds === "number" ? { reauthTtlSeconds: originalReauthTtlSeconds } : {}),
+          ...(originalAllowedScopes ? { allowedScopes: originalAllowedScopes } : {}),
         },
       });
     }
@@ -152,6 +164,73 @@ describe("OIDC flow", () => {
     expect(authorize.type).toBe("login");
     expect(authorize.redirectTo).toContain("return_to=");
     expect(decodeURIComponent(authorize.redirectTo.split("return_to=")[1]!)).toBe(returnTo);
+  });
+
+  it("rejects authorize requests that omit openid", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    await expect(
+      handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "profile email",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: buildReauthCookie(sessionToken),
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+      ),
+    ).rejects.toThrowError("scope must include openid");
+  });
+
+  it("rejects authorize requests with unsupported scopes", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    await expect(
+      handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid profile offline_access",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: buildReauthCookie(sessionToken),
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+      ),
+    ).rejects.toThrowError("Unsupported scopes: offline_access");
+  });
+
+  it("rejects scopes disabled for the client", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: { allowedScopes: ["openid"] },
+    });
+    const challenge = computeS256Challenge(codeVerifier);
+    await expect(
+      handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid profile",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: buildReauthCookie(sessionToken),
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+      ),
+    ).rejects.toThrowError("Client does not allow scopes: profile");
   });
 
   it("does not trust reauth query parameters without the cookie handshake", async () => {

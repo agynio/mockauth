@@ -135,6 +135,16 @@ updates). CI runs this script automatically before executing E2E specs.
 - All subject decisions are stored on the session + authorization code so every token and `userinfo` response reflects
   the strategy that was used during login.
 
+### Per-client scopes
+
+- Mockauth currently supports three OIDC scopes: `openid`, `profile`, and `email`. `openid` is mandatory and cannot be
+  removed.
+- Every client defaults to all three scopes. The Admin UI exposes a **Scopes** card on each client so QA can toggle
+  `profile` and `email` independently; `openid` is always locked on.
+- Discovery advertises the server-wide set via `scopes_supported`. The authorize endpoint additionally enforces each
+  client's allowed scopes, returning `invalid_scope` if a request is missing `openid`, includes unsupported scopes, or
+  asks for scopes that were disabled for that client.
+
 ### Breaking Change — Stage 2 (resource-scoped issuers)
 
 - Tenant slugs have been removed from OIDC URLs. Issuers are now scoped purely by API resource.
