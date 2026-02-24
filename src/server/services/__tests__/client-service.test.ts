@@ -59,6 +59,17 @@ describe("client service", () => {
     expect(stored?.allowedScopes).toEqual(["openid", "email"]);
   });
 
+  it("rejects unsupported scopes", async () => {
+    const tenant = await createTenant();
+    await expect(
+      createClient(tenant.id, {
+        name: "Bad Scope",
+        clientType: "PUBLIC",
+        allowedScopes: ["openid", "offline_access"],
+      }),
+    ).rejects.toThrowError("Unsupported scope configured: offline_access");
+  });
+
   it("fetches a client scoped to a tenant", async () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
