@@ -303,7 +303,11 @@ const setClientReauthTtl = async (page: Page, clientId: string, ttlSeconds: numb
 const openClientDetail = async (page: Page, tenantId: string, clientName: string) => {
   await page.goto("/admin/clients");
   await selectTenant(page, tenantId);
+  const searchBox = page.getByRole("textbox", { name: "Search clients" });
+  await expect(searchBox).toBeVisible();
+  await searchBox.fill(clientName);
   const row = page.getByRole("row", { name: new RegExp(clientName, "i") }).first();
+  await expect(row).toBeVisible();
   await row.getByRole("link", { name: "Details →" }).click();
   await expect(page).toHaveURL(/\/admin\/clients\//);
   const currentUrl = new URL(page.url());
