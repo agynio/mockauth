@@ -102,14 +102,14 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
 
   const reusedViaFreshLogin = Boolean(freshLoginCookieValid && session && strategyAllowed);
   const reusedViaReauthCookie = Boolean(cookieValid && session && strategyAllowed);
-  const hasReusableLogin = reusedViaFreshLogin || reusedViaReauthCookie;
+  const hasReusableLogin = params.prompt === "login" ? reusedViaFreshLogin : reusedViaFreshLogin || reusedViaReauthCookie;
 
   const buildLoginRedirect = (): AuthorizeResult => ({
     type: "login",
     redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
   });
 
-  if (params.prompt === "login") {
+  if (params.prompt === "login" && !reusedViaFreshLogin) {
     return buildLoginRedirect();
   }
 

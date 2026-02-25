@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
     );
 
     if (result.type === "login") {
-      const response = NextResponse.redirect(new URL(result.redirectTo, origin));
+      const response = NextResponse.redirect(new URL(result.redirectTo, origin), { status: 302 });
       if (result.consumeFreshLoginCookie) {
         response.cookies.set({
           name: MOCK_FRESH_LOGIN_COOKIE,
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
       return response;
     }
 
-    const response = NextResponse.redirect(result.redirectTo);
+    const response = NextResponse.redirect(result.redirectTo, { status: 302 });
     if (result.consumeFreshLoginCookie) {
       response.cookies.set({
         name: MOCK_FRESH_LOGIN_COOKIE,
