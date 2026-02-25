@@ -308,7 +308,11 @@ const openClientDetail = async (page: Page, tenantId: string, clientName: string
   await searchBox.fill(clientName);
   const row = page.getByRole("row", { name: new RegExp(clientName, "i") }).first();
   await expect(row).toBeVisible();
-  await row.getByRole("link", { name: "Details →" }).click();
+  const link = row.getByRole("link", { name: "Details →" });
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  expect(href).toBeTruthy();
+  await page.goto(href!, { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/admin\/clients\//);
   const currentUrl = new URL(page.url());
   const segments = currentUrl.pathname.split("/");

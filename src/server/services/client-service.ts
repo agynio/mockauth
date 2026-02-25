@@ -9,19 +9,18 @@ import { DomainError } from "@/server/errors";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
-import { isSupportedScope, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 
 const canonicalizeAllowedScopes = (scopes?: string[]) => {
-  const normalized = scopes ? normalizeScopes(scopes) : Array.from(SUPPORTED_SCOPES);
+  const normalized = scopes && scopes.length > 0 ? normalizeScopes(scopes) : Array.from(SUPPORTED_SCOPES);
   if (!normalized.includes("openid")) {
     throw new Error("Allowed scopes must include openid");
   }
-  for (const scope of normalized) {
-    if (!isSupportedScope(scope)) {
-      throw new Error(`Unsupported scope configured: ${scope}`);
-    }
+  const invalid = normalized.filter((scope) => !isValidScopeValue(scope));
+  if (invalid.length > 0) {
+    throw new Error(`Invalid scope format: ${invalid.join(", ")}`);
   }
-  return SUPPORTED_SCOPES.filter((scope) => normalized.includes(scope));
+  return ["openid", ...normalized.filter((scope) => scope !== "openid")];
 };
 
 export const getClientForTenant = async (tenantId: string, clientId: string) => {

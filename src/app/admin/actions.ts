@@ -51,7 +51,7 @@ import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/server/services/oauth-test-service";
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
-import { isSupportedScope, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -200,11 +200,11 @@ export const createClientAction = async (
     if (!normalizedScopes.includes("openid")) {
       return { error: "Scopes must include openid" };
     }
-    const unsupported = normalizedScopes.filter((scope) => !isSupportedScope(scope));
-    if (unsupported.length > 0) {
-      return { error: `Unsupported scopes: ${unsupported.join(", ")}` };
+    const invalid = normalizedScopes.filter((scope) => !isValidScopeValue(scope));
+    if (invalid.length > 0) {
+      return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
-    const canonicalScopes = SUPPORTED_SCOPES.filter((scope) => normalizedScopes.includes(scope));
+    const canonicalScopes = ["openid", ...normalizedScopes.filter((scope) => scope !== "openid")];
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
       clientType: parsed.type,
@@ -510,12 +510,11 @@ export const updateClientScopesAction = async (
     if (!normalized.includes("openid")) {
       return { error: "Scopes must include openid" };
     }
-    const unsupported = normalized.filter((scope) => !isSupportedScope(scope));
-    if (unsupported.length > 0) {
-      return { error: `Unsupported scopes: ${unsupported.join(", ")}` };
+    const invalid = normalized.filter((scope) => !isValidScopeValue(scope));
+    if (invalid.length > 0) {
+      return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
-
-    const canonical = SUPPORTED_SCOPES.filter((scope) => normalized.includes(scope));
+    const canonical = ["openid", ...normalized.filter((scope) => scope !== "openid")];
     await updateClientAllowedScopes(client.id, canonical);
     revalidatePath(clientPath(client.id));
     return { success: "Scopes updated", data: { allowedScopes: canonical } };

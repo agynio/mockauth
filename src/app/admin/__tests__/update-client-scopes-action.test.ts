@@ -66,9 +66,19 @@ describe("updateClientScopesAction", () => {
   it("updates scopes with canonical ordering", async () => {
     const result = await updateClientScopesAction({ clientId: "client_internal", scopes: ["email", "openid", "profile"] });
 
-    expect(result).toEqual({ success: "Scopes updated", data: { allowedScopes: ["openid", "profile", "email"] } });
-    expect(mockUpdateScopes).toHaveBeenCalledWith("client_internal", ["openid", "profile", "email"]);
+    expect(result).toEqual({ success: "Scopes updated", data: { allowedScopes: ["openid", "email", "profile"] } });
+    expect(mockUpdateScopes).toHaveBeenCalledWith("client_internal", ["openid", "email", "profile"]);
     expect(mockRevalidate).toHaveBeenCalledWith("/admin/clients/client_internal");
+  });
+
+  it("allows custom scopes that match the required pattern", async () => {
+    const result = await updateClientScopesAction({
+      clientId: "client_internal",
+      scopes: ["openid", "profile", "tenant:write"],
+    });
+
+    expect(result).toEqual({ success: "Scopes updated", data: { allowedScopes: ["openid", "profile", "tenant:write"] } });
+    expect(mockUpdateScopes).toHaveBeenCalledWith("client_internal", ["openid", "profile", "tenant:write"]);
   });
 
   it("returns an error when openid is missing", async () => {
@@ -78,10 +88,10 @@ describe("updateClientScopesAction", () => {
     expect(mockUpdateScopes).not.toHaveBeenCalled();
   });
 
-  it("returns an error for unsupported scopes", async () => {
-    const result = await updateClientScopesAction({ clientId: "client_internal", scopes: ["openid", "address"] });
+  it("returns an error for invalid scope formats", async () => {
+    const result = await updateClientScopesAction({ clientId: "client_internal", scopes: ["openid", "invalid scope"] });
 
-    expect(result).toEqual({ error: "Unsupported scopes: address" });
+    expect(result).toEqual({ error: "Scopes must match ^[a-z0-9:_-]{1,64}$: invalid scope" });
     expect(mockUpdateScopes).not.toHaveBeenCalled();
   });
 

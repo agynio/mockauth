@@ -52,22 +52,22 @@ describe("client service", () => {
     const { client } = await createClient(tenant.id, {
       name: "QA Tester",
       clientType: "PUBLIC",
-      allowedScopes: ["openid", "email"],
+      allowedScopes: ["openid", "tenant:write", "profile"],
     });
 
     const stored = await prisma.client.findUnique({ where: { id: client.id } });
-    expect(stored?.allowedScopes).toEqual(["openid", "email"]);
+    expect(stored?.allowedScopes).toEqual(["openid", "tenant:write", "profile"]);
   });
 
-  it("rejects unsupported scopes", async () => {
+  it("rejects invalid scope formats", async () => {
     const tenant = await createTenant();
     await expect(
       createClient(tenant.id, {
         name: "Bad Scope",
         clientType: "PUBLIC",
-        allowedScopes: ["openid", "offline_access"],
+        allowedScopes: ["openid", "invalid scope"],
       }),
-    ).rejects.toThrowError("Unsupported scope configured: offline_access");
+    ).rejects.toThrowError("Invalid scope format: invalid scope");
   });
 
   it("fetches a client scoped to a tenant", async () => {

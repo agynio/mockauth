@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 
@@ -18,6 +18,7 @@ import {
   updateClientReauthTtlAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -27,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { cn } from "@/lib/utils";
+import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
 const redirectSchema = z.object({
@@ -63,26 +65,6 @@ const reauthTtlSchema = z.object({
     .number()
     .int("Enter a whole number"),
 });
-const scopeTogglesSchema = z.object({
-  profile: z.boolean(),
-  email: z.boolean(),
-});
-const optionalScopeKeys = ["profile", "email"] as const;
-type OptionalScopeKey = (typeof optionalScopeKeys)[number];
-const scopeMetadata: Record<"openid" | OptionalScopeKey, { title: string; description: string }> = {
-  openid: {
-    title: "openid",
-    description: "Core scope required for all Mockauth clients.",
-  },
-  profile: {
-    title: "profile",
-    description: "Includes profile claims like preferred_username.",
-  },
-  email: {
-    title: "email",
-    description: "Includes email and email_verified claims when enabled.",
-  },
-};
 
 const formatReauthTtlSummary = (seconds: number) => {
   if (!seconds) {
@@ -112,6 +94,44 @@ const formatReauthTtlSummary = (seconds: number) => {
     parts.push(`${remainingSeconds} second${remainingSeconds === 1 ? "" : "s"}`);
   }
   return `Allows reuse for ${parts.join(" ")}.`;
+};
+
+const ensureCanonicalScopes = (values: string[]): string[] => {
+  const normalized = normalizeScopes(values);
+  if (!normalized.includes("openid")) {
+    return ["openid", ...normalized];
+  }
+  return ["openid", ...normalized.filter((scope) => scope !== "openid")];
+};
+
+type ScopeFormState = {
+  scopes: string[];
+  input: string;
+  error: string | null;
+};
+
+type ScopeFormAction =
+  | { type: "reset"; scopes: string[] }
+  | { type: "add"; scope: string }
+  | { type: "remove"; scope: string }
+  | { type: "setInput"; value: string }
+  | { type: "setError"; value: string | null };
+
+const scopeFormReducer = (state: ScopeFormState, action: ScopeFormAction): ScopeFormState => {
+  switch (action.type) {
+    case "reset":
+      return { scopes: action.scopes, input: "", error: null };
+    case "add":
+      return { scopes: ensureCanonicalScopes([...state.scopes, action.scope]), input: "", error: null };
+    case "remove":
+      return { ...state, scopes: ensureCanonicalScopes(state.scopes.filter((value) => value !== action.scope)) };
+    case "setInput":
+      return { ...state, input: action.value };
+    case "setError":
+      return { ...state, error: action.value };
+    default:
+      return state;
+  }
 };
 
 export function UpdateClientNameForm({
@@ -388,87 +408,142 @@ export function UpdateClientScopesForm({
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const form = useForm<z.infer<typeof scopeTogglesSchema>>({
-    resolver: zodResolver(scopeTogglesSchema),
-    defaultValues: {
-      profile: initialScopes.includes("profile"),
-      email: initialScopes.includes("email"),
-    },
-  });
+  const [state, dispatch] = useReducer(scopeFormReducer, initialScopes, (scopes: string[]): ScopeFormState => ({
+    scopes: ensureCanonicalScopes(scopes),
+    input: "",
+    error: null,
+  }));
+  const { scopes, input, error } = state;
 
   useEffect(() => {
-    form.reset({ profile: initialScopes.includes("profile"), email: initialScopes.includes("email") });
-  }, [form, initialScopes]);
+    dispatch({ type: "reset", scopes: ensureCanonicalScopes(initialScopes) });
+  }, [initialScopes]);
 
-  const handleSubmit = form.handleSubmit((values) => {
-    const scopes = ["openid", ...optionalScopeKeys.filter((key) => values[key])];
+  const addScope = (raw: string) => {
+    if (!canEdit || pending) {
+      return;
+    }
+    const candidate = raw.trim().toLowerCase();
+    if (!candidate) {
+      return;
+    }
+    if (!isValidScopeValue(candidate)) {
+      dispatch({ type: "setError", value: "Scopes must match ^[a-z0-9:_-]{1,64}$" });
+      return;
+    }
+    dispatch({ type: "add", scope: candidate });
+  };
+
+  const removeScope = (scope: string) => {
+    if (!canEdit || pending || scope === "openid") {
+      return;
+    }
+    dispatch({ type: "remove", scope });
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!scopes.includes("openid")) {
+      dispatch({ type: "setError", value: "Scopes must include openid" });
+      return;
+    }
+
     startTransition(async () => {
       const result = await updateClientScopesAction({ clientId, scopes });
       if (result.error) {
         toast({ variant: "destructive", title: "Unable to update", description: result.error });
         return;
       }
+      const nextScopes = result.data?.allowedScopes ?? scopes;
+      dispatch({ type: "reset", scopes: ensureCanonicalScopes(nextScopes) });
       router.refresh();
       toast({ title: "Scopes updated", description: result.success ?? "Saved" });
     });
-  });
+  };
 
-  const renderOptionalScope = (key: OptionalScopeKey) => (
-    <FormField
-      key={key}
-      control={form.control}
-      name={key}
-      render={({ field }) => (
-        <FormItem className="rounded-md border p-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <FormLabel className="text-sm font-semibold text-foreground capitalize">{scopeMetadata[key].title}</FormLabel>
-              <p className="text-xs text-muted-foreground">{scopeMetadata[key].description}</p>
-            </div>
-            <FormControl>
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border border-muted"
-                checked={field.value}
-                onChange={(event) => field.onChange(event.target.checked)}
-                disabled={!canEdit || pending}
-                data-testid={`scope-${key}-toggle`}
-              />
-            </FormControl>
-          </div>
-        </FormItem>
-      )}
-    />
-  );
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      addScope(input);
+    }
+  };
+
+  const suggestedScopes = ["profile", "email", "address", "phone", "offline_access"];
 
   return (
-    <Form {...form}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-3">
-          <div className="rounded-md border bg-muted/50 p-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground capitalize">{scopeMetadata.openid.title}</p>
-                <p className="text-xs text-muted-foreground">{scopeMetadata.openid.description}</p>
-              </div>
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border border-muted"
-                checked
-                readOnly
-                disabled
-                data-testid="scope-openid-toggle"
-              />
-            </div>
-          </div>
-          {optionalScopeKeys.map(renderOptionalScope)}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Allowed scopes</p>
+          <p className="text-xs text-muted-foreground">
+            openid is required. Additional scopes must match the pattern {"^[a-z0-9:_-]{1,64}$"}.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">openid is mandatory; profile and email control returned claims.</p>
-        <Button type="submit" disabled={!canEdit || pending} className="w-full sm:w-auto" data-testid="scope-save-button">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : canEdit ? "Save scopes" : "Read-only"}
-        </Button>
-      </form>
-    </Form>
+        <div className="flex flex-wrap gap-2" data-testid="scope-chip-list">
+          {scopes.map((scope) => (
+            <Badge
+              key={scope}
+              variant="secondary"
+              className="flex items-center gap-1 rounded-full px-3 py-1 text-xs"
+              data-testid={`scope-chip-${scope}`}
+            >
+              {scope}
+              {scope !== "openid" && canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => removeScope(scope)}
+                  className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${scope}`}
+                  data-testid={`remove-scope-${scope}`}
+                  disabled={pending}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              ) : null}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Input
+          value={input}
+          onChange={(event) => {
+            dispatch({ type: "setInput", value: event.target.value });
+            if (error) {
+              dispatch({ type: "setError", value: null });
+            }
+          }}
+          onKeyDown={handleInputKeyDown}
+          placeholder="Add a scope and press Enter"
+          disabled={!canEdit || pending}
+          data-testid="scope-input"
+        />
+        {error ? <p className="text-xs font-medium text-destructive">{error}</p> : null}
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {suggestedScopes
+            .filter((scope) => !scopes.includes(scope))
+            .map((scope) => (
+              <Button
+                key={scope}
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => addScope(scope)}
+                disabled={!canEdit || pending}
+                data-testid={`scope-suggestion-${scope}`}
+              >
+                {scope}
+              </Button>
+            ))}
+        </div>
+      </div>
+
+      <Button type="submit" disabled={!canEdit || pending} className="w-full sm:w-auto" data-testid="scope-save-button">
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : canEdit ? "Save scopes" : "Read-only"}
+      </Button>
+    </form>
   );
 }
 
