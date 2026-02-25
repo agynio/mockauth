@@ -43,7 +43,31 @@ describe("client service", () => {
     expect(stored?.redirectUris).toHaveLength(2);
     expect(stored?.clientSecretHash).toBeTruthy();
     expect(stored?.clientSecretEncrypted).toBeTruthy();
+    expect(stored?.allowedScopes).toEqual(["openid", "profile", "email"]);
     expect(decrypt(stored?.clientSecretEncrypted as string)).toEqual(clientSecret);
+  });
+
+  it("allows configuring custom scopes", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "QA Tester",
+      clientType: "PUBLIC",
+      allowedScopes: ["openid", "email"],
+    });
+
+    const stored = await prisma.client.findUnique({ where: { id: client.id } });
+    expect(stored?.allowedScopes).toEqual(["openid", "email"]);
+  });
+
+  it("rejects unsupported scopes", async () => {
+    const tenant = await createTenant();
+    await expect(
+      createClient(tenant.id, {
+        name: "Bad Scope",
+        clientType: "PUBLIC",
+        allowedScopes: ["openid", "offline_access"],
+      }),
+    ).rejects.toThrowError("Unsupported scope configured: offline_access");
   });
 
   it("fetches a client scoped to a tenant", async () => {

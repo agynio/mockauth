@@ -1,6 +1,5 @@
 import { issuerForResource } from "@/server/oidc/issuer";
-
-const SUPPORTED_SCOPES = ["openid", "profile", "email"];
+import { SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 
 export const buildDiscoveryDocument = (origin: string, apiResourceId: string) => {
   const issuer = issuerForResource(origin, apiResourceId);

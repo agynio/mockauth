@@ -9,6 +9,7 @@ import {
   DeleteRedirectButton,
   RotateSecretForm,
   UpdateAuthStrategiesForm,
+  UpdateClientScopesForm,
   UpdateClientReauthTtlForm,
   UpdateClientIssuerForm,
   UpdateClientNameForm,
@@ -205,6 +206,20 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           <p className="text-xs text-muted-foreground">
             Selecting the default keeps this client aligned with tenant-level issuer changes.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Scopes</CardTitle>
+          <CardDescription>Toggle which scopes this client can request.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UpdateClientScopesForm
+            clientId={client.id}
+            canEdit={canManageClients}
+            initialScopes={client.allowedScopes}
+          />
         </CardContent>
       </Card>
 

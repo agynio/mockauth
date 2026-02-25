@@ -12,6 +12,7 @@ import {
   deleteRedirectUriAction,
   rotateClientSecretAction,
   updateClientAuthStrategiesAction,
+  updateClientScopesAction,
   updateClientIssuerAction,
   updateClientNameAction,
   updateClientReauthTtlAction,
@@ -62,6 +63,26 @@ const reauthTtlSchema = z.object({
     .number()
     .int("Enter a whole number"),
 });
+const scopeTogglesSchema = z.object({
+  profile: z.boolean(),
+  email: z.boolean(),
+});
+const optionalScopeKeys = ["profile", "email"] as const;
+type OptionalScopeKey = (typeof optionalScopeKeys)[number];
+const scopeMetadata: Record<"openid" | OptionalScopeKey, { title: string; description: string }> = {
+  openid: {
+    title: "openid",
+    description: "Core scope required for all Mockauth clients.",
+  },
+  profile: {
+    title: "profile",
+    description: "Includes profile claims like preferred_username.",
+  },
+  email: {
+    title: "email",
+    description: "Includes email and email_verified claims when enabled.",
+  },
+};
 
 const formatReauthTtlSummary = (seconds: number) => {
   if (!seconds) {
@@ -349,6 +370,102 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
         />
         <Button type="submit" disabled={!canEdit || pending} className="self-end">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+export function UpdateClientScopesForm({
+  clientId,
+  initialScopes,
+  canEdit,
+}: {
+  clientId: string;
+  initialScopes: string[];
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const form = useForm<z.infer<typeof scopeTogglesSchema>>({
+    resolver: zodResolver(scopeTogglesSchema),
+    defaultValues: {
+      profile: initialScopes.includes("profile"),
+      email: initialScopes.includes("email"),
+    },
+  });
+
+  useEffect(() => {
+    form.reset({ profile: initialScopes.includes("profile"), email: initialScopes.includes("email") });
+  }, [form, initialScopes]);
+
+  const handleSubmit = form.handleSubmit((values) => {
+    const scopes = ["openid", ...optionalScopeKeys.filter((key) => values[key])];
+    startTransition(async () => {
+      const result = await updateClientScopesAction({ clientId, scopes });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Scopes updated", description: result.success ?? "Saved" });
+    });
+  });
+
+  const renderOptionalScope = (key: OptionalScopeKey) => (
+    <FormField
+      key={key}
+      control={form.control}
+      name={key}
+      render={({ field }) => (
+        <FormItem className="rounded-md border p-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <FormLabel className="text-sm font-semibold text-foreground capitalize">{scopeMetadata[key].title}</FormLabel>
+              <p className="text-xs text-muted-foreground">{scopeMetadata[key].description}</p>
+            </div>
+            <FormControl>
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border border-muted"
+                checked={field.value}
+                onChange={(event) => field.onChange(event.target.checked)}
+                disabled={!canEdit || pending}
+                data-testid={`scope-${key}-toggle`}
+              />
+            </FormControl>
+          </div>
+        </FormItem>
+      )}
+    />
+  );
+
+  return (
+    <Form {...form}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-3">
+          <div className="rounded-md border bg-muted/50 p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground capitalize">{scopeMetadata.openid.title}</p>
+                <p className="text-xs text-muted-foreground">{scopeMetadata.openid.description}</p>
+              </div>
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border border-muted"
+                checked
+                readOnly
+                disabled
+                data-testid="scope-openid-toggle"
+              />
+            </div>
+          </div>
+          {optionalScopeKeys.map(renderOptionalScope)}
+        </div>
+        <p className="text-xs text-muted-foreground">openid is mandatory; profile and email control returned claims.</p>
+        <Button type="submit" disabled={!canEdit || pending} className="w-full sm:w-auto" data-testid="scope-save-button">
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : canEdit ? "Save scopes" : "Read-only"}
         </Button>
       </form>
     </Form>

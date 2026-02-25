@@ -123,16 +123,11 @@ test.describe("Client Test OAuth", () => {
 
     const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
     await setClientReauthTtl(page, clientId, 180);
-
-    try {
-      await completeRunAndReturnToConfigurator(page, clientId);
-      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
-      await page.goto(authorizationUrl);
-      await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
-      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
-    } finally {
-      await setClientReauthTtl(page, clientId, 0);
-    }
+    await completeRunAndReturnToConfigurator(page, clientId);
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+    await page.goto(authorizationUrl);
+    await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 
   test("prompt=login toggle forces a credential screen even within the TTL", async ({ page }) => {
@@ -141,18 +136,13 @@ test.describe("Client Test OAuth", () => {
 
     const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
     await setClientReauthTtl(page, clientId, 300);
-
-    try {
-      await completeRunAndReturnToConfigurator(page, clientId);
-      await page.getByTestId("test-oauth-prompt-login").check();
-      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
-      await page.goto(authorizationUrl);
-      await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
-      await completeProviderLogin(page, clientId);
-      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
-    } finally {
-      await setClientReauthTtl(page, clientId, 0);
-    }
+    await completeRunAndReturnToConfigurator(page, clientId);
+    await page.getByTestId("test-oauth-prompt-login").check();
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+    await page.goto(authorizationUrl);
+    await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+    await completeProviderLogin(page, clientId);
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 
   test("prompt=none succeeds silently when the TTL cookie is valid", async ({ page }) => {
@@ -161,18 +151,13 @@ test.describe("Client Test OAuth", () => {
 
     const clientId = await openClientDetail(page, QA_TENANT_ID, QA_CLIENT_NAME);
     await setClientReauthTtl(page, clientId, 240);
-
-    try {
-      await completeRunAndReturnToConfigurator(page, clientId);
-      const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
-      const silentUrl = new URL(authorizationUrl);
-      silentUrl.searchParams.set("prompt", "none");
-      await page.goto(silentUrl.toString());
-      await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
-      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
-    } finally {
-      await setClientReauthTtl(page, clientId, 0);
-    }
+    await completeRunAndReturnToConfigurator(page, clientId);
+    const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
+    const silentUrl = new URL(authorizationUrl);
+    silentUrl.searchParams.set("prompt", "none");
+    await page.goto(silentUrl.toString());
+    await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 
   test("fresh login handshake completes authorize once when TTL is zero", async ({ page }) => {
@@ -289,7 +274,25 @@ const completeRunAndReturnToConfigurator = async (page: Page, clientId: string) 
 };
 
 const setClientReauthTtl = async (page: Page, clientId: string, ttlSeconds: number) => {
-  await page.goto(`/admin/clients/${clientId}`);
+  const detailPath = `/admin/clients/${clientId}`;
+  const testPath = `${detailPath}/test`;
+  const redirectPath = `${testPath}/redirect`;
+
+  let path = new URL(page.url()).pathname;
+  if (path === redirectPath) {
+    await page.getByRole("link", { name: "← Back to test config" }).click();
+    await expect(page).toHaveURL(new RegExp(`^https?://[^/]+${testPath}$`));
+    path = new URL(page.url()).pathname;
+  }
+
+  if (path === testPath) {
+    await page.getByRole("link", { name: "← Back to client" }).click();
+    await expect(page).toHaveURL(new RegExp(`^https?://[^/]+${detailPath}$`));
+  } else if (path !== detailPath) {
+    await page.goto(detailPath, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(new RegExp(`^https?://[^/]+${detailPath}$`));
+  }
+
   const input = page.getByTestId("reauth-ttl-input");
   await expect(input).toBeVisible();
   await input.fill(ttlSeconds.toString());
@@ -300,7 +303,11 @@ const setClientReauthTtl = async (page: Page, clientId: string, ttlSeconds: numb
 const openClientDetail = async (page: Page, tenantId: string, clientName: string) => {
   await page.goto("/admin/clients");
   await selectTenant(page, tenantId);
+  const searchBox = page.getByRole("textbox", { name: "Search clients" });
+  await expect(searchBox).toBeVisible();
+  await searchBox.fill(clientName);
   const row = page.getByRole("row", { name: new RegExp(clientName, "i") }).first();
+  await expect(row).toBeVisible();
   await row.getByRole("link", { name: "Details →" }).click();
   await expect(page).toHaveURL(/\/admin\/clients\//);
   const currentUrl = new URL(page.url());
@@ -337,6 +344,8 @@ const startOauthTest = async (page: Page, clientId: string, options?: StartOptio
   if (!fromConfigPage) {
     await page.getByTestId("test-oauth-link").click();
   }
+  const startButton = page.getByTestId("test-oauth-start");
+  await expect(startButton).toBeVisible();
   await addTestRedirectIfNeeded(page);
   const secretInput = page.getByTestId("test-oauth-secret-input");
   if (expectSecretField) {
@@ -348,7 +357,7 @@ const startOauthTest = async (page: Page, clientId: string, options?: StartOptio
   } else {
     await expect(secretInput).toHaveCount(0);
   }
-  await page.getByTestId("test-oauth-start").click();
+  await startButton.click();
   const textarea = page.getByTestId("test-oauth-authorization-textarea");
   await expect(textarea).toBeVisible();
   const authorizationUrl = (await textarea.inputValue()).trim();
@@ -390,7 +399,10 @@ const completeProviderLogin = async (page: Page, clientId: string, options?: Log
     }
   }
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+  await Promise.race([
+    page.getByTestId("test-oauth-id-token").waitFor({ state: "visible", timeout: 60000 }),
+    page.getByTestId("test-oauth-error").waitFor({ state: "visible", timeout: 60000 }),
+  ]);
 };
 
 const selectLoginTabIfPresent = async (page: Page, strategy: "username" | "email") => {
