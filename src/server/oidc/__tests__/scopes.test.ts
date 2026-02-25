@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isSupportedScope, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { isSupportedScope, isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 
 describe("OIDC scopes", () => {
   it("normalizes scope values", () => {
@@ -18,5 +18,13 @@ describe("OIDC scopes", () => {
       expect(isSupportedScope(scope)).toBe(true);
     }
     expect(isSupportedScope("offline_access")).toBe(false);
+  });
+
+  it("validates scope values", () => {
+    expect(isValidScopeValue("openid")).toBe(true);
+    expect(isValidScopeValue("tenant:admin")).toBe(true);
+    expect(isValidScopeValue("invalid scope")).toBe(false);
+    expect(isValidScopeValue("UPPERCASE")).toBe(false);
+    expect(isValidScopeValue("a".repeat(65))).toBe(false);
   });
 });

@@ -123,10 +123,12 @@ test.describe("collaboration", () => {
     const readOnlyButton = readerPage.getByRole("button", { name: "Read-only access" });
     await expect(readOnlyButton).toBeDisabled();
 
-    const detailsLink = readerPage.getByRole("link", { name: /Details/ }).first();
-    await detailsLink.click();
-    await expect(readerPage.getByRole("button", { name: "Read-only" })).toBeDisabled();
-    await expect(readerPage.getByRole("button", { name: "Add" })).toBeDisabled();
+    const detailsLink = readerPage.getByRole("link", { name: "Details →" }).first();
+    const detailsHref = await detailsLink.getAttribute("href");
+    expect(detailsHref).toBeTruthy();
+    await readerPage.goto(detailsHref!, { waitUntil: "domcontentloaded" });
+    await expect(readerPage.getByTestId("scope-save-button")).toBeDisabled();
+    await expect(readerPage.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
     await expect(readerPage.getByText("Client secrets can only be rotated by owners or writers.")).toBeVisible();
     await readerContext.close();
   });

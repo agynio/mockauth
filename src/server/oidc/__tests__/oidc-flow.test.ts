@@ -187,7 +187,7 @@ describe("OIDC flow", () => {
     ).rejects.toThrowError("scope must include openid");
   });
 
-  it("rejects authorize requests with unsupported scopes", async () => {
+  it("rejects authorize requests with scopes outside the client allowlist", async () => {
     const challenge = computeS256Challenge(codeVerifier);
     await expect(
       handleAuthorize(
@@ -205,7 +205,7 @@ describe("OIDC flow", () => {
         "https://mockauth.test",
         `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
       ),
-    ).rejects.toThrowError("Unsupported scopes: offline_access");
+    ).rejects.toThrowError("Client does not allow scopes: offline_access");
   });
 
   it("rejects scopes disabled for the client", async () => {

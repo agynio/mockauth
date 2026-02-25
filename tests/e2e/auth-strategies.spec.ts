@@ -34,8 +34,13 @@ test.describe("auth strategy persistence", () => {
     await selectTenant(page, tenantId);
     const searchBox = page.getByRole("textbox", { name: "Search clients" });
     await searchBox.fill("QA Client");
-    await expect(page.getByRole("row", { name: /QA Client/i })).toBeVisible();
-    await page.getByRole("row", { name: /QA Client/i }).first().getByRole("link", { name: "Details →" }).click();
+    const clientRow = page.getByRole("row", { name: /QA Client/i }).first();
+    await expect(clientRow).toBeVisible();
+    const detailsLink = clientRow.getByRole("link", { name: "Details →" });
+    await expect(detailsLink).toBeVisible();
+    const clientHref = await detailsLink.getAttribute("href");
+    expect(clientHref).toBeTruthy();
+    await page.goto(clientHref!, { waitUntil: "domcontentloaded" });
     await updateSelect(page, page.getByTestId("strategy-username-subsource"), "Generate UUID (stable per identity)");
     const emailToggle = page.getByTestId("strategy-email-enabled");
     await emailToggle.check();
