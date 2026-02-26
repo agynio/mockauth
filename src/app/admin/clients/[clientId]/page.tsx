@@ -9,6 +9,7 @@ import {
   DeleteRedirectButton,
   RotateSecretForm,
   UpdateAuthStrategiesForm,
+  UpdateClientSigningAlgorithmsForm,
   UpdateClientScopesForm,
   UpdateClientReauthTtlForm,
   UpdateClientIssuerForm,
@@ -234,6 +235,24 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             canEdit={canManageClients}
             initialStrategies={authStrategies}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Signing algorithms</CardTitle>
+          <CardDescription>Configure how Mockauth signs ID tokens and access tokens.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <UpdateClientSigningAlgorithmsForm
+            clientId={client.id}
+            canEdit={canManageClients}
+            initialIdTokenAlg={client.idTokenSignedResponseAlg}
+            initialAccessTokenAlg={client.accessTokenSigningAlg}
+          />
+          <p className="text-xs text-muted-foreground">
+            Each algorithm maintains its own active signing key. Mockauth rotates keys on demand when you switch algorithms.
+          </p>
         </CardContent>
       </Card>
 

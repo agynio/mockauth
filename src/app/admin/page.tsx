@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { listClients } from "@/server/services/client-service";
-import { getActiveKey } from "@/server/services/key-service";
+import { getActiveKeyForAlg } from "@/server/services/key-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
+import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 
 export default async function AdminPage() {
   const session = await getServerSession(authOptions);
@@ -34,10 +35,15 @@ export default async function AdminPage() {
     );
   }
 
-  const [clientSnapshot, activeKey, origin] = await Promise.all([
+  const [clientSnapshot, origin, signingKeys] = await Promise.all([
     listClients(activeTenant.id, { pageSize: 5 }),
-    getActiveKey(activeTenant.id).catch(() => null),
     getRequestOrigin(),
+    Promise.all(
+      SUPPORTED_JWT_SIGNING_ALGS.map(async (alg) => ({
+        alg,
+        key: await getActiveKeyForAlg(activeTenant.id, alg).catch(() => null),
+      })),
+    ),
   ]);
 
   const redirectCount = clientSnapshot.clients.reduce((acc, client) => acc + client._count.redirectUris, 0);
@@ -100,24 +106,43 @@ export default async function AdminPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Signing key</CardTitle>
-            <CardDescription>Rotate keys to invalidate existing tokens.</CardDescription>
+            <CardTitle>Signing keys</CardTitle>
+            <CardDescription>Manage per-algorithm signing keys for issued tokens.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {activeKey ? (
-              <>
-                <div className="text-sm">
-                  <p className="font-semibold">KID</p>
-                  <p className="font-mono text-xs text-muted-foreground">{activeKey.kid}</p>
+          <CardContent className="space-y-4">
+            {signingKeys.map(({ alg, key }) => (
+              <div
+                key={alg}
+                className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold">{alg}</p>
+                    <span className="text-xs uppercase text-muted-foreground">
+                      {key ? "Active" : "Pending"}
+                    </span>
+                  </div>
+                  {key ? (
+                    <div className="space-y-1">
+                      <p className="font-mono text-xs text-muted-foreground break-all">{key.kid}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Created {formatDistanceToNow(key.createdAt, { addSuffix: true })}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No key generated yet. One will be created automatically on first use.
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Created {formatDistanceToNow(activeKey.createdAt, { addSuffix: true })}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">No active signing key found.</p>
-            )}
-            <RotateKeyButton tenantId={activeTenant.id} canRotate={viewerRole === "OWNER"} />
+                <RotateKeyButton
+                  tenantId={activeTenant.id}
+                  alg={alg}
+                  canRotate={viewerRole === "OWNER"}
+                  hasActiveKey={Boolean(key)}
+                />
+              </div>
+            ))}
           </CardContent>
         </Card>
 

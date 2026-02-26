@@ -11,8 +11,10 @@ import { DomainError } from "@/server/errors";
 import { claimsForScopes } from "@/server/oidc/claims";
 import { issuerForResource } from "@/server/oidc/issuer";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
-import { getActiveKey } from "@/server/services/key-service";
+import { ensureActiveKeyForAlg } from "@/server/services/key-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
+import type { JwtSigningAlg } from "@/generated/prisma/client";
 
 const ID_TOKEN_TTL_SECONDS = 600;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -66,9 +68,19 @@ export const issueTokensFromCode = async (params: {
   await validateClientSecret(code.client, clientSecret);
   verifyPkce(code, codeVerifier);
 
-  const activeKey = await getActiveKey(code.tenantId);
-  const privateJwk = JSON.parse(decrypt(activeKey.privateJwkEncrypted));
-  const signingKey = await importJWK(privateJwk, "RS256");
+  const idTokenAlg: JwtSigningAlg = code.client.idTokenSignedResponseAlg ?? DEFAULT_JWT_SIGNING_ALG;
+  const accessTokenAlg: JwtSigningAlg = code.client.accessTokenSigningAlg ?? idTokenAlg;
+
+  const requiredAlgs = Array.from(new Set<JwtSigningAlg>([idTokenAlg, accessTokenAlg]));
+  type ImportedKey = Awaited<ReturnType<typeof importJWK>>;
+  const signingKeys = new Map<JwtSigningAlg, { keyId: string; cryptoKey: ImportedKey }>();
+
+  for (const alg of requiredAlgs) {
+    const activeKey = await ensureActiveKeyForAlg(code.tenantId, alg);
+    const privateJwk = JSON.parse(decrypt(activeKey.privateJwkEncrypted));
+    const cryptoKey = await importJWK(privateJwk, alg);
+    signingKeys.set(alg, { keyId: activeKey.kid, cryptoKey });
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const issuer = issuerForResource(origin, code.apiResourceId);
@@ -81,6 +93,11 @@ export const issueTokensFromCode = async (params: {
         ? Boolean(code.emailVerifiedOverride)
         : strategies.email.emailVerifiedMode === "true"
       : undefined;
+  const idTokenKey = signingKeys.get(idTokenAlg);
+  if (!idTokenKey) {
+    throw new DomainError("Missing signing key for id_token", { status: 500 });
+  }
+
   const idToken = await new SignJWT({
     ...claimsForScopes(code.user, scopes, strategy, { emailVerified: emailVerifiedClaim }),
     sub: code.subject,
@@ -89,12 +106,17 @@ export const issueTokensFromCode = async (params: {
     scope: code.scope,
     nonce: code.nonce,
   })
-    .setProtectedHeader({ alg: "RS256", kid: activeKey.kid })
+    .setProtectedHeader({ alg: idTokenAlg, kid: idTokenKey.keyId })
     .setIssuedAt(now)
     .setExpirationTime(now + ID_TOKEN_TTL_SECONDS)
-    .sign(signingKey);
+    .sign(idTokenKey.cryptoKey);
 
   const jti = randomUUID();
+  const accessTokenKey = signingKeys.get(accessTokenAlg);
+  if (!accessTokenKey) {
+    throw new DomainError("Missing signing key for access_token", { status: 500 });
+  }
+
   const accessToken = await new SignJWT({
     ...claimsForScopes(code.user, scopes, strategy, { emailVerified: emailVerifiedClaim }),
     sub: code.subject,
@@ -103,10 +125,10 @@ export const issueTokensFromCode = async (params: {
     scope: code.scope,
     jti,
   })
-    .setProtectedHeader({ alg: "RS256", kid: activeKey.kid })
+    .setProtectedHeader({ alg: accessTokenAlg, kid: accessTokenKey.keyId })
     .setIssuedAt(now)
     .setExpirationTime(now + ACCESS_TOKEN_TTL_SECONDS)
-    .sign(signingKey);
+    .sign(accessTokenKey.cryptoKey);
 
   await prisma.accessToken.create({
     data: {

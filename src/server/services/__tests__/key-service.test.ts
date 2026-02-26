@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 
 import { KeyStatus } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
-import { getJwks, getPublicJwkByKid, ensureActiveKey, rotateKey } from "@/server/services/key-service";
+import { getJwks, getPublicJwkByKid, ensureActiveKeyForAlg, rotateKeyForAlg } from "@/server/services/key-service";
 import { describe, expect, it, vi } from "vitest";
 
 const createTenant = async () => {
@@ -19,13 +19,15 @@ const createTenant = async () => {
 describe("key rotation", () => {
   it("keeps the previous key available as rotated", async () => {
     const tenant = await createTenant();
-    const current = await ensureActiveKey(tenant.id);
-    const next = await rotateKey(tenant.id);
+    const current = await ensureActiveKeyForAlg(tenant.id, "RS256");
+    const next = await rotateKeyForAlg(tenant.id, "RS256");
 
     expect(next.tenantId).toBe(tenant.id);
+    expect(next.alg).toBe("RS256");
 
     const original = await prisma.tenantKey.findUnique({ where: { id: current.id } });
     expect(original?.status).toBe(KeyStatus.ROTATED);
+    expect(original?.alg).toBe("RS256");
 
     const jwks = await getJwks(tenant.id);
     expect(jwks.some((jwk) => jwk.kid === original?.kid)).toBe(true);
@@ -36,7 +38,7 @@ describe("key rotation", () => {
 
   it("reuses an existing transaction client", async () => {
     const tenant = await createTenant();
-    await ensureActiveKey(tenant.id);
+    await ensureActiveKeyForAlg(tenant.id, "RS256");
 
     const outerTransaction = prisma.$transaction.bind(prisma);
     await outerTransaction(async (tx) => {
@@ -47,10 +49,26 @@ describe("key rotation", () => {
       }) as typeof prisma.$transaction;
 
       try {
-        await rotateKey(tenant.id, tx);
+        await rotateKeyForAlg(tenant.id, "RS256", tx);
       } finally {
         proxy.$transaction = original;
       }
     });
+  });
+
+  it("maintains separate active keys per algorithm", async () => {
+    const tenant = await createTenant();
+    const rsaKey = await ensureActiveKeyForAlg(tenant.id, "RS256");
+    const esKey = await ensureActiveKeyForAlg(tenant.id, "ES384");
+
+    expect(rsaKey.alg).toBe("RS256");
+    expect(esKey.alg).toBe("ES384");
+
+    const activeKeys = await prisma.tenantKey.findMany({
+      where: { tenantId: tenant.id, status: KeyStatus.ACTIVE },
+    });
+
+    expect(activeKeys.filter((key) => key.alg === "RS256")).toHaveLength(1);
+    expect(activeKeys.filter((key) => key.alg === "ES384")).toHaveLength(1);
   });
 });

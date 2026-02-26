@@ -1,32 +1,37 @@
 import { randomUUID } from "crypto";
 
-import { KeyStatus, Prisma } from "@/generated/prisma/client";
+import { JwtSigningAlg, KeyStatus, Prisma } from "@/generated/prisma/client";
 import { exportJWK, generateKeyPair, importJWK, type JWK } from "jose";
 
 import { prisma } from "@/server/db/client";
 import { encrypt, decrypt } from "@/server/crypto/key-vault";
 import { DomainError } from "@/server/errors";
+import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
 
-export const getActiveKey = async (tenantId: string) => {
+export const getActiveKeyForAlg = async (tenantId: string, alg: JwtSigningAlg) => {
   const key = await prisma.tenantKey.findFirst({
-    where: { tenantId, status: KeyStatus.ACTIVE },
+    where: { tenantId, alg, status: KeyStatus.ACTIVE },
     orderBy: { createdAt: "desc" },
   });
 
   if (!key) {
-    throw new DomainError("No active signing key", { status: 500 });
+    throw new DomainError(`No active signing key for ${alg}`, { status: 500 });
   }
 
   return key;
 };
 
-export const ensureActiveKey = async (tenantId: string) => {
-  const existing = await prisma.tenantKey.count({ where: { tenantId } });
-  if (existing > 0) {
-    return getActiveKey(tenantId);
+export const ensureActiveKeyForAlg = async (tenantId: string, alg: JwtSigningAlg) => {
+  const existing = await prisma.tenantKey.findFirst({
+    where: { tenantId, alg, status: KeyStatus.ACTIVE },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existing) {
+    return existing;
   }
 
-  return rotateKey(tenantId);
+  return rotateKeyForAlg(tenantId, alg);
 };
 
 const runWithTransaction = async <T>(
@@ -39,8 +44,12 @@ const runWithTransaction = async <T>(
   return prisma.$transaction(operation);
 };
 
-export const rotateKey = async (tenantId: string, tx?: Prisma.TransactionClient) => {
-  const { publicKey, privateKey } = await generateKeyPair("RS256", { extractable: true });
+export const rotateKeyForAlg = async (
+  tenantId: string,
+  alg: JwtSigningAlg = DEFAULT_JWT_SIGNING_ALG,
+  tx?: Prisma.TransactionClient,
+) => {
+  const { publicKey, privateKey } = await generateKeyPair(alg, { extractable: true });
   const [publicJwk, privateJwk] = await Promise.all([
     exportJWK(publicKey),
     exportJWK(privateKey),
@@ -49,14 +58,19 @@ export const rotateKey = async (tenantId: string, tx?: Prisma.TransactionClient)
   const kid = randomUUID();
   publicJwk.kid = kid;
   publicJwk.use = "sig";
-  publicJwk.alg = "RS256";
+  publicJwk.alg = alg;
   privateJwk.kid = kid;
   privateJwk.use = "sig";
-  privateJwk.alg = "RS256";
+  privateJwk.alg = alg;
+
+  const kty = publicJwk.kty;
+  if (!kty) {
+    throw new DomainError("Generated key missing key type", { status: 500 });
+  }
 
   return runWithTransaction(tx, async (client) => {
     await client.tenantKey.updateMany({
-      where: { tenantId, status: KeyStatus.ACTIVE },
+      where: { tenantId, alg, status: KeyStatus.ACTIVE },
       data: { status: KeyStatus.ROTATED },
     });
 
@@ -64,8 +78,8 @@ export const rotateKey = async (tenantId: string, tx?: Prisma.TransactionClient)
       data: {
         tenantId,
         kid,
-        kty: publicJwk.kty ?? "RSA",
-        alg: "RS256",
+        kty,
+        alg,
         use: "sig",
         status: KeyStatus.ACTIVE,
         publicJwk: publicJwk as Prisma.InputJsonValue,
@@ -107,5 +121,9 @@ export const getPrivateJwk = async (keyId: string, tenantId: string) => {
 
 export const importPrivateKey = async (keyRecord: { id: string; tenantId: string; privateJwkEncrypted: string; kid: string }) => {
   const jwk = JSON.parse(decrypt(keyRecord.privateJwkEncrypted)) as JWK;
-  return importJWK(jwk, "RS256");
+  const alg = jwk.alg;
+  if (!alg) {
+    throw new DomainError("Signing key missing algorithm", { status: 500 });
+  }
+  return importJWK(jwk, alg);
 };

@@ -1,7 +1,8 @@
 import type { MembershipRole, Prisma, Tenant, TenantMembership } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { DomainError } from "@/server/errors";
-import { rotateKey } from "@/server/services/key-service";
+import { rotateKeyForAlg } from "@/server/services/key-service";
+import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
 
 const ROLE_RANK: Record<MembershipRole, number> = {
   OWNER: 3,
@@ -86,7 +87,7 @@ export const createTenant = async (adminUserId: string, data: { name: string }) 
         role: "OWNER",
       },
     });
-    await rotateKey(tenant.id, tx);
+    await rotateKeyForAlg(tenant.id, DEFAULT_JWT_SIGNING_ALG, tx);
     return tenantWithDefault;
   });
 };

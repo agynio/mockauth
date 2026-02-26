@@ -8,5 +8,6 @@ describe("discovery document", () => {
     expect(doc.issuer).toBe("https://mockauth.test/r/resource_999/oidc");
     expect(doc.authorization_endpoint).toBe("https://mockauth.test/r/resource_999/oidc/authorize");
     expect(doc.jwks_uri).toBe("https://mockauth.test/r/resource_999/oidc/jwks.json");
+    expect(doc.id_token_signing_alg_values_supported).toEqual(["RS256", "PS256", "ES256", "ES384"]);
   });
 });

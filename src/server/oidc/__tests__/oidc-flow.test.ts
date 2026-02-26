@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 
 import { $Enums } from "@/generated/prisma/client";
-import { decodeJwt } from "jose";
+import type { JwtSigningAlg, Prisma } from "@/generated/prisma/client";
+import { decodeJwt, decodeProtectedHeader } from "jose";
 
 import { prisma } from "@/server/db/client";
 import { computeS256Challenge } from "@/server/crypto/pkce";
@@ -25,15 +26,17 @@ describe("OIDC flow", () => {
   let sessionToken: string;
   let codeVerifier: string;
   let clientInternalId: string;
-  let originalStrategies: unknown;
+  let originalStrategies: Prisma.JsonValue;
   let originalReauthTtlSeconds: number;
   let originalAllowedScopes: string[];
+  let originalIdTokenAlg: JwtSigningAlg | null | undefined;
+  let originalAccessTokenAlg: JwtSigningAlg | null | undefined;
 
-  const buildReauthCookie = (token: string, ttlSeconds = DEFAULT_REAUTH_TTL_SECONDS) => {
+  const buildReauthCookie = (token: string, ttlSeconds = DEFAULT_REAUTH_TTL_SECONDS, clientId = CLIENT_ID) => {
     const cookie = createReauthCookieValue({
       tenantId,
       apiResourceId,
-      clientId: CLIENT_ID,
+      clientId,
       sessionHash: hashOpaqueToken(token),
       ttlSeconds,
     });
@@ -43,11 +46,11 @@ describe("OIDC flow", () => {
     return cookie;
   };
 
-  const buildFreshLoginCookie = (token: string) =>
+  const buildFreshLoginCookie = (token: string, clientId = CLIENT_ID) =>
     createFreshLoginCookieValue({
       tenantId,
       apiResourceId,
-      clientId: CLIENT_ID,
+      clientId,
       sessionHash: hashOpaqueToken(token),
     });
 
@@ -63,9 +66,11 @@ describe("OIDC flow", () => {
     codeVerifier = "verifier-1234567890123456789012345678901234567890";
     const client = await prisma.client.findFirstOrThrow({ where: { tenantId: tenant.id, clientId: CLIENT_ID } });
     clientInternalId = client.id;
-    originalStrategies = client.authStrategies;
+    originalStrategies = client.authStrategies as Prisma.JsonValue;
     originalReauthTtlSeconds = client.reauthTtlSeconds;
     originalAllowedScopes = client.allowedScopes;
+    originalIdTokenAlg = client.idTokenSignedResponseAlg;
+    originalAccessTokenAlg = client.accessTokenSigningAlg;
     await prisma.client.update({
       where: { id: client.id },
       data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS },
@@ -93,6 +98,8 @@ describe("OIDC flow", () => {
           ...(originalStrategies ? { authStrategies: originalStrategies } : {}),
           ...(typeof originalReauthTtlSeconds === "number" ? { reauthTtlSeconds: originalReauthTtlSeconds } : {}),
           ...(originalAllowedScopes ? { allowedScopes: originalAllowedScopes } : {}),
+          idTokenSignedResponseAlg: originalIdTokenAlg ?? null,
+          accessTokenSigningAlg: originalAccessTokenAlg ?? null,
         },
       });
     }
@@ -467,6 +474,7 @@ describe("OIDC flow", () => {
     );
 
     expect(authorize.type).toBe("redirect");
+    expect(authorize.type).toBe("redirect");
     const code = new URL(authorize.redirectTo).searchParams.get("code");
     const consumed = await consumeAuthorizationCode(code!);
     const tokenResponse = await issueTokensFromCode({
@@ -651,5 +659,171 @@ describe("OIDC flow", () => {
 
     await expect(authorizeFlow(true)).resolves.toBe(true);
     await expect(authorizeFlow(false)).resolves.toBe(false);
+  });
+
+  it("signs tokens with configured algorithms", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: { authStrategies: originalStrategies as Prisma.InputJsonValue },
+    });
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: { idTokenSignedResponseAlg: "ES384", accessTokenSigningAlg: "PS256" },
+    });
+
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: CLIENT_ID,
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        state: "alg-test",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        reauthCookie: buildReauthCookie(sessionToken, DEFAULT_REAUTH_TTL_SECONDS, CLIENT_ID),
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+    );
+
+    const code = new URL(authorize.redirectTo).searchParams.get("code");
+    const consumed = await consumeAuthorizationCode(code!);
+    const tokens = await issueTokensFromCode({
+      code: consumed,
+      codeVerifier,
+      redirectUri: "https://client.example.test/callback",
+      origin: "https://mockauth.test",
+      clientSecret: CLIENT_SECRET,
+    });
+
+    const idHeader = decodeProtectedHeader(tokens.id_token);
+    const accessHeader = decodeProtectedHeader(tokens.access_token);
+
+    expect(idHeader.alg).toBe("ES384");
+    expect(accessHeader.alg).toBe("PS256");
+    expect(idHeader.kid).toBeTruthy();
+    expect(accessHeader.kid).toBeTruthy();
+
+    const idKey = await prisma.tenantKey.findFirstOrThrow({ where: { tenantId, kid: idHeader.kid as string } });
+    const accessKey = await prisma.tenantKey.findFirstOrThrow({ where: { tenantId, kid: accessHeader.kid as string } });
+    expect(idKey.alg).toBe("ES384");
+    expect(accessKey.alg).toBe("PS256");
+  });
+
+  it("supports multiple clients with distinct signing algorithms", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: { authStrategies: originalStrategies as Prisma.InputJsonValue },
+    });
+    const alternateClientId = `client_${randomUUID().slice(0, 12)}`;
+    const alternateRedirect = `https://${alternateClientId}.example.test/callback`;
+
+    const alternateClient = await prisma.client.create({
+      data: {
+        tenantId,
+        name: "Alternate signing client",
+        clientId: alternateClientId,
+        clientType: "PUBLIC",
+        tokenEndpointAuthMethod: "none",
+        idTokenSignedResponseAlg: "ES256",
+        accessTokenSigningAlg: "ES256",
+        redirectUris: {
+          create: {
+            uri: alternateRedirect,
+          },
+        },
+      },
+    });
+
+    try {
+      await prisma.client.update({
+        where: { id: clientInternalId },
+        data: { idTokenSignedResponseAlg: "PS256", accessTokenSigningAlg: null },
+      });
+
+      const challenge = computeS256Challenge(codeVerifier);
+
+      const primaryAuthorize = await handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "https://client.example.test/callback",
+          responseType: "code",
+          scope: "openid profile",
+          state: "primary-client",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: buildReauthCookie(sessionToken, DEFAULT_REAUTH_TTL_SECONDS, CLIENT_ID),
+          freshLoginRequested: true,
+          freshLoginCookie: buildFreshLoginCookie(sessionToken, CLIENT_ID),
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+      );
+
+      const altAuthorize = await handleAuthorize(
+        {
+          apiResourceId,
+          clientId: alternateClient.clientId,
+          redirectUri: alternateRedirect,
+          responseType: "code",
+          scope: "openid profile",
+          state: "alternate-client",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+          sessionToken,
+          reauthCookie: buildReauthCookie(sessionToken, DEFAULT_REAUTH_TTL_SECONDS, alternateClient.clientId),
+          freshLoginRequested: true,
+          freshLoginCookie: buildFreshLoginCookie(sessionToken, alternateClient.clientId),
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${alternateClient.clientId}`,
+      );
+
+      expect(primaryAuthorize.type).toBe("redirect");
+      expect(altAuthorize.type).toBe("redirect");
+      const primaryCode = new URL(primaryAuthorize.redirectTo).searchParams.get("code");
+      const alternateCode = new URL(altAuthorize.redirectTo).searchParams.get("code");
+
+      const [primaryConsumed, alternateConsumed] = await Promise.all([
+        consumeAuthorizationCode(primaryCode!),
+        consumeAuthorizationCode(alternateCode!),
+      ]);
+
+      const [primaryTokens, alternateTokens] = await Promise.all([
+        issueTokensFromCode({
+          code: primaryConsumed,
+          codeVerifier,
+          redirectUri: "https://client.example.test/callback",
+          origin: "https://mockauth.test",
+          clientSecret: CLIENT_SECRET,
+        }),
+        issueTokensFromCode({
+          code: alternateConsumed,
+          codeVerifier,
+          redirectUri: alternateRedirect,
+          origin: "https://mockauth.test",
+          clientSecret: null,
+        }),
+      ]);
+
+      const primaryHeader = decodeProtectedHeader(primaryTokens.id_token);
+      const alternateHeader = decodeProtectedHeader(alternateTokens.id_token);
+
+      expect(primaryHeader.alg).toBe("PS256");
+      expect(alternateHeader.alg).toBe("ES256");
+      expect(primaryHeader.kid).not.toBe(alternateHeader.kid);
+
+      const activeKeys = await prisma.tenantKey.findMany({ where: { tenantId, status: "ACTIVE" } });
+      expect(activeKeys.some((key) => key.alg === "PS256")).toBe(true);
+      expect(activeKeys.some((key) => key.alg === "ES256")).toBe(true);
+    } finally {
+      await prisma.redirectUri.deleteMany({ where: { clientId: alternateClient.id } });
+      await prisma.client.delete({ where: { id: alternateClient.id } });
+    }
   });
 });

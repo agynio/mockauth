@@ -2,7 +2,12 @@ import { randomUUID } from "crypto";
 
 import { prisma } from "@/server/db/client";
 import { decrypt } from "@/server/crypto/key-vault";
-import { createClient, getClientByIdForTenant, rotateClientSecret } from "@/server/services/client-service";
+import {
+  createClient,
+  getClientByIdForTenant,
+  rotateClientSecret,
+  updateClientSigningAlgorithms,
+} from "@/server/services/client-service";
 import { describe, expect, it } from "vitest";
 
 const createTenant = async () => {
@@ -98,5 +103,25 @@ describe("client service", () => {
     expect(updated?.clientSecretHash).not.toEqual(original?.clientSecretHash);
     expect(updated?.clientSecretEncrypted).not.toEqual(original?.clientSecretEncrypted);
     expect(decrypt(updated?.clientSecretEncrypted as string)).toEqual(nextSecret);
+  });
+
+  it("updates signing algorithms with nullable defaults", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Alg Tester",
+      clientType: "PUBLIC",
+    });
+
+    await updateClientSigningAlgorithms(client.id, { idTokenAlg: "ES384", accessTokenAlg: "PS256" });
+
+    let refreshed = await prisma.client.findUnique({ where: { id: client.id } });
+    expect(refreshed?.idTokenSignedResponseAlg).toBe("ES384");
+    expect(refreshed?.accessTokenSigningAlg).toBe("PS256");
+
+    await updateClientSigningAlgorithms(client.id, { idTokenAlg: null, accessTokenAlg: null });
+
+    refreshed = await prisma.client.findUnique({ where: { id: client.id } });
+    expect(refreshed?.idTokenSignedResponseAlg).toBeNull();
+    expect(refreshed?.accessTokenSigningAlg).toBeNull();
   });
 });
