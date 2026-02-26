@@ -4,6 +4,7 @@ import { DomainError } from "@/server/errors";
 import { issuerForResource, parseIssuerSegments } from "@/server/oidc/issuer";
 import { getPublicJwkByKid } from "@/server/services/key-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { isJwtSigningAlg } from "@/server/oidc/signing-alg";
 
 const parseBearer = (header?: string | null) => {
   if (!header) {
@@ -45,11 +46,14 @@ export const getUserInfo = async (
   if (!header.kid) {
     throw new DomainError("Missing key id", { status: 400, code: "invalid_token" });
   }
+  if (!header.alg || !isJwtSigningAlg(header.alg)) {
+    throw new DomainError("Unsupported signing algorithm", { status: 400, code: "invalid_token" });
+  }
 
   const keyJwk = await getPublicJwkByKid(tenant.id, header.kid);
-  const key = await importJWK(keyJwk, "RS256");
+  const key = await importJWK(keyJwk, header.alg);
   const expectedIssuer = issuerForResource(origin, expectedApiResourceId);
-  const { payload } = await jwtVerify(token, key, { issuer: expectedIssuer });
+  const { payload } = await jwtVerify(token, key, { issuer: expectedIssuer, algorithms: [header.alg] });
   const claims: Record<string, unknown> = { sub: payload.sub };
   if (typeof payload.name === "string") {
     claims.name = payload.name;

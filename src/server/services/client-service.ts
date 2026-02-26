@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, JwtSigningAlg } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { hashSecret } from "@/server/crypto/hash";
 import { encrypt, decrypt } from "@/server/crypto/key-vault";
@@ -185,6 +185,19 @@ export const updateClientAllowedScopes = async (clientId: string, scopes: string
 
 export const updateClientReauthTtl = async (clientId: string, reauthTtlSeconds: number) => {
   return prisma.client.update({ where: { id: clientId }, data: { reauthTtlSeconds } });
+};
+
+export const updateClientSigningAlgorithms = async (
+  clientId: string,
+  options: { idTokenAlg: JwtSigningAlg | null; accessTokenAlg: JwtSigningAlg | null },
+) => {
+  return prisma.client.update({
+    where: { id: clientId },
+    data: {
+      idTokenSignedResponseAlg: options.idTokenAlg,
+      accessTokenSigningAlg: options.accessTokenAlg,
+    },
+  });
 };
 
 export const getConfidentialClientSecret = async (clientId: string): Promise<string | null> => {

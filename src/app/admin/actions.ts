@@ -22,8 +22,9 @@ import {
   updateClientReauthTtl,
   updateClientAllowedScopes,
   getConfidentialClientSecret,
+  updateClientSigningAlgorithms,
 } from "@/server/services/client-service";
-import { rotateKey } from "@/server/services/key-service";
+import { rotateKeyForAlg } from "@/server/services/key-service";
 import {
   ADMIN_ACTIVE_TENANT_COOKIE,
   clearAdminActiveTenantCookie,
@@ -52,6 +53,7 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/server/services/oauth-test-service";
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -67,7 +69,7 @@ const clientSchema = z.object({
   scopes: z.array(z.string().min(1)).optional(),
 });
 
-const keySchema = z.object({ tenantId: z.string().min(1) });
+const keySchema = z.object({ tenantId: z.string().min(1), alg: z.enum(SUPPORTED_JWT_SIGNING_ALGS) });
 const setTenantSchema = z.object({ tenantId: z.string().min(1) });
 const rotateSecretSchema = z.object({ clientId: z.string().min(1) });
 const redirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
@@ -122,6 +124,14 @@ const updateClientStrategiesSchema = z.object({
 const updateClientReauthSchema = z.object({
   clientId: z.string().min(1),
   reauthTtlSeconds: z.number().int().min(0).max(86400),
+});
+
+const idTokenAlgOptions = ["default", ...SUPPORTED_JWT_SIGNING_ALGS] as const;
+const accessTokenAlgOptions = ["match_id", ...SUPPORTED_JWT_SIGNING_ALGS] as const;
+const updateClientSigningAlgsSchema = z.object({
+  clientId: z.string().min(1),
+  idTokenAlg: z.enum(idTokenAlgOptions),
+  accessTokenAlg: z.enum(accessTokenAlgOptions),
 });
 
 const requireSession = async () => {
@@ -283,9 +293,9 @@ export const rotateKeyAction = async (input: z.infer<typeof keySchema>): Promise
     const adminId = await requireSession();
     const parsed = keySchema.parse(input);
     await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
-    await rotateKey(parsed.tenantId);
+    await rotateKeyForAlg(parsed.tenantId, parsed.alg);
     revalidatePath("/admin", "layout");
-    return { success: "Signing key rotated" };
+    return { success: `Signing key rotated (${parsed.alg})` };
   } catch (error) {
     console.error(error);
     return { error: "Unable to rotate key" };
@@ -465,6 +475,35 @@ export const updateClientReauthTtlAction = async (input: z.infer<typeof updateCl
   } catch (error) {
     console.error(error);
     return { error: "Unable to update re-auth TTL" };
+  }
+};
+
+export const updateClientSigningAlgsAction = async (
+  input: z.infer<typeof updateClientSigningAlgsSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateClientSigningAlgsSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+
+    const idTokenAlg = parsed.idTokenAlg === "default" ? null : parsed.idTokenAlg;
+    const accessTokenAlg = parsed.accessTokenAlg === "match_id" ? null : parsed.accessTokenAlg;
+
+    await updateClientSigningAlgorithms(client.id, {
+      idTokenAlg,
+      accessTokenAlg,
+    });
+
+    revalidatePath(clientPath(client.id));
+    revalidatePath("/admin/clients");
+    revalidatePath("/admin", "layout");
+    return { success: "Signing algorithms updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update signing algorithms" };
   }
 };
 

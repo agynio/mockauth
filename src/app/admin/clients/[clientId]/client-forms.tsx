@@ -16,6 +16,7 @@ import {
   updateClientIssuerAction,
   updateClientNameAction,
   updateClientReauthTtlAction,
+  updateClientSigningAlgsAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { Badge } from "@/components/ui/badge";
@@ -23,12 +24,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { cn } from "@/lib/utils";
 import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
+import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
+import type { JwtSigningAlg } from "@/generated/prisma/client";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
 const redirectSchema = z.object({
@@ -65,6 +68,20 @@ const reauthTtlSchema = z.object({
     .number()
     .int("Enter a whole number"),
 });
+
+const idTokenAlgOptions = ["default", ...SUPPORTED_JWT_SIGNING_ALGS] as const;
+const accessTokenAlgOptions = ["match_id", ...SUPPORTED_JWT_SIGNING_ALGS] as const;
+const signingAlgsSchema = z.object({
+  idTokenAlg: z.enum(idTokenAlgOptions),
+  accessTokenAlg: z.enum(accessTokenAlgOptions),
+});
+
+const SIGNING_ALG_LABELS: Record<JwtSigningAlg, string> = {
+  RS256: "RS256 (RSA SHA-256)",
+  PS256: "PS256 (RSA-PSS SHA-256)",
+  ES256: "ES256 (ECDSA P-256)",
+  ES384: "ES384 (ECDSA P-384)",
+};
 
 const formatReauthTtlSummary = (seconds: number) => {
   if (!seconds) {
@@ -187,6 +204,133 @@ export function UpdateClientNameForm({
           </Button>
         ) : (
           <Button type="button" variant="outline" disabled className="self-end">
+            Read-only
+          </Button>
+        )}
+      </form>
+    </Form>
+  );
+}
+
+export function UpdateClientSigningAlgorithmsForm({
+  clientId,
+  initialIdTokenAlg,
+  initialAccessTokenAlg,
+  canEdit,
+}: {
+  clientId: string;
+  initialIdTokenAlg: JwtSigningAlg | null;
+  initialAccessTokenAlg: JwtSigningAlg | null;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const form = useForm<z.infer<typeof signingAlgsSchema>>({
+    resolver: zodResolver(signingAlgsSchema),
+    defaultValues: {
+      idTokenAlg: initialIdTokenAlg ?? "default",
+      accessTokenAlg: initialAccessTokenAlg ?? "match_id",
+    },
+  });
+
+  useEffect(() => {
+    form.reset({
+      idTokenAlg: initialIdTokenAlg ?? "default",
+      accessTokenAlg: initialAccessTokenAlg ?? "match_id",
+    });
+  }, [initialIdTokenAlg, initialAccessTokenAlg, form]);
+
+  const watchedIdAlg = useWatch({ control: form.control, name: "idTokenAlg" });
+  const watchedAccessAlg = useWatch({ control: form.control, name: "accessTokenAlg" });
+
+  const resolvedIdAlg: JwtSigningAlg = watchedIdAlg === "default" ? DEFAULT_JWT_SIGNING_ALG : (watchedIdAlg as JwtSigningAlg);
+  const resolvedAccessAlg: JwtSigningAlg = watchedAccessAlg === "match_id" ? resolvedIdAlg : (watchedAccessAlg as JwtSigningAlg);
+
+  const onSubmit = (values: z.infer<typeof signingAlgsSchema>) => {
+    startTransition(async () => {
+      const result = await updateClientSigningAlgsAction({ clientId, ...values });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Signing algorithms updated", description: result.success ?? "Saved" });
+    });
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="idTokenAlg"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs text-muted-foreground">ID token algorithm</FormLabel>
+              <FormControl>
+                <Select value={field.value} onValueChange={field.onChange} disabled={!canEdit || pending}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select ID token algorithm" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Platform default ({DEFAULT_JWT_SIGNING_ALG})</SelectItem>
+                    {SUPPORTED_JWT_SIGNING_ALGS.map((alg) => (
+                      <SelectItem key={alg} value={alg}>
+                        {SIGNING_ALG_LABELS[alg]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormDescription className="text-xs">
+                Defaults to {DEFAULT_JWT_SIGNING_ALG}. Change when relying parties require a different signature.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="accessTokenAlg"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs text-muted-foreground">Access token algorithm</FormLabel>
+              <FormControl>
+                <Select value={field.value} onValueChange={field.onChange} disabled={!canEdit || pending}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select access token algorithm" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="match_id">Match ID token (default)</SelectItem>
+                    {SUPPORTED_JWT_SIGNING_ALGS.map((alg) => (
+                      <SelectItem key={alg} value={alg}>
+                        {SIGNING_ALG_LABELS[alg]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormDescription className="text-xs">
+                Inherits the ID token algorithm unless overridden. Useful for asymmetric access token policies.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <p className="text-xs text-muted-foreground">
+          ID tokens will use <span className="font-medium text-foreground">{resolvedIdAlg}</span>. Access tokens will use
+          <span className="font-medium text-foreground"> {resolvedAccessAlg}</span>.
+        </p>
+
+        {canEdit ? (
+          <Button type="submit" disabled={pending}>
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save algorithms"}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled className="cursor-not-allowed opacity-70">
             Read-only
           </Button>
         )}

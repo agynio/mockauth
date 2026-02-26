@@ -42,6 +42,13 @@ enum TokenEndpointAuthMethod {
   none
 }
 
+enum JwtSigningAlg {
+  RS256
+  PS256
+  ES256
+  ES384
+}
+
 enum LoginStrategy {
   USERNAME
   EMAIL
@@ -145,6 +152,8 @@ model Client {
   allowedResponseTypes     String[]                 @default(["code"])
   pkceRequired             Boolean                  @default(true)
   tokenEndpointAuthMethod  TokenEndpointAuthMethod  @default(client_secret_basic)
+  idTokenSignedResponseAlg JwtSigningAlg?
+  accessTokenSigningAlg    JwtSigningAlg?
   authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\",\"emailVerifiedMode\":\"false\"}}")
   reauthTtlSeconds         Int                      @default(0)
   redirectUris             RedirectUri[]
@@ -168,20 +177,20 @@ model RedirectUri {
 }
 
 model TenantKey {
-  id                   String     @id @default(uuid())
-  tenant               Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                   String        @id @default(uuid())
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId             String
   kid                  String
   kty                  String
-  alg                  String
-  use                  String     @default("sig")
-  status               KeyStatus  @default(ACTIVE)
+  alg                  JwtSigningAlg @default(RS256)
+  use                  String        @default("sig")
+  status               KeyStatus     @default(ACTIVE)
   publicJwk            Json
   privateJwkEncrypted  String
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
   @@unique([tenantId, kid])
-  @@index([tenantId, status])
+  @@index([tenantId, alg, status])
 }
 
 model MockUser {

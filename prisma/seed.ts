@@ -2,7 +2,8 @@ import { hashSecret } from "@/server/crypto/hash";
 import { encrypt } from "@/server/crypto/key-vault";
 import { prisma } from "@/server/db/client";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
-import { ensureActiveKey } from "@/server/services/key-service";
+import { ensureActiveKeyForAlg } from "@/server/services/key-service";
+import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 const DEFAULT_TENANT_NAME = "QA Sandbox";
@@ -30,7 +31,7 @@ async function main() {
     await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
   }
 
-  await ensureActiveKey(tenant.id);
+  await ensureActiveKeyForAlg(tenant.id, DEFAULT_JWT_SIGNING_ALG);
 
   const client = await prisma.client.upsert({
     where: { tenantId_clientId: { tenantId: tenant.id, clientId: DEFAULT_CLIENT_ID } },

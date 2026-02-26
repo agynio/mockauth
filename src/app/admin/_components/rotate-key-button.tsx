@@ -7,23 +7,37 @@ import { Loader2 } from "lucide-react";
 import { rotateKeyAction } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import type { JwtSigningAlg } from "@/generated/prisma/client";
 
-export const RotateKeyButton = ({ tenantId, canRotate }: { tenantId: string; canRotate: boolean }) => {
+export const RotateKeyButton = ({
+  tenantId,
+  alg,
+  canRotate,
+  hasActiveKey,
+}: {
+  tenantId: string;
+  alg: JwtSigningAlg;
+  canRotate: boolean;
+  hasActiveKey: boolean;
+}) => {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
 
   const handleRotate = () => {
     startTransition(async () => {
-      const result = await rotateKeyAction({ tenantId });
+      const result = await rotateKeyAction({ tenantId, alg });
       if (result.error) {
         toast({ variant: "destructive", title: "Unable to rotate key", description: result.error });
         return;
       }
       router.refresh();
-      toast({ title: "Signing key rotated", description: "JWKS now contains the new key" });
+      toast({ title: result.success ?? "Signing key rotated", description: "JWKS now contains the new key" });
     });
   };
+
+  const label = hasActiveKey ? `Rotate ${alg}` : `Generate ${alg}`;
+  const disabledLabel = canRotate ? label : "Owner access required";
 
   return (
     <Button
@@ -31,9 +45,9 @@ export const RotateKeyButton = ({ tenantId, canRotate }: { tenantId: string; can
       variant="secondary"
       onClick={handleRotate}
       disabled={pending || !canRotate}
-      className="mt-4"
+      className="mt-2 w-full sm:mt-0 sm:w-auto"
     >
-      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : canRotate ? "Rotate signing key" : "Owner access required"}
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : disabledLabel}
     </Button>
   );
 };
