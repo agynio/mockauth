@@ -474,7 +474,6 @@ describe("OIDC flow", () => {
     );
 
     expect(authorize.type).toBe("redirect");
-    expect(authorize.type).toBe("redirect");
     const code = new URL(authorize.redirectTo).searchParams.get("code");
     const consumed = await consumeAuthorizationCode(code!);
     const tokenResponse = await issueTokensFromCode({
