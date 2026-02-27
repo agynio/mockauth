@@ -83,6 +83,18 @@ const SIGNING_ALG_LABELS: Record<JwtSigningAlg, string> = {
   ES384: "ES384 (ECDSA P-384)",
 };
 
+function renderSigningAlgLabel(value: string | undefined, kind: "id" | "access"): string {
+  if (!value) {
+    return kind === "id" ? "Select ID token algorithm" : "Select access token algorithm";
+  }
+  if (kind === "id") {
+    return value === "default"
+      ? `Platform default (${DEFAULT_JWT_SIGNING_ALG})`
+      : SIGNING_ALG_LABELS[value as JwtSigningAlg];
+  }
+  return value === "match_id" ? "Match ID token (default)" : SIGNING_ALG_LABELS[value as JwtSigningAlg];
+}
+
 const formatReauthTtlSummary = (seconds: number) => {
   if (!seconds) {
     return "0 seconds = always require a fresh sign-in.";
@@ -277,11 +289,7 @@ export function UpdateClientSigningAlgorithmsForm({
                 >
                   <SelectTrigger>
                     <span className={cn("truncate", !field.value && "text-muted-foreground")}>
-                      {field.value
-                        ? field.value === "default"
-                          ? `Platform default (${DEFAULT_JWT_SIGNING_ALG})`
-                          : SIGNING_ALG_LABELS[field.value as JwtSigningAlg]
-                        : "Select ID token algorithm"}
+                      {renderSigningAlgLabel(field.value, "id")}
                     </span>
                   </SelectTrigger>
                   <SelectContent>
@@ -317,11 +325,7 @@ export function UpdateClientSigningAlgorithmsForm({
                 >
                   <SelectTrigger>
                     <span className={cn("truncate", !field.value && "text-muted-foreground")}>
-                      {field.value
-                        ? field.value === "match_id"
-                          ? "Match ID token (default)"
-                          : SIGNING_ALG_LABELS[field.value as JwtSigningAlg]
-                        : "Select access token algorithm"}
+                      {renderSigningAlgLabel(field.value, "access")}
                     </span>
                   </SelectTrigger>
                   <SelectContent>
