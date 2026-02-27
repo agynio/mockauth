@@ -279,29 +279,47 @@ export function UpdateClientSigningAlgorithmsForm({
           name="idTokenAlg"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs text-muted-foreground">ID token algorithm</FormLabel>
-              <FormControl>
-                <Select
-                  value={field.value}
-                  defaultValue={field.value}
-                  onValueChange={field.onChange}
-                  disabled={!canEdit || pending}
-                >
-                  <SelectTrigger>
-                    <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+              <FormLabel className="text-xs text-muted-foreground" htmlFor="signing-id-token-alg-trigger">
+                ID token algorithm
+              </FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  if (!value) {
+                    return;
+                  }
+                  field.onChange(value);
+                  form.setValue("idTokenAlg", value as (typeof idTokenAlgOptions)[number], {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }}
+                disabled={!canEdit || pending}
+              >
+                <FormControl>
+                  <SelectTrigger
+                    id="signing-id-token-alg-trigger"
+                    className="text-left"
+                    aria-label="ID token algorithm"
+                    data-testid="signing-id-token-alg-trigger"
+                  >
+                    <SelectValue aria-hidden="true" className="sr-only" />
+                    <span className={cn("flex-1 truncate text-left", !field.value && "text-muted-foreground")}>
                       {renderSigningAlgLabel(field.value, "id")}
                     </span>
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Platform default ({DEFAULT_JWT_SIGNING_ALG})</SelectItem>
-                    {SUPPORTED_JWT_SIGNING_ALGS.map((alg) => (
-                      <SelectItem key={alg} value={alg}>
-                        {SIGNING_ALG_LABELS[alg]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="default" data-testid="signing-id-token-alg-option-default">
+                    Platform default ({DEFAULT_JWT_SIGNING_ALG})
+                  </SelectItem>
+                  {SUPPORTED_JWT_SIGNING_ALGS.map((alg) => (
+                    <SelectItem key={alg} value={alg} data-testid={`signing-id-token-alg-option-${alg}`}>
+                      {SIGNING_ALG_LABELS[alg]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormDescription className="text-xs">
                 Defaults to {DEFAULT_JWT_SIGNING_ALG}. Change when relying parties require a different signature.
               </FormDescription>
@@ -315,29 +333,47 @@ export function UpdateClientSigningAlgorithmsForm({
           name="accessTokenAlg"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs text-muted-foreground">Access token algorithm</FormLabel>
-              <FormControl>
-                <Select
-                  value={field.value}
-                  defaultValue={field.value}
-                  onValueChange={field.onChange}
-                  disabled={!canEdit || pending}
-                >
-                  <SelectTrigger>
-                    <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+              <FormLabel className="text-xs text-muted-foreground" htmlFor="signing-access-token-alg-trigger">
+                Access token algorithm
+              </FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  if (!value) {
+                    return;
+                  }
+                  field.onChange(value);
+                  form.setValue("accessTokenAlg", value as (typeof accessTokenAlgOptions)[number], {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }}
+                disabled={!canEdit || pending}
+              >
+                <FormControl>
+                  <SelectTrigger
+                    id="signing-access-token-alg-trigger"
+                    className="text-left"
+                    aria-label="Access token algorithm"
+                    data-testid="signing-access-token-alg-trigger"
+                  >
+                    <SelectValue aria-hidden="true" className="sr-only" />
+                    <span className={cn("flex-1 truncate text-left", !field.value && "text-muted-foreground")}>
                       {renderSigningAlgLabel(field.value, "access")}
                     </span>
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="match_id">Match ID token (default)</SelectItem>
-                    {SUPPORTED_JWT_SIGNING_ALGS.map((alg) => (
-                      <SelectItem key={alg} value={alg}>
-                        {SIGNING_ALG_LABELS[alg]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="match_id" data-testid="signing-access-token-alg-option-match_id">
+                    Match ID token (default)
+                  </SelectItem>
+                  {SUPPORTED_JWT_SIGNING_ALGS.map((alg) => (
+                    <SelectItem key={alg} value={alg} data-testid={`signing-access-token-alg-option-${alg}`}>
+                      {SIGNING_ALG_LABELS[alg]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormDescription className="text-xs">
                 Inherits the ID token algorithm unless overridden. Useful for asymmetric access token policies.
               </FormDescription>
@@ -352,8 +388,8 @@ export function UpdateClientSigningAlgorithmsForm({
         </p>
 
         {canEdit ? (
-          <Button type="submit" disabled={pending}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save algorithms"}
+          <Button type="submit" disabled={pending} data-testid="signing-algs-save">
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
           </Button>
         ) : (
           <Button type="button" variant="outline" disabled className="cursor-not-allowed opacity-70">
