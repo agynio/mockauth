@@ -83,6 +83,18 @@ const SIGNING_ALG_LABELS: Record<JwtSigningAlg, string> = {
   ES384: "ES384 (ECDSA P-384)",
 };
 
+function renderSigningAlgLabel(value: string | undefined, kind: "id" | "access"): string {
+  if (!value) {
+    return kind === "id" ? "Select ID token algorithm" : "Select access token algorithm";
+  }
+  if (kind === "id") {
+    return value === "default"
+      ? `Platform default (${DEFAULT_JWT_SIGNING_ALG})`
+      : SIGNING_ALG_LABELS[value as JwtSigningAlg];
+  }
+  return value === "match_id" ? "Match ID token (default)" : SIGNING_ALG_LABELS[value as JwtSigningAlg];
+}
+
 const formatReauthTtlSummary = (seconds: number) => {
   if (!seconds) {
     return "0 seconds = always require a fresh sign-in.";
@@ -276,7 +288,9 @@ export function UpdateClientSigningAlgorithmsForm({
                   disabled={!canEdit || pending}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select ID token algorithm" />
+                    <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+                      {renderSigningAlgLabel(field.value, "id")}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">Platform default ({DEFAULT_JWT_SIGNING_ALG})</SelectItem>
@@ -310,7 +324,9 @@ export function UpdateClientSigningAlgorithmsForm({
                   disabled={!canEdit || pending}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select access token algorithm" />
+                    <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+                      {renderSigningAlgLabel(field.value, "access")}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="match_id">Match ID token (default)</SelectItem>
