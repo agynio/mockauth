@@ -276,7 +276,13 @@ export function UpdateClientSigningAlgorithmsForm({
                   disabled={!canEdit || pending}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select ID token algorithm" />
+                    <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+                      {field.value
+                        ? field.value === "default"
+                          ? `Platform default (${DEFAULT_JWT_SIGNING_ALG})`
+                          : SIGNING_ALG_LABELS[field.value as JwtSigningAlg]
+                        : "Select ID token algorithm"}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">Platform default ({DEFAULT_JWT_SIGNING_ALG})</SelectItem>
@@ -310,7 +316,13 @@ export function UpdateClientSigningAlgorithmsForm({
                   disabled={!canEdit || pending}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select access token algorithm" />
+                    <span className={cn("truncate", !field.value && "text-muted-foreground")}>
+                      {field.value
+                        ? field.value === "match_id"
+                          ? "Match ID token (default)"
+                          : SIGNING_ALG_LABELS[field.value as JwtSigningAlg]
+                        : "Select access token algorithm"}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="match_id">Match ID token (default)</SelectItem>
