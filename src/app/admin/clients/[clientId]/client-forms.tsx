@@ -269,7 +269,12 @@ export function UpdateClientSigningAlgorithmsForm({
             <FormItem>
               <FormLabel className="text-xs text-muted-foreground">ID token algorithm</FormLabel>
               <FormControl>
-                <Select value={field.value} onValueChange={field.onChange} disabled={!canEdit || pending}>
+                <Select
+                  value={field.value}
+                  defaultValue={field.value}
+                  onValueChange={field.onChange}
+                  disabled={!canEdit || pending}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select ID token algorithm" />
                   </SelectTrigger>
@@ -298,7 +303,12 @@ export function UpdateClientSigningAlgorithmsForm({
             <FormItem>
               <FormLabel className="text-xs text-muted-foreground">Access token algorithm</FormLabel>
               <FormControl>
-                <Select value={field.value} onValueChange={field.onChange} disabled={!canEdit || pending}>
+                <Select
+                  value={field.value}
+                  defaultValue={field.value}
+                  onValueChange={field.onChange}
+                  disabled={!canEdit || pending}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select access token algorithm" />
                   </SelectTrigger>
