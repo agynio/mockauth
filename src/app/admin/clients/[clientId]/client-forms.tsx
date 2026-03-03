@@ -1159,12 +1159,10 @@ export function UpdateClientIssuerForm({
 export function UpdateProxyProviderConfigForm({
   clientId,
   canEdit,
-  proxyEnabled,
   initialConfig,
 }: {
   clientId: string;
   canEdit: boolean;
-  proxyEnabled: boolean;
   initialConfig: {
     providerType: "oidc" | "oauth2";
     authorizationEndpoint: string;
@@ -1184,7 +1182,7 @@ export function UpdateProxyProviderConfigForm({
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const disableForm = !canEdit || !proxyEnabled || pending;
+  const disableForm = !canEdit || pending;
 
   const defaultScopeMappingRows = Object.entries(initialConfig.scopeMapping).map(([key, values]) => ({
     appScope: key,
@@ -1571,9 +1569,6 @@ export function UpdateProxyProviderConfigForm({
           <Button type="submit" disabled={disableForm} className="w-full sm:w-auto">
             {pending ? "Saving…" : "Save changes"}
           </Button>
-          {!proxyEnabled ? (
-            <p className="text-xs text-muted-foreground">Enable proxy clients to edit this configuration.</p>
-          ) : null}
         </div>
       </form>
     </Form>

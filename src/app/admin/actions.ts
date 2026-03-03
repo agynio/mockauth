@@ -57,7 +57,6 @@ import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/serve
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
-import { env } from "@/server/env";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -320,9 +319,6 @@ export const createClientAction = async (
     const parsed = clientSchema.parse(input);
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
-    if (parsed.mode === "proxy" && !env.ENABLE_PROXY_CLIENTS) {
-      return { error: "Proxy clients are disabled" };
-    }
     if (parsed.mode === "proxy") {
       const proxyValidationError = validateProxyConfigInput(parsed.proxyConfig);
       if (proxyValidationError) {
@@ -467,10 +463,6 @@ export const updateProxyClientConfigAction = async (
     if (client.oauthClientMode !== "proxy") {
       return { error: "Client is not configured for proxy mode" };
     }
-    if (!env.ENABLE_PROXY_CLIENTS) {
-      return { error: "Proxy clients are disabled" };
-    }
-
     const { clientId, ...rawConfig } = parsed;
     const validationError = validateProxyConfigInput(rawConfig);
     if (validationError) {
