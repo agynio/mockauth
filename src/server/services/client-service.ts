@@ -10,6 +10,7 @@ import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { z } from "zod";
 
 const canonicalizeAllowedScopes = (scopes?: string[]) => {
   const normalized = scopes && scopes.length > 0 ? normalizeScopes(scopes) : Array.from(SUPPORTED_SCOPES);
@@ -23,10 +24,68 @@ const canonicalizeAllowedScopes = (scopes?: string[]) => {
   return ["openid", ...normalized.filter((scope) => scope !== "openid")];
 };
 
+export const proxyProviderConfigSchema = z.object({
+  providerType: z.enum(["oidc", "oauth2"] as const),
+  authorizationEndpoint: z.string().url(),
+  tokenEndpoint: z.string().url(),
+  userinfoEndpoint: z.string().url().optional(),
+  jwksUri: z.string().url().optional(),
+  upstreamClientId: z.string().min(1),
+  upstreamClientSecret: z.string().optional(),
+  defaultScopes: z.array(z.string().min(1)).optional(),
+  scopeMapping: z
+    .record(z.string(), z.union([z.string(), z.array(z.string().min(1))]))
+    .optional(),
+  pkceSupported: z.boolean().optional(),
+  oidcEnabled: z.boolean().optional(),
+  promptPassthroughEnabled: z.boolean().optional(),
+  loginHintPassthroughEnabled: z.boolean().optional(),
+  passthroughTokenResponse: z.boolean().optional(),
+});
+
+export type ProxyProviderConfigInput = z.infer<typeof proxyProviderConfigSchema>;
+
+const normalizeProviderScopes = (scopes?: string[]) => {
+  if (!scopes) {
+    return [] as string[];
+  }
+  const set = new Set<string>();
+  for (const scope of scopes) {
+    const trimmed = scope.trim();
+    if (trimmed.length > 0) {
+      set.add(trimmed);
+    }
+  }
+  return Array.from(set);
+};
+
+const normalizeScopeMapping = (mapping?: ProxyProviderConfigInput["scopeMapping"]) => {
+  if (!mapping) {
+    return undefined;
+  }
+  const normalized: Record<string, string[]> = {};
+  for (const [key, raw] of Object.entries(mapping)) {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      continue;
+    }
+    const values = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw.split(/\s+/)
+        : [];
+    const normalizedValues = normalizeProviderScopes(values as string[]);
+    if (normalizedValues.length > 0) {
+      normalized[trimmedKey] = normalizedValues;
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
 export const getClientForTenant = async (tenantId: string, clientId: string) => {
   const client = await prisma.client.findFirst({
     where: { tenantId, clientId },
-    include: { redirectUris: true },
+    include: { redirectUris: true, proxyConfig: true },
   });
 
   if (!client) {
@@ -43,6 +102,8 @@ export const createClient = async (
     clientType: "PUBLIC" | "CONFIDENTIAL";
     redirectUris?: string[];
     allowedScopes?: string[];
+    oauthClientMode?: "regular" | "proxy";
+    proxyConfig?: ProxyProviderConfigInput;
   },
 ) => {
   const clientId = `client_${nanoid(16)}`;
@@ -50,6 +111,13 @@ export const createClient = async (
   let clientSecretHash: string | null = null;
   let clientSecretEncrypted: string | null = null;
   const allowedScopes = canonicalizeAllowedScopes(data.allowedScopes);
+  const mode = data.oauthClientMode ?? "regular";
+
+  if (mode === "proxy" && !data.proxyConfig) {
+    throw new DomainError("Proxy clients require provider configuration", { status: 400 });
+  }
+
+  const validatedProxyConfig = data.proxyConfig ? proxyProviderConfigSchema.parse(data.proxyConfig) : null;
 
   if (data.clientType === "CONFIDENTIAL") {
     clientSecret = generateOpaqueToken(24);
@@ -69,6 +137,7 @@ export const createClient = async (
         tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         allowedScopes,
+        oauthClientMode: mode,
       },
     });
 
@@ -77,6 +146,30 @@ export const createClient = async (
         const { normalized, type } = classifyRedirect(raw);
         await tx.redirectUri.create({ data: { clientId: created.id, uri: normalized, type } });
       }
+    }
+
+    if (mode === "proxy" && validatedProxyConfig) {
+      await tx.proxyProviderConfig.create({
+        data: {
+          clientId: created.id,
+          providerType: validatedProxyConfig.providerType,
+          authorizationEndpoint: validatedProxyConfig.authorizationEndpoint,
+          tokenEndpoint: validatedProxyConfig.tokenEndpoint,
+          userinfoEndpoint: validatedProxyConfig.userinfoEndpoint ?? null,
+          jwksUri: validatedProxyConfig.jwksUri ?? null,
+          upstreamClientId: validatedProxyConfig.upstreamClientId,
+          upstreamClientSecretEncrypted: validatedProxyConfig.upstreamClientSecret
+            ? encrypt(validatedProxyConfig.upstreamClientSecret)
+            : null,
+          defaultScopes: normalizeProviderScopes(validatedProxyConfig.defaultScopes),
+          scopeMapping: normalizeScopeMapping(validatedProxyConfig.scopeMapping),
+          pkceSupported: Boolean(validatedProxyConfig.pkceSupported),
+          oidcEnabled: Boolean(validatedProxyConfig.oidcEnabled),
+          promptPassthroughEnabled: Boolean(validatedProxyConfig.promptPassthroughEnabled),
+          loginHintPassthroughEnabled: Boolean(validatedProxyConfig.loginHintPassthroughEnabled),
+          passthroughTokenResponse: Boolean(validatedProxyConfig.passthroughTokenResponse),
+        },
+      });
     }
 
     return created;
@@ -143,6 +236,7 @@ export const getClientByIdForTenant = async (tenantId: string, clientInternalId:
       redirectUris: { orderBy: { createdAt: "asc" } },
       tenant: { include: { defaultApiResource: true } },
       apiResource: true,
+      proxyConfig: true,
     },
   });
 
@@ -164,6 +258,47 @@ export const rotateClientSecret = async (clientId: string) => {
   });
 
   return secret;
+};
+
+export const upsertProxyProviderConfig = async (
+  clientId: string,
+  config: ProxyProviderConfigInput,
+  options?: { keepExistingSecret?: boolean },
+) => {
+  const parsed = proxyProviderConfigSchema.parse(config);
+  const normalizedScopes = normalizeProviderScopes(parsed.defaultScopes);
+  const normalizedMapping = normalizeScopeMapping(parsed.scopeMapping);
+  const encryptedSecret = parsed.upstreamClientSecret ? encrypt(parsed.upstreamClientSecret) : null;
+  const shouldUpdateSecret = !options?.keepExistingSecret && parsed.upstreamClientSecret !== undefined;
+
+  const baseUpdate = {
+    providerType: parsed.providerType,
+    authorizationEndpoint: parsed.authorizationEndpoint,
+    tokenEndpoint: parsed.tokenEndpoint,
+    userinfoEndpoint: parsed.userinfoEndpoint ?? null,
+    jwksUri: parsed.jwksUri ?? null,
+    upstreamClientId: parsed.upstreamClientId,
+    defaultScopes: normalizedScopes,
+    scopeMapping: normalizedMapping,
+    pkceSupported: Boolean(parsed.pkceSupported),
+    oidcEnabled: Boolean(parsed.oidcEnabled),
+    promptPassthroughEnabled: Boolean(parsed.promptPassthroughEnabled),
+    loginHintPassthroughEnabled: Boolean(parsed.loginHintPassthroughEnabled),
+    passthroughTokenResponse: Boolean(parsed.passthroughTokenResponse),
+  } satisfies Prisma.ProxyProviderConfigUpdateInput;
+
+  await prisma.proxyProviderConfig.upsert({
+    where: { clientId },
+    update: {
+      ...baseUpdate,
+      ...(shouldUpdateSecret ? { upstreamClientSecretEncrypted: encryptedSecret } : {}),
+    },
+    create: {
+      clientId,
+      ...baseUpdate,
+      upstreamClientSecretEncrypted: encryptedSecret,
+    },
+  });
 };
 
 export const updateClientName = async (clientId: string, name: string) => {

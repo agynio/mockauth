@@ -15,6 +15,7 @@ const baseEnv: AppEnv = {
   MOCKAUTH_KEY_ENCRYPTION_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
   MOCKAUTH_ALLOW_ANY_REDIRECT: false,
   ENABLE_TEST_ROUTES: true,
+  ENABLE_PROXY_CLIENTS: false,
   ALLOW_EMAIL_LINKING: false,
   MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE: false,
 };

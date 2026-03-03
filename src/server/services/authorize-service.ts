@@ -7,7 +7,17 @@ import { getApiResourceWithTenant } from "@/server/services/api-resource-service
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { normalizeScopes } from "@/server/oidc/scopes";
 import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
-import { hashOpaqueToken } from "@/server/crypto/opaque-token";
+import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-token";
+import { computeS256Challenge } from "@/server/crypto/pkce";
+import {
+  PROXY_TRANSACTION_TTL_SECONDS,
+  startProxyAuthTransaction,
+  deleteProxyAuthTransaction,
+} from "@/server/services/proxy-service";
+import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
+
+type LoadedClient = Awaited<ReturnType<typeof getClientForTenant>>;
+type ProxyProviderConfigRecord = NonNullable<LoadedClient["proxyConfig"]>;
 
 type AuthorizeParams = {
   apiResourceId: string;
@@ -20,15 +30,28 @@ type AuthorizeParams = {
   codeChallenge: string;
   codeChallengeMethod: string;
   prompt?: string;
+  loginHint?: string;
   sessionToken?: string;
   reauthCookie?: string;
   freshLoginCookie?: string;
   freshLoginRequested?: boolean;
 };
 
+type CookieInstruction = {
+  name: string;
+  value: string;
+  options: {
+    path: string;
+    httpOnly: boolean;
+    sameSite: "lax" | "strict" | "none";
+    secure: boolean;
+    maxAge?: number;
+  };
+};
+
 type AuthorizeResult =
-  | { type: "login"; redirectTo: string; consumeFreshLoginCookie?: boolean }
-  | { type: "redirect"; redirectTo: string; consumeFreshLoginCookie?: boolean };
+  | { type: "login"; redirectTo: string; consumeFreshLoginCookie?: boolean; cookies?: CookieInstruction[] }
+  | { type: "redirect"; redirectTo: string; consumeFreshLoginCookie?: boolean; cookies?: CookieInstruction[] };
 
 const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
   const requested = normalizeScopes(requestedScopes);
@@ -61,6 +84,10 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
   if (clientResourceId !== resource.id) {
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
+  }
+
+  if (client.oauthClientMode === "proxy") {
+    return handleProxyAuthorize({ params, origin, tenantId: tenant.id, resourceId: resource.id, client });
   }
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
 
@@ -148,4 +175,159 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   }
 
   return { type: "redirect" as const, redirectTo: redirectUrl.toString(), consumeFreshLoginCookie: reusedViaFreshLogin };
+};
+
+const handleProxyAuthorize = async (args: {
+  params: AuthorizeParams;
+  origin: string;
+  tenantId: string;
+  resourceId: string;
+  client: Awaited<ReturnType<typeof getClientForTenant>>;
+}): Promise<AuthorizeResult> => {
+  const { params, origin, tenantId, resourceId, client } = args;
+
+  const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
+  ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
+
+  const proxyConfig = client.proxyConfig;
+  if (!proxyConfig) {
+    throw new DomainError("Proxy client is missing provider configuration", { status: 500 });
+  }
+
+  const providerScopes = mapAppScopesToProvider(params.scope, proxyConfig);
+  const callbackUrl = new URL(`/r/${resourceId}/oidc/proxy/callback`, origin).toString();
+  const providerPrompt = proxyConfig.promptPassthroughEnabled ? params.prompt ?? null : null;
+  const providerLoginHint = proxyConfig.loginHintPassthroughEnabled ? params.loginHint ?? null : null;
+
+  let providerCodeVerifier: string | null = null;
+  let providerCodeChallenge: string | null = null;
+  if (proxyConfig.pkceSupported) {
+    providerCodeVerifier = generateOpaqueToken(48);
+    providerCodeChallenge = computeS256Challenge(providerCodeVerifier);
+  }
+
+  const transaction = await startProxyAuthTransaction({
+    tenantId,
+    apiResourceId: resourceId,
+    clientId: client.id,
+    redirectUri: redirect,
+    appState: params.state,
+    appNonce: params.nonce,
+    appScope: params.scope,
+    appCodeChallenge: params.codeChallenge,
+    appCodeChallengeMethod: params.codeChallengeMethod,
+    providerScope: providerScopes,
+    providerCodeVerifier,
+    providerPkceEnabled: Boolean(proxyConfig.pkceSupported),
+    prompt: providerPrompt,
+    loginHint: providerLoginHint,
+  });
+
+  try {
+    const authorizeUrl = new URL(proxyConfig.authorizationEndpoint);
+    authorizeUrl.searchParams.set("client_id", proxyConfig.upstreamClientId);
+    authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("scope", providerScopes);
+    authorizeUrl.searchParams.set("state", transaction.id);
+
+    if (proxyConfig.oidcEnabled && params.nonce) {
+      authorizeUrl.searchParams.set("nonce", params.nonce);
+    }
+
+    if (proxyConfig.pkceSupported && providerCodeChallenge) {
+      authorizeUrl.searchParams.set("code_challenge", providerCodeChallenge);
+      authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    }
+
+    if (providerPrompt) {
+      authorizeUrl.searchParams.set("prompt", providerPrompt);
+    }
+
+    if (providerLoginHint) {
+      authorizeUrl.searchParams.set("login_hint", providerLoginHint);
+    }
+
+    const cookies: CookieInstruction[] = [
+      {
+        name: PROXY_TRANSACTION_COOKIE,
+        value: transaction.id,
+        options: {
+          path: buildProxyTransactionCookiePath(resourceId),
+          httpOnly: true,
+          sameSite: "lax",
+          secure: origin.startsWith("https:"),
+          maxAge: PROXY_TRANSACTION_TTL_SECONDS,
+        },
+      },
+    ];
+
+    return { type: "redirect", redirectTo: authorizeUrl.toString(), cookies };
+  } catch (error) {
+    await deleteProxyAuthTransaction(transaction.id);
+    throw error;
+  }
+};
+
+const mapAppScopesToProvider = (scopeString: string, config: ProxyProviderConfigRecord): string => {
+  const requestedScopes = scopeString.split(" ").map((scope) => scope.trim()).filter(Boolean);
+  const mapping = parseScopeMapping(config.scopeMapping);
+  const providerScopes = new Set<string>();
+
+  for (const scope of requestedScopes) {
+    const value = mapping.get(scope);
+    if (!value || value.length === 0) {
+      providerScopes.add(scope);
+      continue;
+    }
+
+    for (const mapped of value) {
+      if (mapped) {
+        providerScopes.add(mapped);
+      }
+    }
+  }
+
+  if (providerScopes.size === 0) {
+    for (const fallback of config.defaultScopes ?? []) {
+      if (fallback) {
+        providerScopes.add(fallback);
+      }
+    }
+  }
+
+  if (providerScopes.size === 0) {
+    throw new DomainError("Proxy provider scopes configuration is empty", { status: 500 });
+  }
+
+  return Array.from(providerScopes).join(" ");
+};
+
+const parseScopeMapping = (value: unknown): Map<string, string[]> => {
+  if (!value || typeof value !== "object") {
+    return new Map();
+  }
+
+  const entries: Array<[string, string[]]> = [];
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key !== "string") {
+      continue;
+    }
+    if (typeof raw === "string") {
+      const scopes = raw
+        .split(" ")
+        .map((scope) => scope.trim())
+        .filter(Boolean);
+      entries.push([key, scopes]);
+      continue;
+    }
+    if (Array.isArray(raw)) {
+      const scopes = raw
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item) => item.length > 0);
+      entries.push([key, scopes]);
+    }
+  }
+
+  return new Map(entries);
 };

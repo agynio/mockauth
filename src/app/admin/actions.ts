@@ -15,6 +15,7 @@ import { authOptions } from "@/server/auth/options";
 import {
   addRedirectUri,
   createClient,
+  proxyProviderConfigSchema,
   rotateClientSecret,
   updateClientName,
   updateClientApiResource,
@@ -23,7 +24,9 @@ import {
   updateClientAllowedScopes,
   getConfidentialClientSecret,
   updateClientSigningAlgorithms,
+  upsertProxyProviderConfig,
 } from "@/server/services/client-service";
+import type { ProxyProviderConfigInput } from "@/server/services/client-service";
 import { rotateKeyForAlg } from "@/server/services/key-service";
 import {
   ADMIN_ACTIVE_TENANT_COOKIE,
@@ -54,6 +57,7 @@ import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/serve
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
+import { env } from "@/server/env";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -67,7 +71,116 @@ const clientSchema = z.object({
   type: z.enum(["PUBLIC", "CONFIDENTIAL"]),
   redirects: z.array(z.string().min(1)).optional(),
   scopes: z.array(z.string().min(1)).optional(),
+  mode: z.enum(["regular", "proxy"]).default("regular"),
+  proxyConfig: proxyProviderConfigSchema.optional(),
 });
+
+const normalizeProxyConfigInput = (
+  config: z.infer<typeof proxyProviderConfigSchema> | undefined,
+  options?: { treatUndefinedSecretAsNoChange?: boolean },
+): { normalized: ProxyProviderConfigInput | undefined; keepExistingSecret: boolean } => {
+  if (!config) {
+    return { normalized: undefined, keepExistingSecret: false };
+  }
+
+  const rawSecret = config.upstreamClientSecret;
+  const trimmedSecret = rawSecret?.trim();
+  const secretProvided = typeof rawSecret === "string" && trimmedSecret && trimmedSecret.length > 0;
+  const keepExistingSecret = options?.treatUndefinedSecretAsNoChange === true && !secretProvided;
+
+  const mappingEntries = config.scopeMapping
+    ? Object.entries(config.scopeMapping)
+        .map(([key, raw]) => {
+          const normalizedKey = key.trim();
+          const scopes = Array.isArray(raw)
+            ? raw.map((scope) => scope.trim()).filter(Boolean)
+            : raw
+                .split(/\s+/)
+                .map((scope) => scope.trim())
+                .filter(Boolean);
+          return [normalizedKey, scopes] as [string, string[]];
+        })
+        .filter(([key, scopes]) => key.length > 0 && scopes.length > 0)
+    : [];
+
+  const normalized: ProxyProviderConfigInput = {
+    providerType: config.providerType ?? "oidc",
+    authorizationEndpoint: config.authorizationEndpoint?.trim() ?? "",
+    tokenEndpoint: config.tokenEndpoint?.trim() ?? "",
+    userinfoEndpoint: config.userinfoEndpoint?.trim() || undefined,
+    jwksUri: config.jwksUri?.trim() || undefined,
+    upstreamClientId: config.upstreamClientId?.trim() ?? "",
+    upstreamClientSecret: keepExistingSecret ? undefined : trimmedSecret || undefined,
+    defaultScopes: (config.defaultScopes ?? []).map((scope) => scope.trim()).filter(Boolean),
+    scopeMapping: mappingEntries.length > 0 ? Object.fromEntries(mappingEntries) : undefined,
+    pkceSupported: Boolean(config.pkceSupported),
+    oidcEnabled: Boolean(config.oidcEnabled),
+    promptPassthroughEnabled: Boolean(config.promptPassthroughEnabled),
+    loginHintPassthroughEnabled: Boolean(config.loginHintPassthroughEnabled),
+    passthroughTokenResponse: Boolean(config.passthroughTokenResponse),
+  };
+
+  return { normalized, keepExistingSecret };
+};
+
+const validateProxyConfigInput = (config: z.infer<typeof proxyProviderConfigSchema> | undefined): string | null => {
+  if (!config) {
+    return "Proxy configuration is required";
+  }
+
+  if (!config.providerType) {
+    return "Select a provider type";
+  }
+
+  const requiredStrings: Array<[string | undefined, string]> = [
+    [config.authorizationEndpoint, "Authorization endpoint is required"],
+    [config.tokenEndpoint, "Token endpoint is required"],
+    [config.upstreamClientId, "Provider client ID is required"],
+  ];
+
+  for (const [value, message] of requiredStrings) {
+    if (!value || value.trim().length === 0) {
+      return message;
+    }
+  }
+
+  const urlChecks: Array<[string | undefined, string]> = [
+    [config.authorizationEndpoint, "Authorization endpoint must be a valid URL"],
+    [config.tokenEndpoint, "Token endpoint must be a valid URL"],
+    [config.userinfoEndpoint, "Userinfo endpoint must be a valid URL"],
+    [config.jwksUri, "JWKS URI must be a valid URL"],
+  ];
+
+  for (const [value, message] of urlChecks) {
+    if (!value || value.trim().length === 0) {
+      continue;
+    }
+    try {
+      new URL(value);
+    } catch (error) {
+      return message;
+    }
+  }
+
+  if (config.scopeMapping) {
+    for (const [appScope, providerScopes] of Object.entries(config.scopeMapping)) {
+      if (!appScope.trim()) {
+        return "Scope mapping keys must be non-empty";
+      }
+      const scopesArray = Array.isArray(providerScopes)
+        ? providerScopes.map((scope) => scope.trim()).filter(Boolean)
+        : providerScopes
+            .split(/\s+/)
+            .map((scope) => scope.trim())
+            .filter(Boolean);
+      if (scopesArray.length === 0) {
+        return `Scope mapping for ${appScope} must include provider scopes`;
+      }
+    }
+  }
+
+  return null;
+};
 
 const keySchema = z.object({ tenantId: z.string().min(1), alg: z.enum(SUPPORTED_JWT_SIGNING_ALGS) });
 const setTenantSchema = z.object({ tenantId: z.string().min(1) });
@@ -134,6 +247,8 @@ const updateClientSigningAlgsSchema = z.object({
   accessTokenAlg: z.enum(accessTokenAlgOptions),
 });
 
+const updateProxyConfigSchema = proxyProviderConfigSchema.extend({ clientId: z.string().min(1) });
+
 const requireSession = async () => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -147,7 +262,7 @@ const clientPath = (clientId: string) => `/admin/clients/${clientId}`;
 const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles?: MembershipRole[]) => {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { id: true, tenantId: true, clientType: true },
+    select: { id: true, tenantId: true, clientType: true, oauthClientMode: true },
   });
   if (!client) {
     return null;
@@ -205,6 +320,15 @@ export const createClientAction = async (
     const parsed = clientSchema.parse(input);
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+    if (parsed.mode === "proxy" && !env.ENABLE_PROXY_CLIENTS) {
+      return { error: "Proxy clients are disabled" };
+    }
+    if (parsed.mode === "proxy") {
+      const proxyValidationError = validateProxyConfigInput(parsed.proxyConfig);
+      if (proxyValidationError) {
+        return { error: proxyValidationError };
+      }
+    }
     const redirectEntries = parsed.redirects?.filter(Boolean);
     const normalizedScopes = parsed.scopes ? normalizeScopes(parsed.scopes) : Array.from(SUPPORTED_SCOPES);
     if (!normalizedScopes.includes("openid")) {
@@ -215,11 +339,17 @@ export const createClientAction = async (
       return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
     const canonicalScopes = ["openid", ...normalizedScopes.filter((scope) => scope !== "openid")];
+    const proxyConfigResult = parsed.mode === "proxy"
+      ? normalizeProxyConfigInput(parsed.proxyConfig)
+      : { normalized: undefined, keepExistingSecret: false };
+
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
       clientType: parsed.type,
       redirectUris: redirectEntries,
       allowedScopes: canonicalScopes,
+      oauthClientMode: parsed.mode,
+      proxyConfig: proxyConfigResult.normalized,
     });
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
@@ -321,6 +451,46 @@ export const rotateClientSecretAction = async (
   } catch (error) {
     console.error(error);
     return { error: "Unable to rotate secret" };
+  }
+};
+
+export const updateProxyClientConfigAction = async (
+  input: z.infer<typeof updateProxyConfigSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateProxyConfigSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    if (client.oauthClientMode !== "proxy") {
+      return { error: "Client is not configured for proxy mode" };
+    }
+    if (!env.ENABLE_PROXY_CLIENTS) {
+      return { error: "Proxy clients are disabled" };
+    }
+
+    const { clientId, ...rawConfig } = parsed;
+    const validationError = validateProxyConfigInput(rawConfig);
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    const { normalized, keepExistingSecret } = normalizeProxyConfigInput(rawConfig, {
+      treatUndefinedSecretAsNoChange: true,
+    });
+
+    if (!normalized) {
+      return { error: "Proxy configuration is required" };
+    }
+
+    await upsertProxyProviderConfig(client.id, normalized, { keepExistingSecret });
+    revalidatePath(clientPath(client.id));
+    return { success: "Upstream configuration updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Failed to update proxy configuration" };
   }
 };
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Loader2, Trash2, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useWatch } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import {
   addRedirectUriAction,
@@ -17,11 +17,13 @@ import {
   updateClientNameAction,
   updateClientReauthTtlAction,
   updateClientSigningAlgsAction,
+  updateProxyClientConfigAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -75,6 +77,51 @@ const signingAlgsSchema = z.object({
   idTokenAlg: z.enum(idTokenAlgOptions),
   accessTokenAlg: z.enum(accessTokenAlgOptions),
 });
+
+const proxyScopeMappingSchema = z.object({
+  appScope: z.string().optional(),
+  providerScopes: z.string().optional(),
+});
+
+const proxyConfigFormSchema = z.object({
+  providerType: z.enum(["oidc", "oauth2"]),
+  authorizationEndpoint: z.string().min(1, "Required"),
+  tokenEndpoint: z.string().min(1, "Required"),
+  userinfoEndpoint: z.string().optional(),
+  jwksUri: z.string().optional(),
+  upstreamClientId: z.string().min(1, "Required"),
+  upstreamClientSecret: z.string().optional(),
+  defaultScopes: z.string().optional(),
+  scopeMappings: z.array(proxyScopeMappingSchema).optional(),
+  pkceSupported: z.boolean(),
+  oidcEnabled: z.boolean(),
+  promptPassthroughEnabled: z.boolean(),
+  loginHintPassthroughEnabled: z.boolean(),
+  passthroughTokenResponse: z.boolean(),
+});
+
+const splitProxyScopes = (value?: string) => {
+  if (!value) {
+    return [] as string[];
+  }
+  return Array.from(new Set(value.split(/\s+/).map((scope) => scope.trim()).filter((scope) => scope.length > 0)));
+};
+
+const buildProxyScopeMapping = (
+  rows?: z.infer<typeof proxyConfigFormSchema>["scopeMappings"],
+): Record<string, string[]> | undefined => {
+  if (!rows) {
+    return undefined;
+  }
+  const entries = rows
+    .map((row) => {
+      const key = row?.appScope?.trim() ?? "";
+      const scopes = splitProxyScopes(row?.providerScopes ?? "");
+      return [key, scopes] as [string, string[]];
+    })
+    .filter(([key, scopes]) => key.length > 0 && scopes.length > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
 
 const SIGNING_ALG_LABELS: Record<JwtSigningAlg, string> = {
   RS256: "RS256 (RSA SHA-256)",
@@ -1104,6 +1151,430 @@ export function UpdateClientIssuerForm({
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
         </Button>
+      </form>
+    </Form>
+  );
+}
+
+export function UpdateProxyProviderConfigForm({
+  clientId,
+  canEdit,
+  proxyEnabled,
+  initialConfig,
+}: {
+  clientId: string;
+  canEdit: boolean;
+  proxyEnabled: boolean;
+  initialConfig: {
+    providerType: "oidc" | "oauth2";
+    authorizationEndpoint: string;
+    tokenEndpoint: string;
+    userinfoEndpoint?: string | null;
+    jwksUri?: string | null;
+    upstreamClientId: string;
+    defaultScopes: string[];
+    scopeMapping: Record<string, string[]>;
+    pkceSupported: boolean;
+    oidcEnabled: boolean;
+    promptPassthroughEnabled: boolean;
+    loginHintPassthroughEnabled: boolean;
+    passthroughTokenResponse: boolean;
+  };
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const disableForm = !canEdit || !proxyEnabled || pending;
+
+  const defaultScopeMappingRows = Object.entries(initialConfig.scopeMapping).map(([key, values]) => ({
+    appScope: key,
+    providerScopes: values.join(" "),
+  }));
+
+  const form = useForm<z.infer<typeof proxyConfigFormSchema>>({
+    resolver: zodResolver(proxyConfigFormSchema),
+    defaultValues: {
+      providerType: initialConfig.providerType,
+      authorizationEndpoint: initialConfig.authorizationEndpoint,
+      tokenEndpoint: initialConfig.tokenEndpoint,
+      userinfoEndpoint: initialConfig.userinfoEndpoint ?? "",
+      jwksUri: initialConfig.jwksUri ?? "",
+      upstreamClientId: initialConfig.upstreamClientId,
+      upstreamClientSecret: "",
+      defaultScopes: initialConfig.defaultScopes.join(" "),
+      scopeMappings: defaultScopeMappingRows,
+      pkceSupported: initialConfig.pkceSupported,
+      oidcEnabled: initialConfig.oidcEnabled,
+      promptPassthroughEnabled: initialConfig.promptPassthroughEnabled,
+      loginHintPassthroughEnabled: initialConfig.loginHintPassthroughEnabled,
+      passthroughTokenResponse: initialConfig.passthroughTokenResponse,
+    },
+  });
+
+  useEffect(() => {
+    form.reset({
+      providerType: initialConfig.providerType,
+      authorizationEndpoint: initialConfig.authorizationEndpoint,
+      tokenEndpoint: initialConfig.tokenEndpoint,
+      userinfoEndpoint: initialConfig.userinfoEndpoint ?? "",
+      jwksUri: initialConfig.jwksUri ?? "",
+      upstreamClientId: initialConfig.upstreamClientId,
+      upstreamClientSecret: "",
+      defaultScopes: initialConfig.defaultScopes.join(" "),
+      scopeMappings: Object.entries(initialConfig.scopeMapping).map(([key, values]) => ({
+        appScope: key,
+        providerScopes: values.join(" "),
+      })),
+      pkceSupported: initialConfig.pkceSupported,
+      oidcEnabled: initialConfig.oidcEnabled,
+      promptPassthroughEnabled: initialConfig.promptPassthroughEnabled,
+      loginHintPassthroughEnabled: initialConfig.loginHintPassthroughEnabled,
+      passthroughTokenResponse: initialConfig.passthroughTokenResponse,
+    });
+  }, [initialConfig, form]);
+
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: "scopeMappings" });
+
+  const onSubmit = form.handleSubmit((values) => {
+    startTransition(async () => {
+      const result = await updateProxyClientConfigAction({
+        clientId,
+        providerType: values.providerType,
+        authorizationEndpoint: values.authorizationEndpoint.trim(),
+        tokenEndpoint: values.tokenEndpoint.trim(),
+        userinfoEndpoint: values.userinfoEndpoint?.trim() || undefined,
+        jwksUri: values.jwksUri?.trim() || undefined,
+        upstreamClientId: values.upstreamClientId.trim(),
+        upstreamClientSecret: values.upstreamClientSecret?.trim() || undefined,
+        defaultScopes: splitProxyScopes(values.defaultScopes),
+        scopeMapping: buildProxyScopeMapping(values.scopeMappings),
+        pkceSupported: values.pkceSupported,
+        oidcEnabled: values.oidcEnabled,
+        promptPassthroughEnabled: values.promptPassthroughEnabled,
+        loginHintPassthroughEnabled: values.loginHintPassthroughEnabled,
+        passthroughTokenResponse: values.passthroughTokenResponse,
+      });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Proxy configuration updated", description: result.success ?? "Saved" });
+      form.reset({
+        ...values,
+        upstreamClientSecret: "",
+      });
+    });
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="providerType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Provider type</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange} disabled={disableForm}>
+                  <FormControl>
+                    <SelectTrigger className="justify-between">
+                      <SelectValue placeholder="Select provider type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="oidc">OpenID Connect</SelectItem>
+                    <SelectItem value="oauth2">OAuth 2.0</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="upstreamClientId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Provider client ID</FormLabel>
+                <FormControl>
+                  <Input placeholder="client-123" {...field} disabled={disableForm} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="upstreamClientSecret"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Provider client secret</FormLabel>
+              <FormControl>
+                <Input placeholder="Leave blank to keep current" type="password" {...field} disabled={disableForm} />
+              </FormControl>
+              <FormDescription>Provide a new value to rotate the upstream secret.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="authorizationEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Authorization endpoint</FormLabel>
+                <FormControl>
+                  <Input placeholder="https://idp.example.com/oauth2/authorize" {...field} disabled={disableForm} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="tokenEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Token endpoint</FormLabel>
+                <FormControl>
+                  <Input placeholder="https://idp.example.com/oauth2/token" {...field} disabled={disableForm} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="userinfoEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Userinfo endpoint</FormLabel>
+                <FormControl>
+                  <Input placeholder="Optional" {...field} disabled={disableForm} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="jwksUri"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>JWKS URI</FormLabel>
+                <FormControl>
+                  <Input placeholder="Optional" {...field} disabled={disableForm} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="defaultScopes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Default provider scopes</FormLabel>
+              <FormControl>
+                <Textarea rows={3} placeholder="openid profile email" {...field} disabled={disableForm} />
+              </FormControl>
+              <FormDescription>Applied when the client omits scopes. Separate with spaces.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="space-y-3">
+          <FormLabel>Scope mapping</FormLabel>
+          <p className="text-xs text-muted-foreground">
+            Map app scopes to provider scopes. Leave empty to forward requested scopes unchanged.
+          </p>
+          <div className="space-y-3">
+            {fields.length === 0 ? <p className="text-xs text-muted-foreground">No mappings configured.</p> : null}
+            {fields.map((fieldItem, index) => (
+              <div key={fieldItem.id} className="flex flex-col gap-3 rounded-md border p-4 md:flex-row md:items-center">
+                <FormField
+                  control={form.control}
+                  name={`scopeMappings.${index}.appScope`}
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel className="text-xs uppercase tracking-wide">App scope</FormLabel>
+                      <FormControl>
+                        <Input placeholder="profile:read" {...field} disabled={disableForm} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`scopeMappings.${index}.providerScopes`}
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel className="text-xs uppercase tracking-wide">Provider scopes</FormLabel>
+                      <FormControl>
+                        <Input placeholder="openid profile" {...field} disabled={disableForm} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => remove(index)}
+                  disabled={disableForm}
+                  className="md:self-end"
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => append({ appScope: "", providerScopes: "" })}
+            disabled={disableForm}
+          >
+            Add mapping
+          </Button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="pkceSupported"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <FormLabel className="text-sm font-semibold">Provider supports PKCE</FormLabel>
+                  <p className="text-xs text-muted-foreground">Include code_verifier when exchanging tokens.</p>
+                </div>
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={disableForm}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="oidcEnabled"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <FormLabel className="text-sm font-semibold">Provider issues ID tokens</FormLabel>
+                  <p className="text-xs text-muted-foreground">Request nonce and expect ID tokens in responses.</p>
+                </div>
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={disableForm}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="promptPassthroughEnabled"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <FormLabel className="text-sm font-semibold">Passthrough prompt</FormLabel>
+                  <p className="text-xs text-muted-foreground">Forward prompt=login to force upstream re-authentication.</p>
+                </div>
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={disableForm}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="loginHintPassthroughEnabled"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <FormLabel className="text-sm font-semibold">Passthrough login_hint</FormLabel>
+                  <p className="text-xs text-muted-foreground">Send login hints to the upstream provider.</p>
+                </div>
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={disableForm}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="passthroughTokenResponse"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+              <div>
+                <FormLabel className="text-sm font-semibold">Passthrough token payload</FormLabel>
+                <p className="text-xs text-muted-foreground">Return the provider token response verbatim.</p>
+              </div>
+              <FormControl>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border border-muted"
+                  checked={field.value}
+                  onChange={(event) => field.onChange(event.target.checked)}
+                  disabled={disableForm}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        <div className="space-y-2">
+          <Button type="submit" disabled={disableForm} className="w-full sm:w-auto">
+            {pending ? "Saving…" : "Save changes"}
+          </Button>
+          {!proxyEnabled ? (
+            <p className="text-xs text-muted-foreground">Enable proxy clients to edit this configuration.</p>
+          ) : null}
+        </div>
       </form>
     </Form>
   );
