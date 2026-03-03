@@ -55,13 +55,14 @@ export const completeProxyAuthorizationCodeGrant = async (
     throw new DomainError("Proxy configuration missing", { status: 500 });
   }
 
-  const fallbackScope = typeof record.tokenExchange.transaction?.providerScope === "string"
-    ? record.tokenExchange.transaction?.providerScope
-    : undefined;
+  const providerScope = record.tokenExchange.transaction?.providerScope;
+  if (typeof providerScope !== "string" || providerScope.trim().length === 0) {
+    throw new DomainError("Proxy transaction is missing provider scope", { status: 500 });
+  }
 
   return buildProxyTokenResponse(providerResponse, {
     passthrough: proxyConfig.passthroughTokenResponse,
-    fallbackScope,
+    fallbackScope: providerScope,
   });
 };
 
