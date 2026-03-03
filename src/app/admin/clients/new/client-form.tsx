@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -163,7 +163,7 @@ const buildScopeMapping = (
   return Object.keys(mapping).length > 0 ? mapping : undefined;
 };
 
-export function NewClientForm({ tenantId, enableProxyClients }: { tenantId: string; enableProxyClients: boolean }) {
+export function NewClientForm({ tenantId }: { tenantId: string }) {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -180,13 +180,6 @@ export function NewClientForm({ tenantId, enableProxyClients }: { tenantId: stri
 
   const watchMode = useWatch({ control: form.control, name: "mode" });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "proxyConfig.scopeMappings" });
-
-  const proxyDisabledReason = useMemo(() => {
-    if (enableProxyClients) {
-      return null;
-    }
-    return "Proxy clients are disabled by configuration";
-  }, [enableProxyClients]);
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -288,9 +281,7 @@ export function NewClientForm({ tenantId, enableProxyClients }: { tenantId: stri
               <Tabs value={field.value} onValueChange={field.onChange} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="regular">Regular</TabsTrigger>
-                  <TabsTrigger value="proxy" disabled={!enableProxyClients} title={proxyDisabledReason ?? undefined}>
-                    Proxy
-                  </TabsTrigger>
+                  <TabsTrigger value="proxy">Proxy</TabsTrigger>
                 </TabsList>
                 <TabsContent value="regular" className="rounded-md border p-4 text-sm text-muted-foreground">
                   MockAuth issues and validates tokens directly.
@@ -299,9 +290,6 @@ export function NewClientForm({ tenantId, enableProxyClients }: { tenantId: stri
                   Delegate authentication to an upstream identity provider while MockAuth brokers OAuth flows.
                 </TabsContent>
               </Tabs>
-              {!enableProxyClients ? (
-                <p className="text-xs text-muted-foreground">Enable proxy clients with ENABLE_PROXY_CLIENTS=true.</p>
-              ) : null}
             </FormItem>
           )}
         />

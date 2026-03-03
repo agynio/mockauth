@@ -28,7 +28,6 @@ import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { decrypt } from "@/server/crypto/key-vault";
-import { env } from "@/server/env";
 
 type PageParams = Promise<{ clientId: string }>;
 
@@ -272,7 +271,6 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             <UpdateProxyProviderConfigForm
               clientId={client.id}
               canEdit={canManageClients}
-              proxyEnabled={env.ENABLE_PROXY_CLIENTS}
               initialConfig={proxyConfigInitial}
             />
           </CardContent>

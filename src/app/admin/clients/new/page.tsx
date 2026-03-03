@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
-import { env } from "@/server/env";
 
 export default async function NewClientPage() {
   const session = await getServerSession(authOptions);
@@ -68,7 +67,7 @@ export default async function NewClientPage() {
           <CardDescription>Define metadata and redirects. Secrets are displayed once after creation.</CardDescription>
         </CardHeader>
         <CardContent>
-          <NewClientForm tenantId={activeTenant.id} enableProxyClients={env.ENABLE_PROXY_CLIENTS} />
+          <NewClientForm tenantId={activeTenant.id} />
         </CardContent>
       </Card>
     </div>

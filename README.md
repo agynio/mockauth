@@ -147,9 +147,8 @@ updates). CI runs this script automatically before executing E2E specs.
 
 ### Proxy clients (upstream delegation)
 
-- Set `ENABLE_PROXY_CLIENTS=true` to expose a **Proxy client** mode in the admin create dialog. Regular clients remain
-  the default. Proxy mode brokers OAuth/OIDC against an upstream identity provider while preserving Mockauth’s tenant
-  boundary and redirect validation.
+- The admin create dialog includes a **Proxy client** mode alongside the default regular clients. Proxy mode brokers
+  OAuth/OIDC against an upstream identity provider while preserving Mockauth’s tenant boundary and redirect validation.
 - The create/edit forms collect upstream authorization/token/userinfo/JWKS endpoints, provider client credentials, and
   optional scope mappings. Default provider scopes cover the fallback when an app requests nothing; scope mappings
   translate app scopes (left-hand column) into upstream scopes (right-hand column). When no mapping applies, Mockauth
