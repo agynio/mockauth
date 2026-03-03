@@ -145,6 +145,29 @@ updates). CI runs this script automatically before executing E2E specs.
   opaque to discovery.
 - The authorize endpoint validates that every requested scope is allowed for the client and still requires `openid`.
 
+### Proxy clients (upstream delegation)
+
+- Set `ENABLE_PROXY_CLIENTS=true` to expose a **Proxy client** mode in the admin create dialog. Regular clients remain
+  the default. Proxy mode brokers OAuth/OIDC against an upstream identity provider while preserving Mockauth’s tenant
+  boundary and redirect validation.
+- The create/edit forms collect upstream authorization/token/userinfo/JWKS endpoints, provider client credentials, and
+  optional scope mappings. Default provider scopes cover the fallback when an app requests nothing; scope mappings
+  translate app scopes (left-hand column) into upstream scopes (right-hand column). When no mapping applies, Mockauth
+  forwards the original scope verbatim.
+- Toggle the advanced flags to match the upstream provider:
+  - **Provider supports PKCE** stores a verifier on the transaction and sends `code_challenge` when redirecting.
+  - **Provider issues ID tokens** forwards the app’s `nonce` and expects an upstream `id_token`.
+  - **Passthrough prompt/login_hint** forwards those request parameters when present.
+  - **Passthrough token payload** returns the upstream JSON verbatim; otherwise Mockauth emits a minimal compliant
+    access token response derived from the provider payload.
+- Proxy clients display a “proxy mode” badge on the detail page. The new **Proxy provider** card lets you rotate
+  upstream secrets, edit endpoints, and adjust mappings without recreating the client. Leaving the secret blank keeps
+  the existing encrypted value.
+- Callback handling lives at `/r/<apiResourceId>/oidc/proxy/callback`. Authorization requests set a short-lived
+  transaction cookie; the callback matches it, trades the upstream code for tokens, and issues a Mockauth authorization
+  code referencing the stored upstream response. The regular token endpoint then serves proxied access/refresh tokens
+  (and ID tokens when provided) while enforcing the client’s token auth method and PKCE requirements.
+
 ### Breaking Change — Stage 2 (resource-scoped issuers)
 
 - Tenant slugs have been removed from OIDC URLs. Issuers are now scoped purely by API resource.

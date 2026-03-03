@@ -21,17 +21,23 @@ vi.mock("@/server/services/tenant-service", () => ({
   getTenantMemberships: vi.fn(),
 }));
 
-vi.mock("@/server/services/client-service", () => ({
-  addRedirectUri: vi.fn(),
-  createClient: vi.fn(),
-  rotateClientSecret: vi.fn(),
-  updateClientName: vi.fn(),
-  updateClientApiResource: vi.fn(),
-  updateClientAuthStrategies: vi.fn(),
-  updateClientReauthTtl: vi.fn(),
-  updateClientAllowedScopes: vi.fn(),
-  getConfidentialClientSecret: vi.fn(),
-}));
+vi.mock("@/server/services/client-service", async () => {
+  const actual = await vi.importActual<typeof import("@/server/services/client-service")>(
+    "@/server/services/client-service",
+  );
+  return {
+    ...actual,
+    addRedirectUri: vi.fn(),
+    createClient: vi.fn(),
+    rotateClientSecret: vi.fn(),
+    updateClientName: vi.fn(),
+    updateClientApiResource: vi.fn(),
+    updateClientAuthStrategies: vi.fn(),
+    updateClientReauthTtl: vi.fn(),
+    updateClientAllowedScopes: vi.fn(),
+    getConfidentialClientSecret: vi.fn(),
+  };
+});
 
 vi.mock("@/server/db/client", () => ({
   prisma: {

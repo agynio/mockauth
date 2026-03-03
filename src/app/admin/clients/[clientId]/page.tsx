@@ -14,6 +14,7 @@ import {
   UpdateClientReauthTtlForm,
   UpdateClientIssuerForm,
   UpdateClientNameForm,
+  UpdateProxyProviderConfigForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { decrypt } from "@/server/crypto/key-vault";
+import { env } from "@/server/env";
 
 type PageParams = Promise<{ clientId: string }>;
 
@@ -74,6 +76,49 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     }
   })();
 
+  const proxyConfigInitial = (() => {
+    if (client.oauthClientMode !== "proxy" || !client.proxyConfig) {
+      return null;
+    }
+    const rawMapping = client.proxyConfig.scopeMapping as unknown;
+    const parsedMapping: Record<string, string[]> = {};
+    if (rawMapping && typeof rawMapping === "object" && !Array.isArray(rawMapping)) {
+      for (const [key, value] of Object.entries(rawMapping as Record<string, unknown>)) {
+        const normalizedKey = key.trim();
+        if (!normalizedKey) {
+          continue;
+        }
+        const scopeValues = Array.isArray(value)
+          ? value.map((scope) => `${scope}`.trim()).filter((scope) => scope.length > 0)
+          : typeof value === "string"
+            ? value
+                .split(/\s+/)
+                .map((scope) => scope.trim())
+                .filter((scope) => scope.length > 0)
+            : [];
+        if (scopeValues.length > 0) {
+          parsedMapping[normalizedKey] = scopeValues;
+        }
+      }
+    }
+
+    return {
+      providerType: client.proxyConfig.providerType,
+      authorizationEndpoint: client.proxyConfig.authorizationEndpoint,
+      tokenEndpoint: client.proxyConfig.tokenEndpoint,
+      userinfoEndpoint: client.proxyConfig.userinfoEndpoint,
+      jwksUri: client.proxyConfig.jwksUri,
+      upstreamClientId: client.proxyConfig.upstreamClientId,
+      defaultScopes: client.proxyConfig.defaultScopes ?? [],
+      scopeMapping: parsedMapping,
+      pkceSupported: client.proxyConfig.pkceSupported,
+      oidcEnabled: client.proxyConfig.oidcEnabled,
+      promptPassthroughEnabled: client.proxyConfig.promptPassthroughEnabled,
+      loginHintPassthroughEnabled: client.proxyConfig.loginHintPassthroughEnabled,
+      passthroughTokenResponse: client.proxyConfig.passthroughTokenResponse,
+    };
+  })();
+
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
   const testFlowHref = `/admin/clients/${client.id}/test`;
@@ -106,9 +151,14 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           </Button>
           <UpdateClientNameForm clientId={client.id} initialName={client.name} canEdit={canManageClients} />
           {!canManageClients && <p className="text-xs text-muted-foreground">Read-only access.</p>}
-          <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
-            {client.clientType.toLowerCase()}
-          </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
+              {client.clientType.toLowerCase()}
+            </Badge>
+            <Badge variant={client.oauthClientMode === "proxy" ? "default" : "outline"}>
+              {client.oauthClientMode === "proxy" ? "proxy mode" : "regular mode"}
+            </Badge>
+          </div>
         </div>
         <div className="text-sm text-muted-foreground">
           <p className="font-semibold text-foreground">{activeTenant.name}</p>
@@ -117,11 +167,11 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
       </div>
 
       <div className="space-y-6">
-        <Card>
-          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <CardTitle>OAuth parameters</CardTitle>
-              <CardDescription>Copy issuer metadata for relying parties. Currently issuing for {currentResourceName}.</CardDescription>
+      <Card>
+        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>OAuth parameters</CardTitle>
+            <CardDescription>Copy issuer metadata for relying parties. Currently issuing for {currentResourceName}.</CardDescription>
             </div>
             <Button asChild variant="outline" size="sm" data-testid="test-oauth-link">
               <Link href={testFlowHref}>Test OAuth</Link>
@@ -209,6 +259,25 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           </p>
         </CardContent>
       </Card>
+
+      {client.oauthClientMode === "proxy" && proxyConfigInitial ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Proxy provider</CardTitle>
+            <CardDescription>
+              Configure the upstream identity provider used to broker OAuth flows.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <UpdateProxyProviderConfigForm
+              clientId={client.id}
+              canEdit={canManageClients}
+              proxyEnabled={env.ENABLE_PROXY_CLIENTS}
+              initialConfig={proxyConfigInitial}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

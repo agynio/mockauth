@@ -42,6 +42,16 @@ enum TokenEndpointAuthMethod {
   none
 }
 
+enum OAuthClientMode {
+  regular
+  proxy
+}
+
+enum ProxyProviderType {
+  oidc
+  oauth2
+}
+
 enum JwtSigningAlg {
   RS256
   PS256
@@ -72,6 +82,9 @@ model Tenant {
   authorizationCode AuthorizationCode[]
   accessTokens      AccessToken[]
   mockSessions      MockSession[]
+  proxyAuthTransactions ProxyAuthTransaction[]
+  proxyTokenExchanges   ProxyTokenExchange[]
+  proxyAuthorizationCodes ProxyAuthorizationCode[]
 }
 
 model ApiResource {
@@ -86,6 +99,9 @@ model ApiResource {
   authorizationCodes AuthorizationCode[]
   accessTokens AccessToken[]
   defaultFor  Tenant?    @relation("TenantDefaultApiResource")
+  proxyAuthTransactions ProxyAuthTransaction[]
+  proxyTokenExchanges   ProxyTokenExchange[]
+  proxyAuthorizationCodes ProxyAuthorizationCode[]
 
   @@unique([tenantId, name])
 }
@@ -147,6 +163,7 @@ model Client {
   clientSecretHash         String?
   clientSecretEncrypted    String?
   clientType               ClientType               @default(CONFIDENTIAL)
+  oauthClientMode          OAuthClientMode          @default(regular)
   allowedScopes            String[]                 @default(["openid", "profile", "email"])
   allowedGrantTypes        String[]                 @default(["authorization_code"])
   allowedResponseTypes     String[]                 @default(["code"])
@@ -160,6 +177,10 @@ model Client {
   oauthTestSessions        OAuthTestSession[]
   authorizationCodes       AuthorizationCode[]
   accessTokens             AccessToken[]
+  proxyConfig              ProxyProviderConfig?
+  proxyAuthTransactions    ProxyAuthTransaction[]
+  proxyTokenExchanges      ProxyTokenExchange[]
+  proxyAuthorizationCodes  ProxyAuthorizationCode[]
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   @@unique([tenantId, clientId])
@@ -279,6 +300,100 @@ model AuthorizationCode {
   consumedAt         DateTime?
   createdAt          DateTime    @default(now())
   @@index([tenantId, clientId])
+}
+
+model ProxyProviderConfig {
+  id                          String             @id @default(uuid())
+  client                      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId                    String             @unique
+  providerType                ProxyProviderType
+  authorizationEndpoint       String
+  tokenEndpoint               String
+  userinfoEndpoint            String?
+  jwksUri                     String?
+  upstreamClientId            String
+  upstreamClientSecretEncrypted String?
+  defaultScopes               String[]           @default([])
+  scopeMapping                Json?
+  pkceSupported               Boolean            @default(false)
+  oidcEnabled                 Boolean            @default(false)
+  promptPassthroughEnabled    Boolean            @default(false)
+  loginHintPassthroughEnabled Boolean            @default(false)
+  passthroughTokenResponse    Boolean            @default(false)
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+}
+
+model ProxyAuthTransaction {
+  id                       String   @id @default(uuid())
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId                 String
+  apiResource              ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId            String
+  client                   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId                 String
+  redirectUri              String
+  appState                 String?
+  appNonce                 String?
+  appScope                 String
+  appCodeChallenge         String
+  appCodeChallengeMethod   String   @default("S256")
+  providerScope            String
+  providerCodeVerifier     String?
+  providerPkceEnabled      Boolean  @default(false)
+  prompt                   String?
+  loginHint                String?
+  createdAt                DateTime @default(now())
+  expiresAt                DateTime
+  tokenExchange            ProxyTokenExchange? @relation("AuthTransactionExchange")
+
+  @@index([tenantId, clientId])
+  @@index([expiresAt])
+}
+
+model ProxyTokenExchange {
+  id                     String   @id @default(uuid())
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId               String
+  apiResource            ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId          String
+  client                 Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId               String
+  transaction            ProxyAuthTransaction? @relation("AuthTransactionExchange", fields: [transactionId], references: [id])
+  transactionId          String?  @unique
+  providerResponseEncrypted String
+  createdAt              DateTime @default(now())
+  expiresAt              DateTime
+  consumedAt             DateTime?
+  proxyAuthorizationCode ProxyAuthorizationCode? @relation("ExchangeAuthorizationCode")
+
+  @@index([tenantId, clientId])
+  @@index([expiresAt])
+}
+
+model ProxyAuthorizationCode {
+  id                     String   @id @default(uuid())
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId               String
+  apiResource            ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId          String
+  client                 Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId               String
+  codeHash               String   @unique
+  redirectUri            String
+  scope                  String
+  nonce                  String?
+  state                  String?
+  codeChallenge          String
+  codeChallengeMethod    String   @default("S256")
+  expiresAt              DateTime
+  consumedAt             DateTime?
+  createdAt              DateTime @default(now())
+  tokenExchange          ProxyTokenExchange @relation("ExchangeAuthorizationCode", fields: [tokenExchangeId], references: [id], onDelete: Cascade)
+  tokenExchangeId        String   @unique
+
+  @@index([tenantId, clientId])
+  @@index([expiresAt])
 }
 
 model AccessToken {

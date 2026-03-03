@@ -16,6 +16,7 @@ const authorizeSchema = z.object({
   state: z.string().optional(),
   nonce: z.string().optional(),
   prompt: z.enum(["login", "none"]).optional(),
+  login_hint: z.string().optional(),
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.string().default("S256"),
   fresh_login: z.string().optional(),
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
         codeChallenge: validation.data.code_challenge,
         codeChallengeMethod: validation.data.code_challenge_method,
         prompt: validation.data.prompt,
+        loginHint: validation.data.login_hint,
         sessionToken,
         reauthCookie,
         freshLoginCookie,
@@ -59,6 +61,13 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
 
     if (result.type === "login") {
       const response = NextResponse.redirect(new URL(result.redirectTo, origin), { status: 302 });
+      for (const cookie of result.cookies ?? []) {
+        response.cookies.set({
+          name: cookie.name,
+          value: cookie.value,
+          ...cookie.options,
+        });
+      }
       if (result.consumeFreshLoginCookie) {
         response.cookies.set({
           name: MOCK_FRESH_LOGIN_COOKIE,
@@ -74,6 +83,13 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
     }
 
     const response = NextResponse.redirect(result.redirectTo, { status: 302 });
+    for (const cookie of result.cookies ?? []) {
+      response.cookies.set({
+        name: cookie.name,
+        value: cookie.value,
+        ...cookie.options,
+      });
+    }
     if (result.consumeFreshLoginCookie) {
       response.cookies.set({
         name: MOCK_FRESH_LOGIN_COOKIE,

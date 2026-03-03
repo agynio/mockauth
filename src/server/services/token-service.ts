@@ -21,10 +21,13 @@ const ACCESS_TOKEN_TTL_SECONDS = 3600;
 
 type CodeContext = AuthorizationCodeWithRelations;
 
-const validateClientSecret = async (
-  client: AuthorizationCodeWithRelations["client"],
-  provided?: string | null,
-) => {
+type ClientSecretContext = {
+  clientType: AuthorizationCodeWithRelations["client"]["clientType"];
+  tokenEndpointAuthMethod: AuthorizationCodeWithRelations["client"]["tokenEndpointAuthMethod"];
+  clientSecretHash: AuthorizationCodeWithRelations["client"]["clientSecretHash"];
+};
+
+export const assertClientSecret = async (client: ClientSecretContext, provided?: string | null) => {
   if (client.clientType === "PUBLIC") {
     if (client.tokenEndpointAuthMethod !== "none") {
       throw new DomainError("Public clients must use auth method none", { status: 400, code: "invalid_client" });
@@ -42,7 +45,12 @@ const validateClientSecret = async (
   }
 };
 
-const verifyPkce = (code: CodeContext, verifier: string) => {
+type PkceContext = {
+  codeChallengeMethod: string;
+  codeChallenge: string;
+};
+
+export const verifyPkce = (code: PkceContext, verifier: string) => {
   if (code.codeChallengeMethod !== "S256") {
     throw new DomainError("Unsupported code challenge method", { status: 400, code: "invalid_grant" });
   }
@@ -65,7 +73,7 @@ export const issueTokensFromCode = async (params: {
   if (normalized !== code.redirectUri) {
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
-  await validateClientSecret(code.client, clientSecret);
+  await assertClientSecret(code.client, clientSecret);
   verifyPkce(code, codeVerifier);
 
   const idTokenAlg: JwtSigningAlg = code.client.idTokenSignedResponseAlg ?? DEFAULT_JWT_SIGNING_ALG;
