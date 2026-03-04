@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RHFSelectField } from "@/components/rhf/rhf-select-field";
 
 const scopeMappingSchema = z.object({
   appScope: z.string().optional(),
@@ -24,7 +24,7 @@ const scopeMappingSchema = z.object({
 });
 
 const proxyConfigSchema = z.object({
-  providerType: z.enum(["oidc", "oauth2"]).optional(),
+  providerType: z.enum(["oidc", "oauth2"]),
   authorizationEndpoint: z.string().optional(),
   tokenEndpoint: z.string().optional(),
   userinfoEndpoint: z.string().optional(),
@@ -57,10 +57,6 @@ const formSchema = z
     if (!config) {
       ctx.addIssue({ path: ["proxyConfig"], code: "custom", message: "Proxy configuration is required" });
       return;
-    }
-
-    if (!config.providerType) {
-      ctx.addIssue({ path: ["proxyConfig", "providerType"], code: "custom", message: "Select a provider type" });
     }
 
     const requiredFields: Array<[keyof typeof config, string]> = [
@@ -316,12 +312,30 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
     }
     const currentConfig = getValues("proxyConfig");
     if (!currentConfig) {
-      setValue("proxyConfig", createDefaultProxyConfig(), {
+      const defaults = createDefaultProxyConfig();
+      setValue("proxyConfig", defaults, {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+      setValue("proxyConfig.providerType", defaults.providerType, {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+      setValue("proxyConfig.scopeMappings", defaults.scopeMappings ?? [], {
         shouldDirty: false,
         shouldTouch: false,
         shouldValidate: false,
       });
       return;
+    }
+    if (!currentConfig.providerType) {
+      setValue("proxyConfig.providerType", "oidc", {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
     }
     if (!Array.isArray(currentConfig.scopeMappings)) {
       setValue("proxyConfig.scopeMappings", [], {
@@ -341,7 +355,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
 
       const proxyConfigInput = values.mode === "proxy" && values.proxyConfig
         ? {
-            providerType: values.proxyConfig.providerType ?? "oidc",
+            providerType: values.proxyConfig.providerType,
             authorizationEndpoint: values.proxyConfig.authorizationEndpoint?.trim() ?? "",
             tokenEndpoint: values.proxyConfig.tokenEndpoint?.trim() ?? "",
             userinfoEndpoint: values.proxyConfig.userinfoEndpoint?.trim() || undefined,
@@ -455,26 +469,16 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField
+              <RHFSelectField
                 control={form.control}
                 name="proxyConfig.providerType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Provider type</FormLabel>
-                    <Select value={field.value ?? "oidc"} onValueChange={field.onChange} disabled={pending}>
-                      <FormControl>
-                        <SelectTrigger className="justify-between">
-                          <SelectValue placeholder="Select provider type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="oidc">OpenID Connect</SelectItem>
-                        <SelectItem value="oauth2">OAuth 2.0</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Provider type"
+                placeholder="Select provider type"
+                options={[
+                  { value: "oidc", label: "OpenID Connect" },
+                  { value: "oauth2", label: "OAuth 2.0" },
+                ]}
+                disabled={pending}
               />
 
               <FormField

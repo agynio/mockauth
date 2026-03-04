@@ -23,17 +23,27 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as Body;
   const tenantId = payload.tenantId ?? DEFAULT_TENANT_ID;
 
+  const isUniqueConstraintError = (error: unknown): error is { code?: string } =>
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+
   const email = payload.email?.toLowerCase() || "pw-admin@example.test";
   const name = payload.name ?? "Playwright Admin";
 
-  const admin = await prisma.adminUser.upsert({
-    where: { email },
-    update: { name },
-    create: {
-      email,
-      name,
-    },
-  });
+  const admin = await prisma.adminUser
+    .upsert({
+      where: { email },
+      update: { name },
+      create: {
+        email,
+        name,
+      },
+    })
+    .catch(async (error) => {
+      if (isUniqueConstraintError(error)) {
+        return prisma.adminUser.update({ where: { email }, data: { name } });
+      }
+      throw error;
+    });
 
   const shouldAssignMembership = payload.assignMembership ?? true;
   if (shouldAssignMembership) {

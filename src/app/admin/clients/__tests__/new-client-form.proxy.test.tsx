@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -16,6 +16,8 @@ vi.mock("@/app/admin/actions", () => ({
 vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
 }));
+
+vi.mock("@/components/ui/select", async () => await import("@/test-utils/mocks/shadcn-select"));
 
 describe("NewClientForm proxy mode", () => {
   beforeEach(() => {
@@ -68,6 +70,40 @@ describe("NewClientForm proxy mode", () => {
 
     expect(mockCreateClientAction).not.toHaveBeenCalled();
     expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it("persists provider type selection and submits chosen value", async () => {
+    const user = renderForm();
+
+    mockCreateClientAction.mockResolvedValueOnce({ success: "Created" });
+
+    await user.type(screen.getByLabelText("Client name"), "Proxy Provider");
+    await user.click(screen.getByRole("tab", { name: "Proxy" }));
+
+    const providerField = screen.getByText("Provider type").closest("div");
+    expect(providerField).not.toBeNull();
+    const providerSelect = within(providerField as HTMLElement).getByRole("combobox");
+    expect(providerSelect).toHaveValue("oidc");
+
+    await user.selectOptions(providerSelect, "oauth2");
+    expect(providerSelect).toHaveValue("oauth2");
+
+    await user.clear(screen.getByLabelText("Authorization endpoint"));
+    await user.type(screen.getByLabelText("Authorization endpoint"), "https://idp.example.test/oauth2/auth");
+    await user.clear(screen.getByLabelText("Token endpoint"));
+    await user.type(screen.getByLabelText("Token endpoint"), "https://idp.example.test/oauth2/token");
+    await user.clear(screen.getByLabelText("Provider client ID"));
+    await user.type(screen.getByLabelText("Provider client ID"), "proxy-client");
+
+    await user.click(screen.getByRole("button", { name: "Create client" }));
+
+    await waitFor(() => expect(mockCreateClientAction).toHaveBeenCalledTimes(1));
+    expect(mockCreateClientAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant_123",
+        proxyConfig: expect.objectContaining({ providerType: "oauth2" }),
+      }),
+    );
   });
 
   it("submits normalized proxy configuration", async () => {

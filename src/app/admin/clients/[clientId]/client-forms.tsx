@@ -28,6 +28,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
+import { RHFSelectField } from "@/components/rhf/rhf-select-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { cn } from "@/lib/utils";
@@ -1269,26 +1270,16 @@ export function UpdateProxyProviderConfigForm({
     <Form {...form}>
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2">
-          <FormField
+          <RHFSelectField
             control={form.control}
             name="providerType"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Provider type</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange} disabled={disableForm}>
-                  <FormControl>
-                    <SelectTrigger className="justify-between">
-                      <SelectValue placeholder="Select provider type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="oidc">OpenID Connect</SelectItem>
-                    <SelectItem value="oauth2">OAuth 2.0</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
+            label="Provider type"
+            placeholder="Select provider type"
+            options={[
+              { value: "oidc", label: "OpenID Connect" },
+              { value: "oauth2", label: "OAuth 2.0" },
+            ]}
+            disabled={disableForm}
           />
 
           <FormField
