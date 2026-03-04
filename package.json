@@ -23,7 +23,7 @@
     "prisma:seed": "tsx -r tsconfig-paths/register prisma/seed.ts",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "postinstall": "pnpm prisma:generate",
-    "playwright:install": "playwright install --with-deps"
+    "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright install --with-deps"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.0",
