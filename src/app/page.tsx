@@ -143,6 +143,15 @@ export default function Home() {
                 View on GitHub
               </a>
             </div>
+            <div className="mt-4">
+              <a
+                data-testid="landing-sign-in-link"
+                href="/api/auth/signin/logto?callbackUrl=/admin"
+                className="text-sm font-semibold text-indigo-700 transition hover:text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              >
+                Sign in
+              </a>
+            </div>
           </div>
         </section>
 
