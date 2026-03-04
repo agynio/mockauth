@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { toNestErrors, validateFieldsNatively } from "@hookform/resolvers";
+import { appendErrors, useFieldArray, useForm, useFormContext, useWatch } from "react-hook-form";
+import type { Resolver } from "react-hook-form";
+import type { ZodIssue } from "zod";
 
 import { createClientAction } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
@@ -115,7 +117,75 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
-const defaultProxyConfig: NonNullable<FormValues["proxyConfig"]> = {
+const createZodFieldErrors = (issues: ZodIssue[], collectAll: boolean) => {
+  const pending = [...issues];
+  const fieldErrors: Record<string, any> = {};
+
+  while (pending.length > 0) {
+    const issue = pending.shift()!;
+    const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+    const type = issue.code;
+    const message = issue.message;
+
+    if (!fieldErrors[path]) {
+      if ("unionErrors" in issue && Array.isArray(issue.unionErrors) && issue.unionErrors.length > 0) {
+        const [firstUnion] = issue.unionErrors;
+        const [unionIssue] = firstUnion.errors;
+        fieldErrors[path] = { message: unionIssue.message, type: unionIssue.code };
+      } else {
+        fieldErrors[path] = { message, type };
+      }
+    }
+
+    if ("unionErrors" in issue && Array.isArray(issue.unionErrors)) {
+      issue.unionErrors.forEach((unionError) => {
+        unionError.errors.forEach((unionIssue: ZodIssue) => {
+          pending.push(unionIssue);
+        });
+      });
+    }
+
+    if (collectAll) {
+      const existingTypes = fieldErrors[path].types;
+      const previous = existingTypes && existingTypes[type];
+      const nextMessage = previous
+        ? Array.isArray(previous)
+          ? [...previous, message]
+          : [previous, message]
+        : message;
+      fieldErrors[path] = appendErrors(
+        path,
+        collectAll,
+        fieldErrors,
+        type,
+        nextMessage,
+      );
+    }
+  }
+
+  return fieldErrors;
+};
+
+const proxyFormResolver: Resolver<FormValues> = async (values, context, options) => {
+  const result = await formSchema.safeParseAsync(values);
+
+  if (result.success) {
+    if (options.shouldUseNativeValidation) {
+      validateFieldsNatively({}, options);
+    }
+    return { values: result.data, errors: {} };
+  }
+
+  return {
+    values: {},
+    errors: toNestErrors(
+      createZodFieldErrors(result.error.issues, !options.shouldUseNativeValidation && options.criteriaMode === "all"),
+      options,
+    ),
+  };
+};
+
+const createDefaultProxyConfig = (): NonNullable<FormValues["proxyConfig"]> => ({
   providerType: "oidc",
   authorizationEndpoint: "",
   tokenEndpoint: "",
@@ -130,7 +200,7 @@ const defaultProxyConfig: NonNullable<FormValues["proxyConfig"]> = {
   promptPassthroughEnabled: false,
   loginHintPassthroughEnabled: false,
   passthroughTokenResponse: false,
-};
+});
 
 const splitScopes = (value?: string | null) => {
   if (!value) {
@@ -163,15 +233,74 @@ const buildScopeMapping = (
   return Object.keys(mapping).length > 0 ? mapping : undefined;
 };
 
+function ProxyScopeMappingFields({ pending }: { pending: boolean }) {
+  const form = useFormContext<FormValues>();
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: "proxyConfig.scopeMappings" });
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-semibold">Scope mapping</p>
+      <p className="text-xs text-muted-foreground">
+        Map each app-facing scope to provider scopes. Leave empty to forward the requested scope as-is.
+      </p>
+      <div className="space-y-3">
+        {fields.length === 0 ? <p className="text-xs text-muted-foreground">No mappings configured.</p> : null}
+        {fields.map((fieldItem, index) => (
+          <div key={fieldItem.id} className="flex flex-col gap-3 rounded-md border p-4 md:flex-row md:items-center">
+            <FormField
+              control={form.control}
+              name={`proxyConfig.scopeMappings.${index}.appScope`}
+              render={({ field }) => (
+                <FormItem className="flex-1">
+                  <FormLabel className="text-xs uppercase tracking-wide">App scope</FormLabel>
+                  <FormControl>
+                    <Input placeholder="profile:read" {...field} disabled={pending} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name={`proxyConfig.scopeMappings.${index}.providerScopes`}
+              render={({ field }) => (
+                <FormItem className="flex-1">
+                  <FormLabel className="text-xs uppercase tracking-wide">Provider scopes</FormLabel>
+                  <FormControl>
+                    <Input placeholder="openid profile" {...field} disabled={pending} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => remove(index)}
+              disabled={pending}
+              className="md:self-end"
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button type="button" variant="outline" onClick={() => append({ appScope: "", providerScopes: "" })} disabled={pending}>
+        Add mapping
+      </Button>
+    </div>
+  );
+}
+
 export function NewClientForm({ tenantId }: { tenantId: string }) {
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: proxyFormResolver,
     defaultValues: {
       name: "",
       type: "CONFIDENTIAL",
       redirects: "",
       mode: "regular",
-      proxyConfig: defaultProxyConfig,
+      proxyConfig: createDefaultProxyConfig(),
     },
   });
   const { toast } = useToast();
@@ -179,7 +308,29 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
   const [credentials, setCredentials] = useState<{ clientId: string; clientSecret?: string } | null>(null);
 
   const watchMode = useWatch({ control: form.control, name: "mode" });
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "proxyConfig.scopeMappings" });
+  const { getValues, setValue } = form;
+
+  useEffect(() => {
+    if (watchMode !== "proxy") {
+      return;
+    }
+    const currentConfig = getValues("proxyConfig");
+    if (!currentConfig) {
+      setValue("proxyConfig", createDefaultProxyConfig(), {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+      return;
+    }
+    if (!Array.isArray(currentConfig.scopeMappings)) {
+      setValue("proxyConfig.scopeMappings", [], {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [watchMode, getValues, setValue]);
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -228,7 +379,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         type: values.type,
         redirects: "",
         mode: values.mode,
-        proxyConfig: defaultProxyConfig,
+        proxyConfig: createDefaultProxyConfig(),
       });
     });
   };
@@ -431,59 +582,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
               )}
             />
 
-            <div className="space-y-3">
-              <FormLabel>Scope mapping</FormLabel>
-              <p className="text-xs text-muted-foreground">
-                Map each app-facing scope to provider scopes. Leave empty to forward the requested scope as-is.
-              </p>
-              <div className="space-y-3">
-                {fields.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No mappings configured.</p>
-                ) : null}
-                {fields.map((fieldItem, index) => (
-                  <div key={fieldItem.id} className="flex flex-col gap-3 rounded-md border p-4 md:flex-row md:items-center">
-                    <FormField
-                      control={form.control}
-                      name={`proxyConfig.scopeMappings.${index}.appScope`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel className="text-xs uppercase tracking-wide">App scope</FormLabel>
-                          <FormControl>
-                            <Input placeholder="profile:read" {...field} disabled={pending} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`proxyConfig.scopeMappings.${index}.providerScopes`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel className="text-xs uppercase tracking-wide">Provider scopes</FormLabel>
-                          <FormControl>
-                            <Input placeholder="openid profile" {...field} disabled={pending} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => remove(index)}
-                      disabled={pending}
-                      className="md:self-end"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <Button type="button" variant="outline" onClick={() => append({ appScope: "", providerScopes: "" })} disabled={pending}>
-                Add mapping
-              </Button>
-            </div>
+            <ProxyScopeMappingFields pending={pending} />
 
             <div className="grid gap-4 md:grid-cols-2">
               <FormField

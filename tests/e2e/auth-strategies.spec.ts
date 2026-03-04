@@ -50,7 +50,7 @@ test.describe("auth strategy persistence", () => {
     const saveButton = page.getByRole("button", { name: "Save strategies" });
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
-    await expect(page.getByText("Auth strategies updated")).toBeVisible();
+    await expect(page.getByText("Auth strategies updated").first()).toBeVisible();
     await expect.poll(async () => (await getClientStrategies(page)).username.subSource, { timeout: 10_000 }).toBe(
       "generated_uuid",
     );

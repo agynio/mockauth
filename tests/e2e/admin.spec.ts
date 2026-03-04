@@ -77,7 +77,7 @@ test.describe("admin console", () => {
 
     const row = page.getByRole("row", { name: new RegExp(clientName, "i") }).last();
     await row.getByRole("link", { name: "Details →" }).click();
-    await expect(page.getByText("Redirect URIs")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Redirect URIs" })).toBeVisible();
 
     const requiredSection = page.getByTestId("oauth-required");
     await expect(requiredSection.locator("[data-field-label]").first()).toBeVisible();
