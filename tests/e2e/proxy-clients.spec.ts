@@ -42,7 +42,11 @@ test.describe("proxy clients", () => {
     await page.getByTestId("clients-search-input").fill(clientName);
     const clientRow = page.getByRole("row", { name: new RegExp(clientName, "i") });
     await expect(clientRow).toBeVisible();
-    await clientRow.getByRole("link", { name: "Details →" }).click();
+    const detailsHref = await clientRow.getByRole("link", { name: "Details →" }).getAttribute("href");
+    expect(detailsHref).toBeTruthy();
+    await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
+    await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
+    await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
 
     await page.getByLabel("Default provider scopes").fill("openid profile offline_access");
     await page.getByRole("button", { name: "Add mapping" }).click();
@@ -64,5 +68,52 @@ test.describe("proxy clients", () => {
     await expect(page.getByLabel("Provider client secret")).toHaveValue("");
     await expect(page.locator('input[value="email:read"]')).toBeVisible();
     await expect(page.locator('input[value="email"]')).toBeVisible();
+  });
+
+  test("honors provider type selection when creating proxy clients", async ({ page }) => {
+    const sessionToken = await createTestSession(page);
+    await authenticate(page, sessionToken);
+    await stubClipboard(page);
+
+    await page.goto("/admin/clients");
+    await expect(page.getByRole("heading", { name: "OAuth clients" })).toBeVisible();
+
+    const clientName = `Proxy Provider ${Date.now()}`;
+
+    await page.getByRole("link", { name: "Add client" }).click();
+    await expect(page.getByRole("heading", { name: "New client" })).toBeVisible();
+
+    await page.getByLabel("Client name").fill(clientName);
+    await page.getByRole("tab", { name: "Proxy" }).click();
+
+    const providerSelect = page.getByRole("combobox", { name: "Provider type" });
+    await expect(providerSelect).toHaveAttribute("data-selected-value", "oidc");
+    await providerSelect.click();
+    const openIdOption = page.getByRole("option", { name: "OpenID Connect" });
+    await expect(openIdOption).toHaveAttribute("data-state", "checked");
+    await page.getByRole("option", { name: "OAuth 2.0" }).click({ force: true });
+    await page.getByLabel("Provider client ID").fill("provider-upstream");
+    await page.getByLabel("Authorization endpoint").fill("https://upstream.example.test/oauth2/authorize");
+    await page.getByLabel("Token endpoint").fill("https://upstream.example.test/oauth2/token");
+
+    await page.getByRole("button", { name: "Create client" }).click();
+
+    await expect(page.getByText("Client created").first()).toBeVisible();
+
+    await page.getByRole("link", { name: "Back to list" }).click();
+    await expect(page).toHaveURL(/\/admin\/clients$/);
+
+    await page.getByTestId("clients-search-input").fill(clientName);
+    const clientRow = page.getByRole("row", { name: new RegExp(clientName, "i") });
+    await expect(clientRow).toBeVisible();
+    const detailsHref = await clientRow.getByRole("link", { name: "Details →" }).getAttribute("href");
+    expect(detailsHref).toBeTruthy();
+    await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
+    await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
+    await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
+    const persistedSelect = page.getByRole("combobox", { name: "Provider type" });
+    await persistedSelect.click();
+    await expect(page.getByRole("option", { name: "OAuth 2.0" })).toHaveAttribute("data-state", "checked");
+    await page.keyboard.press("Escape");
   });
 });

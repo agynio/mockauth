@@ -22,6 +22,9 @@ type SeedResponse = {
   clientsB: { id: string; name: string; clientId: string }[];
 };
 
+const isUniqueConstraintError = (error: unknown): error is { code?: string } =>
+  typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+
 export async function POST(request: Request) {
   if (!env.ENABLE_TEST_ROUTES) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -30,14 +33,21 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as SeedRequest;
   const adminEmail = payload.adminEmail?.toLowerCase().trim() || ADMIN_EMAIL;
 
-  const admin = await prisma.adminUser.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      name: "Playwright Admin",
-    },
-  });
+  const admin = await prisma.adminUser
+    .upsert({
+      where: { email: adminEmail },
+      update: {},
+      create: {
+        email: adminEmail,
+        name: "Playwright Admin",
+      },
+    })
+    .catch(async (error) => {
+      if (isUniqueConstraintError(error)) {
+        return prisma.adminUser.findUniqueOrThrow({ where: { email: adminEmail } });
+      }
+      throw error;
+    });
 
   const timestamp = Date.now();
   const tenantAName = `Tenant Switch A ${timestamp}`;
