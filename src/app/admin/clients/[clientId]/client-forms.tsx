@@ -1395,7 +1395,7 @@ export function UpdateProxyProviderConfigForm({
         />
 
         <div className="space-y-3">
-          <FormLabel>Scope mapping</FormLabel>
+          <Label>Scope mapping</Label>
           <p className="text-xs text-muted-foreground">
             Map app scopes to provider scopes. Leave empty to forward requested scopes unchanged.
           </p>
