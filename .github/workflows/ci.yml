@@ -69,6 +69,6 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm playwright:install
       - name: Playwright E2E
-        run: pnpm test:e2e
+        run: pnpm test:e2e:ci
       - name: Build
         run: pnpm build
