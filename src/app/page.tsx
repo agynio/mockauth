@@ -116,7 +116,7 @@ export default function Home() {
           <a
             href="https://github.com/agynio/mockauth"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="text-sm font-semibold text-indigo-700 transition hover:text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
             GitHub
@@ -131,26 +131,26 @@ export default function Home() {
               Frictionless OIDC testing for ephemeral environments.
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
-              <a href="#" className={primaryButtonClasses}>
+              <a href="#quick-start" className={primaryButtonClasses}>
                 Get Started
               </a>
               <a
                 href="https://github.com/agynio/mockauth"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className={secondaryLinkClasses}
               >
                 View on GitHub
               </a>
             </div>
             <div className="mt-4">
-              <a
+              <Link
                 data-testid="landing-sign-in-link"
                 href="/api/auth/signin/logto?callbackUrl=/admin"
                 className="text-sm font-semibold text-indigo-700 transition hover:text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
               >
                 Sign in
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -239,18 +239,18 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-white">
+        <section className="bg-white" id="quick-start">
           <div className="mx-auto max-w-5xl px-6 py-20">
             <div className="rounded-3xl border border-indigo-100 bg-indigo-50 p-10 text-center shadow-sm">
               <h2 className="text-2xl font-semibold text-slate-900">Quick Start</h2>
               <div className="mt-8 flex flex-wrap justify-center gap-4">
-                <a href="#" className={primaryButtonClasses}>
+                <a href="#quick-start" className={primaryButtonClasses}>
                   Get Started
                 </a>
                 <a
                   href="https://github.com/agynio/mockauth"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className={secondaryLinkClasses}
                 >
                   View on GitHub
@@ -268,7 +268,7 @@ export default function Home() {
           <a
             href="https://github.com/agynio/mockauth"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="font-semibold text-indigo-700 transition hover:text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
             GitHub
