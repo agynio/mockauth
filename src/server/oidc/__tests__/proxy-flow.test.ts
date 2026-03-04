@@ -61,6 +61,7 @@ describe("Proxy client OAuth flow", () => {
             promptPassthroughEnabled: true,
             loginHintPassthroughEnabled: true,
             passthroughTokenResponse: false,
+            upstreamTokenEndpointAuthMethod: "none",
           },
         },
       },
@@ -193,6 +194,20 @@ describe("Proxy client OAuth flow", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, firstInit] = fetchMock.mock.calls[0];
+    const firstHeaders = (firstInit?.headers ?? {}) as Record<string, string>;
+    expect(firstHeaders.authorization).toBeUndefined();
+    const firstParams = new URLSearchParams(firstInit?.body as URLSearchParams);
+    expect(firstParams.get("client_id")).toBe("up-client");
+    expect(firstParams.has("client_secret")).toBe(false);
+
+    const [, secondInit] = fetchMock.mock.calls[1];
+    const secondHeaders = (secondInit?.headers ?? {}) as Record<string, string>;
+    expect(secondHeaders.authorization).toBeUndefined();
+    const secondParams = new URLSearchParams(secondInit?.body as URLSearchParams);
+    expect(secondParams.get("client_id")).toBe("up-client");
+    expect(secondParams.has("client_secret")).toBe(false);
+
     fetchMock.mockRestore();
   });
 });

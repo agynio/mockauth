@@ -22,10 +22,14 @@ test.describe("proxy clients", () => {
     await page.getByLabel("Provider client ID").fill("proxy-upstream-client");
     await page.getByLabel("Provider client secret").fill("proxy-upstream-secret");
     await page.getByLabel("Authorization endpoint").fill("https://upstream.example.test/oauth2/authorize");
-    await page.getByLabel("Token endpoint").fill("https://upstream.example.test/oauth2/token");
+    await page.getByLabel("Token endpoint", { exact: true }).fill("https://upstream.example.test/oauth2/token");
     await page.getByLabel("Userinfo endpoint").fill("https://upstream.example.test/oauth2/userinfo");
     await page.getByLabel("JWKS URI").fill("https://upstream.example.test/oauth2/jwks.json");
     await page.getByLabel("Default provider scopes").fill("openid profile");
+
+    const tokenAuthSelect = page.getByRole("combobox", { name: "Token endpoint auth" });
+    await tokenAuthSelect.click();
+    await page.getByRole("option", { name: "POST body (client_secret_post)" }).click();
 
     await page.getByRole("button", { name: "Add mapping" }).click();
     await page.getByLabel("App scope").fill("profile:read");
@@ -35,6 +39,7 @@ test.describe("proxy clients", () => {
 
     await expect(page.getByText("Client created").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Credentials" })).toBeVisible();
+    await expect(page.getByTestId("provider-redirect-uri")).toContainText("/oidc/proxy/callback");
 
     await page.getByRole("link", { name: "Back to list" }).click();
     await expect(page).toHaveURL(/\/admin\/clients$/);
@@ -47,6 +52,15 @@ test.describe("proxy clients", () => {
     await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
     await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
+    await expect(page.getByTestId("provider-redirect-uri")).toContainText("/oidc/proxy/callback");
+    await expect(page.getByTestId("proxy-mode-note")).toBeVisible();
+    await expect(page.locator('[data-testid="client-scopes-card"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="client-auth-strategies-card"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="client-signing-card"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="client-reauth-card"]')).toHaveCount(0);
+
+    const persistedTokenAuthSelect = page.getByRole("combobox", { name: "Token endpoint auth" });
+    await expect(persistedTokenAuthSelect).toHaveAttribute("data-selected-value", "client_secret_post");
 
     await page.getByLabel("Default provider scopes").fill("openid profile offline_access");
     await page.getByRole("button", { name: "Add mapping" }).click();
@@ -92,9 +106,11 @@ test.describe("proxy clients", () => {
     const openIdOption = page.getByRole("option", { name: "OpenID Connect" });
     await expect(openIdOption).toHaveAttribute("data-state", "checked");
     await page.getByRole("option", { name: "OAuth 2.0" }).click({ force: true });
+    const tokenAuthSelect = page.getByRole("combobox", { name: "Token endpoint auth" });
+    await expect(tokenAuthSelect).toHaveAttribute("data-selected-value", "client_secret_basic");
     await page.getByLabel("Provider client ID").fill("provider-upstream");
     await page.getByLabel("Authorization endpoint").fill("https://upstream.example.test/oauth2/authorize");
-    await page.getByLabel("Token endpoint").fill("https://upstream.example.test/oauth2/token");
+    await page.getByLabel("Token endpoint", { exact: true }).fill("https://upstream.example.test/oauth2/token");
 
     await page.getByRole("button", { name: "Create client" }).click();
 

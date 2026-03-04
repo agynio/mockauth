@@ -50,7 +50,14 @@ vi.mock("@/server/db/client", () => ({
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
+    tenant: {
+      findUnique: vi.fn(),
+    },
   },
+}));
+
+vi.mock("@/server/utils/request-origin", () => ({
+  getRequestOrigin: vi.fn(),
 }));
 
 import { createClientAction, updateProxyClientConfigAction } from "../actions";
@@ -58,6 +65,7 @@ import { getServerSession } from "next-auth";
 import { assertTenantMembership, ensureMembershipRole } from "@/server/services/tenant-service";
 import { createClient, upsertProxyProviderConfig } from "@/server/services/client-service";
 import { prisma } from "@/server/db/client";
+import { getRequestOrigin } from "@/server/utils/request-origin";
 
 const mockGetServerSession = vi.mocked(getServerSession);
 const mockAssertTenantMembership = vi.mocked(assertTenantMembership);
@@ -65,6 +73,8 @@ const mockEnsureMembershipRole = vi.mocked(ensureMembershipRole);
 const mockCreateClient = vi.mocked(createClient);
 const mockUpsertProxyConfig = vi.mocked(upsertProxyProviderConfig);
 const mockFindClient = vi.mocked(prisma.client.findUnique);
+const mockGetRequestOrigin = vi.mocked(getRequestOrigin);
+const mockFindTenant = vi.mocked(prisma.tenant.findUnique);
 
 describe("proxy client server actions", () => {
   beforeEach(() => {
@@ -83,6 +93,8 @@ describe("proxy client server actions", () => {
       oauthClientMode: "proxy",
     } as never);
     mockUpsertProxyConfig.mockResolvedValue(undefined);
+    mockGetRequestOrigin.mockResolvedValue("https://mockauth.test");
+    mockFindTenant.mockResolvedValue({ defaultApiResourceId: "api-default" } as never);
   });
 
   it("creates a proxy client with normalized configuration", async () => {
@@ -134,13 +146,18 @@ describe("proxy client server actions", () => {
           promptPassthroughEnabled: true,
           loginHintPassthroughEnabled: false,
           passthroughTokenResponse: true,
+          upstreamTokenEndpointAuthMethod: "client_secret_basic",
         }),
       }),
     );
 
     expect(result).toEqual({
       success: "Client created",
-      data: { clientId: "client_public", clientSecret: "secret-generated" },
+      data: {
+        clientId: "client_public",
+        clientSecret: "secret-generated",
+        providerRedirectUri: "https://mockauth.test/r/api-default/oidc/proxy/callback",
+      },
     });
   });
 
@@ -192,6 +209,7 @@ describe("proxy client server actions", () => {
         promptPassthroughEnabled: false,
         loginHintPassthroughEnabled: false,
         passthroughTokenResponse: false,
+        upstreamTokenEndpointAuthMethod: "client_secret_basic",
       },
       { keepExistingSecret: true },
     );

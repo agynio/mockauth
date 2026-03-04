@@ -32,6 +32,7 @@ export const proxyProviderConfigSchema = z.object({
   jwksUri: z.string().url().optional(),
   upstreamClientId: z.string().min(1),
   upstreamClientSecret: z.string().optional(),
+  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"] as const).optional(),
   defaultScopes: z.array(z.string().min(1)).optional(),
   scopeMapping: z
     .record(z.string(), z.union([z.string(), z.array(z.string().min(1))]))
@@ -161,6 +162,7 @@ export const createClient = async (
           upstreamClientSecretEncrypted: validatedProxyConfig.upstreamClientSecret
             ? encrypt(validatedProxyConfig.upstreamClientSecret)
             : null,
+          upstreamTokenEndpointAuthMethod: validatedProxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
           defaultScopes: normalizeProviderScopes(validatedProxyConfig.defaultScopes),
           scopeMapping: normalizeScopeMapping(validatedProxyConfig.scopeMapping),
           pkceSupported: Boolean(validatedProxyConfig.pkceSupported),
@@ -278,6 +280,7 @@ export const upsertProxyProviderConfig = async (
     userinfoEndpoint: parsed.userinfoEndpoint ?? null,
     jwksUri: parsed.jwksUri ?? null,
     upstreamClientId: parsed.upstreamClientId,
+    upstreamTokenEndpointAuthMethod: parsed.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
     defaultScopes: normalizedScopes,
     scopeMapping: normalizedMapping,
     pkceSupported: Boolean(parsed.pkceSupported),

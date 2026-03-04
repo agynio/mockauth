@@ -149,8 +149,10 @@ test.describe("admin console", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "OAuth clients" })).toBeVisible();
 
-    await page.getByRole("link", { name: "Next →" }).click();
-    await expect(page).toHaveURL(/page=2/);
+    await Promise.all([
+      page.waitForURL(/page=2/),
+      page.getByRole("link", { name: "Next →" }).click(),
+    ]);
 
     await searchInput.fill("Pagination Client 11");
     await expect(page).toHaveURL(/q=Pagination%20Client%2011/);
@@ -159,8 +161,10 @@ test.describe("admin console", () => {
 
     await searchInput.fill("");
     await expect(page).toHaveURL(/\/admin\/clients$/);
-    await page.getByRole("link", { name: "Next →" }).click();
-    await expect(page).toHaveURL(/page=2/);
+    await Promise.all([
+      page.waitForURL(/page=2/),
+      page.getByRole("link", { name: "Next →" }).click(),
+    ]);
 
     await page.getByTestId("logout-button").click();
     await page.waitForURL("**/api/auth/signin**");

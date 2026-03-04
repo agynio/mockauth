@@ -117,6 +117,7 @@ const normalizeProxyConfigInput = (
     promptPassthroughEnabled: Boolean(config.promptPassthroughEnabled),
     loginHintPassthroughEnabled: Boolean(config.loginHintPassthroughEnabled),
     passthroughTokenResponse: Boolean(config.passthroughTokenResponse),
+    upstreamTokenEndpointAuthMethod: config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
   };
 
   return { normalized, keepExistingSecret };
@@ -313,7 +314,7 @@ export const setActiveTenantAction = async (input: z.infer<typeof setTenantSchem
 
 export const createClientAction = async (
   input: z.infer<typeof clientSchema>,
-): Promise<ActionState<{ clientId: string; clientSecret?: string }>> => {
+): Promise<ActionState<{ clientId: string; clientSecret?: string; providerRedirectUri?: string }>> => {
   try {
     const adminId = await requireSession();
     const parsed = clientSchema.parse(input);
@@ -347,12 +348,24 @@ export const createClientAction = async (
       oauthClientMode: parsed.mode,
       proxyConfig: proxyConfigResult.normalized,
     });
+    let providerRedirectUri: string | undefined;
+    if (parsed.mode === "proxy") {
+      const origin = await getRequestOrigin();
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: parsed.tenantId },
+        select: { defaultApiResourceId: true },
+      });
+      const resourceId = client.apiResourceId ?? tenant?.defaultApiResourceId;
+      if (resourceId) {
+        providerRedirectUri = new URL(`/r/${resourceId}/oidc/proxy/callback`, origin).toString();
+      }
+    }
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath(clientPath(client.id));
     return {
       success: "Client created",
-      data: { clientId: client.clientId, clientSecret: clientSecret ?? undefined },
+      data: { clientId: client.clientId, clientSecret: clientSecret ?? undefined, providerRedirectUri },
     };
   } catch (error) {
     console.error(error);

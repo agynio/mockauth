@@ -92,6 +92,7 @@ const proxyConfigFormSchema = z.object({
   jwksUri: z.string().optional(),
   upstreamClientId: z.string().min(1, "Required"),
   upstreamClientSecret: z.string().optional(),
+  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"]),
   defaultScopes: z.string().optional(),
   scopeMappings: z.array(proxyScopeMappingSchema).optional(),
   pkceSupported: z.boolean(),
@@ -1171,6 +1172,7 @@ export function UpdateProxyProviderConfigForm({
     userinfoEndpoint?: string | null;
     jwksUri?: string | null;
     upstreamClientId: string;
+    upstreamTokenEndpointAuthMethod: "client_secret_basic" | "client_secret_post" | "none";
     defaultScopes: string[];
     scopeMapping: Record<string, string[]>;
     pkceSupported: boolean;
@@ -1199,6 +1201,7 @@ export function UpdateProxyProviderConfigForm({
       userinfoEndpoint: initialConfig.userinfoEndpoint ?? "",
       jwksUri: initialConfig.jwksUri ?? "",
       upstreamClientId: initialConfig.upstreamClientId,
+      upstreamTokenEndpointAuthMethod: initialConfig.upstreamTokenEndpointAuthMethod,
       upstreamClientSecret: "",
       defaultScopes: initialConfig.defaultScopes.join(" "),
       scopeMappings: defaultScopeMappingRows,
@@ -1218,6 +1221,7 @@ export function UpdateProxyProviderConfigForm({
       userinfoEndpoint: initialConfig.userinfoEndpoint ?? "",
       jwksUri: initialConfig.jwksUri ?? "",
       upstreamClientId: initialConfig.upstreamClientId,
+      upstreamTokenEndpointAuthMethod: initialConfig.upstreamTokenEndpointAuthMethod,
       upstreamClientSecret: "",
       defaultScopes: initialConfig.defaultScopes.join(" "),
       scopeMappings: Object.entries(initialConfig.scopeMapping).map(([key, values]) => ({
@@ -1245,6 +1249,7 @@ export function UpdateProxyProviderConfigForm({
         jwksUri: values.jwksUri?.trim() || undefined,
         upstreamClientId: values.upstreamClientId.trim(),
         upstreamClientSecret: values.upstreamClientSecret?.trim() || undefined,
+        upstreamTokenEndpointAuthMethod: values.upstreamTokenEndpointAuthMethod,
         defaultScopes: splitProxyScopes(values.defaultScopes),
         scopeMapping: buildProxyScopeMapping(values.scopeMappings),
         pkceSupported: values.pkceSupported,
@@ -1310,6 +1315,20 @@ export function UpdateProxyProviderConfigForm({
               <FormMessage />
             </FormItem>
           )}
+        />
+
+        <RHFSelectField
+          control={form.control}
+          name="upstreamTokenEndpointAuthMethod"
+          label="Token endpoint auth"
+          placeholder="Select auth method"
+          options={[
+            { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
+            { value: "client_secret_post", label: "POST body (client_secret_post)" },
+            { value: "none", label: "Public client (none)" },
+          ]}
+          disabled={disableForm}
+          description="Determines how MockAuth authenticates to the upstream token endpoint."
         />
 
         <div className="grid gap-4 md:grid-cols-2">

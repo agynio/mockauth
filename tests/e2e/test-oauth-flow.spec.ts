@@ -19,12 +19,39 @@ test.describe("Client Test OAuth", () => {
     await expect(page.getByTestId("test-oauth-decoded-id")).toContainText("\"sub\"");
 
     const firstState = (await page.getByTestId("test-oauth-state").textContent())?.trim();
+    const initialRedirect = page.url();
+    const loginPattern = /\/r\/.*\/oidc\/login/;
+    const redirectPattern = new RegExp(`/admin/clients/${clientId}/test/redirect`);
+
     await page.getByTestId("test-oauth-run-again").click();
-    await completeProviderLogin(page, clientId);
+    await page.waitForURL((url) => {
+      const href = url.toString();
+      if (href === initialRedirect) {
+        return false;
+      }
+      return loginPattern.test(href) || redirectPattern.test(href);
+    });
+
+    if (loginPattern.test(page.url())) {
+      const loginUrl = page.url();
+      await page.getByRole("textbox", { name: /^Username/ }).fill("qa-user");
+      await Promise.all([
+        page.waitForURL((url) => {
+          const href = url.toString();
+          return redirectPattern.test(href) && href !== loginUrl;
+        }),
+        page.getByRole("button", { name: "Continue" }).click(),
+      ]);
+    }
+
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible({ timeout: 60000 });
+    await expect(page.getByTestId("test-oauth-access-token")).toBeVisible({ timeout: 60000 });
+
+    await expect
+      .poll(async () => (await page.getByTestId("test-oauth-state").textContent())?.trim(), { timeout: 60000 })
+      .not.toBe(firstState ?? null);
 
     const secondState = (await page.getByTestId("test-oauth-state").textContent())?.trim();
-    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
-    await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
     expect(firstState).toBeTruthy();
     expect(secondState).toBeTruthy();
     expect(secondState).not.toEqual(firstState);
@@ -210,7 +237,11 @@ test.describe("Client Test OAuth", () => {
     await expect(errorAlert).toContainText("Run again");
     await expect(page.getByTestId("test-oauth-reset")).toBeVisible();
 
-    await page.getByTestId("test-oauth-run-again").click();
+    const loginPattern = /\/r\/.*\/oidc\/login/;
+    await Promise.all([
+      page.waitForURL(loginPattern),
+      page.getByTestId("test-oauth-run-again").click(),
+    ]);
     await completeProviderLogin(page, clientId);
 
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
@@ -386,27 +417,75 @@ type LoginOptions = {
   strategy?: "username" | "email";
   identifier?: string;
   emailVerifiedPreference?: "true" | "false";
+  previousState?: string | null;
 };
 
 const completeProviderLogin = async (page: Page, clientId: string, options?: LoginOptions) => {
-  await page.waitForURL(/\/r\/.*\/oidc\/login/);
-  const strategy = options?.strategy ?? "username";
-  await selectLoginTabIfPresent(page, strategy);
-  const identifier = options?.identifier ?? (strategy === "email" ? "qa-user@example.test" : "qa-user");
-  const labelPattern = strategy === "email" ? /^Email/ : /^Username/;
-  await page.getByRole("textbox", { name: labelPattern }).fill(identifier);
-  if (strategy === "email" && options?.emailVerifiedPreference) {
-    const radioLabel = options.emailVerifiedPreference === "true" ? "Verified" : "Unverified";
-    const radio = page.getByLabel(radioLabel, { exact: true });
-    if (await radio.count()) {
-      await radio.click();
-    }
+  const loginPattern = /\/r\/.*\/oidc\/login/;
+  const redirectPattern = new RegExp(`/admin/clients/${clientId}/test/redirect`);
+
+  const initialUrl = page.url();
+
+  const waitForNextNavigation = async (fromUrl: string) => {
+    await page.waitForURL((url) => {
+      const href = url.toString();
+      if (href === fromUrl) {
+        return false;
+      }
+      return loginPattern.test(href) || redirectPattern.test(href);
+    });
+  };
+
+  let currentUrl = page.url();
+  if (!loginPattern.test(currentUrl) && !redirectPattern.test(currentUrl)) {
+    await waitForNextNavigation(initialUrl);
+    currentUrl = page.url();
   }
-  await page.getByRole("button", { name: "Continue" }).click();
-  await Promise.race([
-    page.getByTestId("test-oauth-id-token").waitFor({ state: "visible", timeout: 60000 }),
-    page.getByTestId("test-oauth-error").waitFor({ state: "visible", timeout: 60000 }),
-  ]);
+
+  if (loginPattern.test(currentUrl)) {
+    const strategy = options?.strategy ?? "username";
+    await selectLoginTabIfPresent(page, strategy);
+    const identifier = options?.identifier ?? (strategy === "email" ? "qa-user@example.test" : "qa-user");
+    const labelPattern = strategy === "email" ? /^Email/ : /^Username/;
+    await page.getByRole("textbox", { name: labelPattern }).fill(identifier);
+    if (strategy === "email" && options?.emailVerifiedPreference) {
+      const radioLabel = options.emailVerifiedPreference === "true" ? "Verified" : "Unverified";
+      const radio = page.getByLabel(radioLabel, { exact: true });
+      if (await radio.count()) {
+        await radio.click();
+      }
+    }
+    await Promise.all([
+      page.waitForURL((url) => {
+        const href = url.toString();
+        if (href === currentUrl) {
+          return false;
+        }
+        return redirectPattern.test(href);
+      }),
+      page.getByRole("button", { name: "Continue" }).click(),
+    ]);
+    currentUrl = page.url();
+  }
+
+  const waitForTestResult = () =>
+    Promise.race([
+      page.getByTestId("test-oauth-id-token").waitFor({ state: "visible", timeout: 60000 }),
+      page.getByTestId("test-oauth-error").waitFor({ state: "visible", timeout: 60000 }),
+    ]);
+
+  if (!redirectPattern.test(currentUrl)) {
+    await page.waitForURL((url) => redirectPattern.test(url.toString()));
+    currentUrl = page.url();
+  }
+
+  await waitForTestResult();
+
+  if (options?.previousState) {
+    await expect
+      .poll(async () => (await page.getByTestId("test-oauth-state").textContent())?.trim())
+      .not.toBe(options.previousState);
+  }
 };
 
 const selectLoginTabIfPresent = async (page: Page, strategy: "username" | "email") => {
