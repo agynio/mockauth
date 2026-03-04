@@ -1,0 +1,1 @@
+-- Empty anchor migration before issue_106
