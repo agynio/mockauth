@@ -3,7 +3,7 @@
 import { useEffect, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import { Loader2, Trash2, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Loader2, Trash2, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
@@ -92,6 +92,7 @@ const proxyConfigFormSchema = z.object({
   jwksUri: z.string().optional(),
   upstreamClientId: z.string().min(1, "Required"),
   upstreamClientSecret: z.string().optional(),
+  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"]),
   defaultScopes: z.string().optional(),
   scopeMappings: z.array(proxyScopeMappingSchema).optional(),
   pkceSupported: z.boolean(),
@@ -1157,10 +1158,56 @@ export function UpdateClientIssuerForm({
   );
 }
 
+function StoredProxySecretField({ value }: { value: string }) {
+  const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const toggleVisibility = () => {
+    setVisible((current) => !current);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.error("Failed to copy upstream secret", error);
+    }
+  };
+
+  const inputType = visible ? "text" : "password";
+
+  return (
+    <div className="flex items-center gap-2" data-testid="proxy-stored-secret">
+      <Input value={value} type={inputType} readOnly className="flex-1 font-mono" />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={toggleVisibility}
+        aria-label={visible ? "Hide upstream secret" : "Reveal upstream secret"}
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={handleCopy}
+        aria-label="Copy upstream secret"
+      >
+        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
+  );
+}
+
 export function UpdateProxyProviderConfigForm({
   clientId,
   canEdit,
   initialConfig,
+  storedSecret,
 }: {
   clientId: string;
   canEdit: boolean;
@@ -1171,6 +1218,7 @@ export function UpdateProxyProviderConfigForm({
     userinfoEndpoint?: string | null;
     jwksUri?: string | null;
     upstreamClientId: string;
+    upstreamTokenEndpointAuthMethod: "client_secret_basic" | "client_secret_post" | "none";
     defaultScopes: string[];
     scopeMapping: Record<string, string[]>;
     pkceSupported: boolean;
@@ -1179,6 +1227,7 @@ export function UpdateProxyProviderConfigForm({
     loginHintPassthroughEnabled: boolean;
     passthroughTokenResponse: boolean;
   };
+  storedSecret?: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1199,6 +1248,7 @@ export function UpdateProxyProviderConfigForm({
       userinfoEndpoint: initialConfig.userinfoEndpoint ?? "",
       jwksUri: initialConfig.jwksUri ?? "",
       upstreamClientId: initialConfig.upstreamClientId,
+      upstreamTokenEndpointAuthMethod: initialConfig.upstreamTokenEndpointAuthMethod,
       upstreamClientSecret: "",
       defaultScopes: initialConfig.defaultScopes.join(" "),
       scopeMappings: defaultScopeMappingRows,
@@ -1218,6 +1268,7 @@ export function UpdateProxyProviderConfigForm({
       userinfoEndpoint: initialConfig.userinfoEndpoint ?? "",
       jwksUri: initialConfig.jwksUri ?? "",
       upstreamClientId: initialConfig.upstreamClientId,
+      upstreamTokenEndpointAuthMethod: initialConfig.upstreamTokenEndpointAuthMethod,
       upstreamClientSecret: "",
       defaultScopes: initialConfig.defaultScopes.join(" "),
       scopeMappings: Object.entries(initialConfig.scopeMapping).map(([key, values]) => ({
@@ -1245,6 +1296,7 @@ export function UpdateProxyProviderConfigForm({
         jwksUri: values.jwksUri?.trim() || undefined,
         upstreamClientId: values.upstreamClientId.trim(),
         upstreamClientSecret: values.upstreamClientSecret?.trim() || undefined,
+        upstreamTokenEndpointAuthMethod: values.upstreamTokenEndpointAuthMethod,
         defaultScopes: splitProxyScopes(values.defaultScopes),
         scopeMapping: buildProxyScopeMapping(values.scopeMappings),
         pkceSupported: values.pkceSupported,
@@ -1310,6 +1362,30 @@ export function UpdateProxyProviderConfigForm({
               <FormMessage />
             </FormItem>
           )}
+        />
+
+        {storedSecret ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">Stored provider secret</p>
+            <StoredProxySecretField value={storedSecret} />
+            <p className="text-xs text-muted-foreground" data-testid="proxy-secret-caution">
+              Revealed secrets render only in your browser. Share cautiously.
+            </p>
+          </div>
+        ) : null}
+
+        <RHFSelectField
+          control={form.control}
+          name="upstreamTokenEndpointAuthMethod"
+          label="Token endpoint auth"
+          placeholder="Select auth method"
+          options={[
+            { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
+            { value: "client_secret_post", label: "POST body (client_secret_post)" },
+            { value: "none", label: "Public client (none)" },
+          ]}
+          disabled={disableForm}
+          description="Determines how MockAuth authenticates to the upstream token endpoint."
         />
 
         <div className="grid gap-4 md:grid-cols-2">

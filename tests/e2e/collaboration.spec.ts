@@ -123,7 +123,11 @@ test.describe("collaboration", () => {
     const readOnlyButton = readerPage.getByRole("button", { name: "Read-only access" });
     await expect(readOnlyButton).toBeDisabled();
 
-    const detailsLink = readerPage.getByRole("link", { name: "Details →" }).first();
+    await readerPage.getByTestId("clients-search-input").fill("QA Client");
+    const detailsLink = readerPage
+      .getByRole("row", { name: /QA Client/i })
+      .getByRole("link", { name: "Details →" })
+      .first();
     const detailsHref = await detailsLink.getAttribute("href");
     expect(detailsHref).toBeTruthy();
     await readerPage.goto(detailsHref!, { waitUntil: "domcontentloaded" });

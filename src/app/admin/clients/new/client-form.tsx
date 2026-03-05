@@ -31,6 +31,7 @@ const proxyConfigSchema = z.object({
   jwksUri: z.string().optional(),
   upstreamClientId: z.string().optional(),
   upstreamClientSecret: z.string().optional(),
+  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"]).default("client_secret_basic"),
   defaultScopes: z.string().optional(),
   scopeMappings: z.array(scopeMappingSchema).optional(),
   pkceSupported: z.boolean().default(true),
@@ -189,6 +190,7 @@ const createDefaultProxyConfig = (): NonNullable<FormValues["proxyConfig"]> => (
   jwksUri: "",
   upstreamClientId: "",
   upstreamClientSecret: "",
+  upstreamTokenEndpointAuthMethod: "client_secret_basic",
   defaultScopes: "",
   scopeMappings: [],
   pkceSupported: true,
@@ -301,7 +303,11 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
   });
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [credentials, setCredentials] = useState<{ clientId: string; clientSecret?: string } | null>(null);
+  const [credentials, setCredentials] = useState<{
+    clientId: string;
+    clientSecret?: string;
+    providerRedirectUri?: string;
+  } | null>(null);
 
   const watchMode = useWatch({ control: form.control, name: "mode" });
   const { getValues, setValue } = form;
@@ -362,6 +368,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
             jwksUri: values.proxyConfig.jwksUri?.trim() || undefined,
             upstreamClientId: values.proxyConfig.upstreamClientId?.trim() ?? "",
             upstreamClientSecret: values.proxyConfig.upstreamClientSecret?.trim() || undefined,
+            upstreamTokenEndpointAuthMethod: values.proxyConfig.upstreamTokenEndpointAuthMethod,
             defaultScopes: splitScopes(values.proxyConfig.defaultScopes),
             scopeMapping: buildScopeMapping(values.proxyConfig.scopeMappings),
             pkceSupported: Boolean(values.proxyConfig.pkceSupported),
@@ -509,6 +516,20 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
                   <p className="text-xs text-muted-foreground">Leave blank for public providers or if mutual TLS applies.</p>
                 </FormItem>
               )}
+            />
+
+            <RHFSelectField
+              control={form.control}
+              name="proxyConfig.upstreamTokenEndpointAuthMethod"
+              label="Token endpoint auth"
+              placeholder="Select auth method"
+              options={[
+                { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
+                { value: "client_secret_post", label: "POST body (client_secret_post)" },
+                { value: "none", label: "Public client (none)" },
+              ]}
+              disabled={pending}
+              description="Determines how MockAuth authenticates to the upstream token endpoint."
             />
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -738,6 +759,9 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
               ) : (
                 <p className="text-sm text-muted-foreground">Public clients do not receive secrets.</p>
               )}
+              {credentials.providerRedirectUri ? (
+                <CopyField label="Provider redirect URI" value={credentials.providerRedirectUri} testId="provider-redirect-uri" />
+              ) : null}
             </CardContent>
           </Card>
         ) : null}

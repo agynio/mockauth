@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
@@ -75,6 +76,19 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     }
   })();
 
+  const upstreamClientSecretValue = (() => {
+    const encrypted = client.proxyConfig?.upstreamClientSecretEncrypted;
+    if (!encrypted) {
+      return null;
+    }
+    try {
+      return decrypt(encrypted);
+    } catch (error) {
+      console.error("Unable to decrypt upstream client secret", error);
+      return null;
+    }
+  })();
+
   const proxyConfigInitial = (() => {
     if (client.oauthClientMode !== "proxy" || !client.proxyConfig) {
       return null;
@@ -108,6 +122,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
       userinfoEndpoint: client.proxyConfig.userinfoEndpoint,
       jwksUri: client.proxyConfig.jwksUri,
       upstreamClientId: client.proxyConfig.upstreamClientId,
+      upstreamTokenEndpointAuthMethod: client.proxyConfig.upstreamTokenEndpointAuthMethod,
       defaultScopes: client.proxyConfig.defaultScopes ?? [],
       scopeMapping: parsedMapping,
       pkceSupported: client.proxyConfig.pkceSupported,
@@ -120,6 +135,11 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
+  const providerRedirectUri =
+    client.oauthClientMode === "proxy"
+      ? new URL(`/r/${currentResourceId}/oidc/proxy/callback`, origin).toString()
+      : null;
+  const showLocalClientSettings = client.oauthClientMode !== "proxy";
   const testFlowHref = `/admin/clients/${client.id}/test`;
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
@@ -268,74 +288,96 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {providerRedirectUri ? (
+              <CopyField label="Provider redirect URI" value={providerRedirectUri} testId="provider-redirect-uri" />
+            ) : null}
+            <Alert data-testid="proxy-mode-note">
+              <AlertTitle>Scopes and claims come from upstream</AlertTitle>
+              <AlertDescription>
+                MockAuth will forward tokens from the provider as-is. Local scope toggles and token settings are disabled in
+                proxy mode.
+              </AlertDescription>
+            </Alert>
             <UpdateProxyProviderConfigForm
               clientId={client.id}
               canEdit={canManageClients}
               initialConfig={proxyConfigInitial}
+              storedSecret={upstreamClientSecretValue}
             />
           </CardContent>
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Scopes</CardTitle>
-          <CardDescription>Toggle which scopes this client can request.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UpdateClientScopesForm
-            clientId={client.id}
-            canEdit={canManageClients}
-            initialScopes={client.allowedScopes}
-          />
-        </CardContent>
-      </Card>
+      {showLocalClientSettings ? (
+        <Card data-testid="client-scopes-card">
+          <CardHeader>
+            <CardTitle>Scopes</CardTitle>
+            <CardDescription>Toggle which scopes this client can request.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UpdateClientScopesForm
+              clientId={client.id}
+              canEdit={canManageClients}
+              initialScopes={client.allowedScopes}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Auth strategies</CardTitle>
-          <CardDescription>Enable username or email flows and decide how the OIDC subject is derived.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UpdateAuthStrategiesForm
-            clientId={client.id}
-            canEdit={canManageClients}
-            initialStrategies={authStrategies}
-          />
-        </CardContent>
-      </Card>
+      {showLocalClientSettings ? (
+        <Card data-testid="client-auth-strategies-card">
+          <CardHeader>
+            <CardTitle>Auth strategies</CardTitle>
+            <CardDescription>Enable username or email flows and decide how the OIDC subject is derived.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UpdateAuthStrategiesForm
+              clientId={client.id}
+              canEdit={canManageClients}
+              initialStrategies={authStrategies}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Signing algorithms</CardTitle>
-          <CardDescription>Configure how Mockauth signs ID tokens and access tokens.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <UpdateClientSigningAlgorithmsForm
-            clientId={client.id}
-            canEdit={canManageClients}
-            initialIdTokenAlg={client.idTokenSignedResponseAlg}
-            initialAccessTokenAlg={client.accessTokenSigningAlg}
-          />
-          <p className="text-xs text-muted-foreground">
-            Each algorithm maintains its own active signing key. Mockauth rotates keys on demand when you switch algorithms.
-          </p>
-        </CardContent>
-      </Card>
+      {showLocalClientSettings ? (
+        <Card data-testid="client-signing-card">
+          <CardHeader>
+            <CardTitle>Signing algorithms</CardTitle>
+            <CardDescription>Configure how Mockauth signs ID tokens and access tokens.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <UpdateClientSigningAlgorithmsForm
+              clientId={client.id}
+              canEdit={canManageClients}
+              initialIdTokenAlg={client.idTokenSignedResponseAlg}
+              initialAccessTokenAlg={client.accessTokenSigningAlg}
+            />
+            <p className="text-xs text-muted-foreground">
+              Each algorithm maintains its own active signing key. Mockauth rotates keys on demand when you switch algorithms.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Re-authentication</CardTitle>
-          <CardDescription>Control how long Mockauth honors a previous sign-in for this client.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <UpdateClientReauthTtlForm clientId={client.id} initialTtl={client.reauthTtlSeconds} canEdit={canManageClients} />
-          <p className="text-xs text-muted-foreground">
-            0 seconds disables silent reuse. Higher values allow the authorize endpoint to skip the login form when the
-            same admin signs in again within the TTL window.
-          </p>
-        </CardContent>
-      </Card>
+      {showLocalClientSettings ? (
+        <Card data-testid="client-reauth-card">
+          <CardHeader>
+            <CardTitle>Re-authentication</CardTitle>
+            <CardDescription>Control how long Mockauth honors a previous sign-in for this client.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <UpdateClientReauthTtlForm
+              clientId={client.id}
+              initialTtl={client.reauthTtlSeconds}
+              canEdit={canManageClients}
+            />
+            <p className="text-xs text-muted-foreground">
+              0 seconds disables silent reuse. Higher values allow the authorize endpoint to skip the login form when the same admin signs in again within the TTL window.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

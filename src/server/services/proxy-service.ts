@@ -229,16 +229,33 @@ export const requestProviderTokens = async (
     accept: "application/json",
   };
 
+  const params = new URLSearchParams(body);
+  params.set("client_id", config.upstreamClientId);
+
+  const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
   let authorization: string | null = null;
-  if (config.upstreamClientSecretEncrypted) {
-    const secret = decrypt(config.upstreamClientSecretEncrypted);
+
+  const readUpstreamSecret = (method: "client_secret_basic" | "client_secret_post") => {
+    if (!config.upstreamClientSecretEncrypted) {
+      throw new DomainError(`Provider client secret is required for ${method}`, { status: 500 });
+    }
+    return decrypt(config.upstreamClientSecretEncrypted);
+  };
+
+  params.delete("client_secret");
+
+  if (authMethod === "client_secret_basic") {
+    const secret = readUpstreamSecret("client_secret_basic");
     authorization = `Basic ${Buffer.from(`${config.upstreamClientId}:${secret}`).toString("base64")}`;
+  } else if (authMethod === "client_secret_post") {
+    const secret = readUpstreamSecret("client_secret_post");
+    params.set("client_secret", secret);
   }
 
   const response = await fetch(config.tokenEndpoint, {
     method: "POST",
     headers: authorization ? { ...headers, authorization } : headers,
-    body,
+    body: params,
   });
 
   const json = (await response.json().catch(() => {
