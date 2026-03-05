@@ -18,7 +18,6 @@ CREATE TABLE "ProxyProviderConfig" (
     "jwksUri" TEXT,
     "upstreamClientId" TEXT NOT NULL,
     "upstreamClientSecretEncrypted" TEXT,
-    "upstreamTokenEndpointAuthMethod" "TokenEndpointAuthMethod" NOT NULL DEFAULT 'client_secret_basic',
     "defaultScopes" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "scopeMapping" JSONB,
     "pkceSupported" BOOLEAN NOT NULL DEFAULT false,
