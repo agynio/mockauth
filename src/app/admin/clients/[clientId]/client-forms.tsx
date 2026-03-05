@@ -3,7 +3,7 @@
 import { useEffect, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import { Loader2, Trash2, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Loader2, Trash2, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
@@ -1158,10 +1158,56 @@ export function UpdateClientIssuerForm({
   );
 }
 
+function StoredProxySecretField({ value }: { value: string }) {
+  const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const toggleVisibility = () => {
+    setVisible((current) => !current);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.error("Failed to copy upstream secret", error);
+    }
+  };
+
+  const inputType = visible ? "text" : "password";
+
+  return (
+    <div className="flex items-center gap-2" data-testid="proxy-stored-secret">
+      <Input value={value} type={inputType} readOnly className="flex-1 font-mono" />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={toggleVisibility}
+        aria-label={visible ? "Hide upstream secret" : "Reveal upstream secret"}
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={handleCopy}
+        aria-label="Copy upstream secret"
+      >
+        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
+  );
+}
+
 export function UpdateProxyProviderConfigForm({
   clientId,
   canEdit,
   initialConfig,
+  storedSecret,
 }: {
   clientId: string;
   canEdit: boolean;
@@ -1181,6 +1227,7 @@ export function UpdateProxyProviderConfigForm({
     loginHintPassthroughEnabled: boolean;
     passthroughTokenResponse: boolean;
   };
+  storedSecret?: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1316,6 +1363,16 @@ export function UpdateProxyProviderConfigForm({
             </FormItem>
           )}
         />
+
+        {storedSecret ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">Stored provider secret</p>
+            <StoredProxySecretField value={storedSecret} />
+            <p className="text-xs text-muted-foreground" data-testid="proxy-secret-caution">
+              Revealed secrets render only in your browser. Share cautiously.
+            </p>
+          </div>
+        ) : null}
 
         <RHFSelectField
           control={form.control}

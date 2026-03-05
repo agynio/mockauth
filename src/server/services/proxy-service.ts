@@ -235,21 +235,21 @@ export const requestProviderTokens = async (
   const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
   let authorization: string | null = null;
 
+  const readUpstreamSecret = (method: "client_secret_basic" | "client_secret_post") => {
+    if (!config.upstreamClientSecretEncrypted) {
+      throw new DomainError(`Provider client secret is required for ${method}`, { status: 500 });
+    }
+    return decrypt(config.upstreamClientSecretEncrypted);
+  };
+
+  params.delete("client_secret");
+
   if (authMethod === "client_secret_basic") {
-    if (!config.upstreamClientSecretEncrypted) {
-      throw new DomainError("Provider client secret is required for basic auth", { status: 500 });
-    }
-    const secret = decrypt(config.upstreamClientSecretEncrypted);
+    const secret = readUpstreamSecret("client_secret_basic");
     authorization = `Basic ${Buffer.from(`${config.upstreamClientId}:${secret}`).toString("base64")}`;
-    params.delete("client_secret");
   } else if (authMethod === "client_secret_post") {
-    if (!config.upstreamClientSecretEncrypted) {
-      throw new DomainError("Provider client secret is required for post auth", { status: 500 });
-    }
-    const secret = decrypt(config.upstreamClientSecretEncrypted);
+    const secret = readUpstreamSecret("client_secret_post");
     params.set("client_secret", secret);
-  } else {
-    params.delete("client_secret");
   }
 
   const response = await fetch(config.tokenEndpoint, {

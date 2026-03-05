@@ -76,6 +76,19 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     }
   })();
 
+  const upstreamClientSecretValue = (() => {
+    const encrypted = client.proxyConfig?.upstreamClientSecretEncrypted;
+    if (!encrypted) {
+      return null;
+    }
+    try {
+      return decrypt(encrypted);
+    } catch (error) {
+      console.error("Unable to decrypt upstream client secret", error);
+      return null;
+    }
+  })();
+
   const proxyConfigInitial = (() => {
     if (client.oauthClientMode !== "proxy" || !client.proxyConfig) {
       return null;
@@ -289,6 +302,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               clientId={client.id}
               canEdit={canManageClients}
               initialConfig={proxyConfigInitial}
+              storedSecret={upstreamClientSecretValue}
             />
           </CardContent>
         </Card>

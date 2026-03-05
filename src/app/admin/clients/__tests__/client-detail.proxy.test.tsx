@@ -47,9 +47,13 @@ vi.mock("@/server/utils/request-origin", () => ({
 vi.mock("../[clientId]/client-forms", () => ({
   UpdateClientNameForm: () => <div data-testid="client-name-form" />,
   UpdateClientIssuerForm: () => <div data-testid="client-issuer-form" />,
-  UpdateProxyProviderConfigForm: ({ initialConfig }: { initialConfig: unknown }) => (
-    <div data-testid="proxy-config-form">{JSON.stringify(initialConfig)}</div>
-  ),
+  UpdateProxyProviderConfigForm: ({
+    initialConfig,
+    storedSecret,
+  }: {
+    initialConfig: unknown;
+    storedSecret?: string | null;
+  }) => <div data-testid="proxy-config-form">{JSON.stringify({ initialConfig, storedSecret })}</div>,
   UpdateClientScopesForm: () => <div data-testid="client-scopes-form" />,
   UpdateAuthStrategiesForm: () => <div data-testid="client-auth-form" />,
   UpdateClientSigningAlgorithmsForm: () => <div data-testid="client-signing-form" />,
