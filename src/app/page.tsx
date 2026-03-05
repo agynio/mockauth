@@ -102,6 +102,16 @@ const secondaryHeroLinkClasses =
 
 export default function Home() {
   const currentYear = new Date().getFullYear();
+  const productionFeatureSplitIndex = Math.ceil(productionFeatures.length / 2);
+  const productionFeatureColumns = [
+    productionFeatures.slice(0, productionFeatureSplitIndex),
+    productionFeatures.slice(productionFeatureSplitIndex),
+  ];
+  const developerFeatureSplitIndex = Math.ceil(developerFeatures.length / 2);
+  const developerFeatureColumns = [
+    developerFeatures.slice(0, developerFeatureSplitIndex),
+    developerFeatures.slice(developerFeatureSplitIndex),
+  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950">
@@ -209,30 +219,60 @@ export default function Home() {
           <div className="mx-auto max-w-6xl space-y-20 px-6 py-20">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Key Features — Production-Grade Standards</h2>
-              <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {productionFeatures.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="rounded-2xl border border-indigo-200 bg-white p-8 shadow-md shadow-indigo-200/40 ring-1 ring-indigo-200/60"
-                  >
-                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-slate-700">{feature.description}</p>
-                  </div>
-                ))}
+              <div className="mt-12 grid gap-10 md:grid-cols-2 md:gap-12">
+                {productionFeatureColumns
+                  .filter((column) => column.length > 0)
+                  .map((column, columnIndex) => (
+                    <ul
+                      key={`production-column-${columnIndex}`}
+                      className={
+                        columnIndex === 1
+                          ? "space-y-5 md:border-l md:border-indigo-200/60 md:pl-12"
+                          : "space-y-5"
+                      }
+                    >
+                      {column.map((feature) => (
+                        <li key={feature.title} className="flex gap-3">
+                          <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white ring-1 ring-indigo-400/70">
+                            ✓
+                          </span>
+                          <div>
+                            <div className="font-semibold text-slate-900">{feature.title}</div>
+                            <p className="text-sm text-slate-700">{feature.description}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
               </div>
             </div>
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Key Features — Developer Experience</h2>
-              <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {developerFeatures.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="rounded-2xl border border-indigo-200 bg-white p-8 shadow-md shadow-indigo-200/40 ring-1 ring-indigo-200/60"
-                  >
-                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-slate-700">{feature.description}</p>
-                  </div>
-                ))}
+              <div className="mt-12 grid gap-10 md:grid-cols-2 md:gap-12">
+                {developerFeatureColumns
+                  .filter((column) => column.length > 0)
+                  .map((column, columnIndex) => (
+                    <ul
+                      key={`developer-column-${columnIndex}`}
+                      className={
+                        columnIndex === 1
+                          ? "space-y-5 md:border-l md:border-indigo-200/60 md:pl-12"
+                          : "space-y-5"
+                      }
+                    >
+                      {column.map((feature) => (
+                        <li key={feature.title} className="flex gap-3">
+                          <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white ring-1 ring-indigo-400/70">
+                            ✓
+                          </span>
+                          <div>
+                            <div className="font-semibold text-slate-900">{feature.title}</div>
+                            <p className="text-sm text-slate-700">{feature.description}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
               </div>
             </div>
           </div>
