@@ -37,31 +37,6 @@ const developerFeatures = [
   },
 ];
 
-const allFeatures = [...productionFeatures, ...developerFeatures];
-const featureSplitIndex = Math.ceil(allFeatures.length / 2);
-
-const featureColumns = [
-  allFeatures.slice(0, featureSplitIndex),
-  allFeatures.slice(featureSplitIndex),
-];
-
-const steps = [
-  {
-    title: "Launch",
-    description: "Run `pnpm test:e2e:ci` to provision Postgres + MockAuth auto-magically.",
-  },
-  {
-    title: "Simulate",
-    description: "Guide apps through authorize → token → userinfo without leaving localhost.",
-  },
-  {
-    title: "Ship",
-    description: "Promote the same configs into preview or production with zero drift.",
-  },
-];
-
-const integrations = ["OIDC", "OAuth2", "PKCE", "NextAuth", "Logto", "Auth0"];
-
 const excellenceItems: { title: string; description: ReactNode }[] = [
   {
     title: "Autonomous Testing",
@@ -93,6 +68,16 @@ const secondaryHeroLinkClasses =
 
 export default function LandingV2() {
   const currentYear = new Date().getFullYear();
+  const productionFeatureSplitIndex = Math.ceil(productionFeatures.length / 2);
+  const productionFeatureColumns = [
+    productionFeatures.slice(0, productionFeatureSplitIndex),
+    productionFeatures.slice(productionFeatureSplitIndex),
+  ];
+  const developerFeatureSplitIndex = Math.ceil(developerFeatures.length / 2);
+  const developerFeatureColumns = [
+    developerFeatures.slice(0, developerFeatureSplitIndex),
+    developerFeatures.slice(developerFeatureSplitIndex),
+  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -160,59 +145,68 @@ export default function LandingV2() {
         </section>
 
         <section className="bg-slate-950">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Key Features</h2>
-            <div className="mt-12 grid gap-10 md:grid-cols-2 md:gap-16">
-              {featureColumns
-                .filter((column) => column.length > 0)
-                .map((column, columnIndex) => (
-                  <ul
-                    key={`feature-column-${columnIndex}`}
-                    className={columnIndex === 1 ? "space-y-6 md:border-l md:border-slate-800 md:pl-12" : "space-y-6"}
-                  >
-                    {column.map((feature) => (
-                      <li key={feature.title} className="flex gap-4">
-                        <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500 text-base font-semibold text-white shadow shadow-indigo-900/40">
-                          ✓
-                        </span>
-                        <div>
-                          <div className="font-semibold text-white">{feature.title}</div>
-                          <p className="text-sm text-slate-300">{feature.description}</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
+          <div className="mx-auto max-w-6xl space-y-20 px-6 py-20">
+            <div>
+              <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                Key Features — Production-Grade Standards
+              </h2>
+              <div className="mt-12 grid gap-10 md:grid-cols-2 md:gap-16">
+                {productionFeatureColumns
+                  .filter((column) => column.length > 0)
+                  .map((column, columnIndex) => (
+                    <ul
+                      key={`production-column-${columnIndex}`}
+                      className={
+                        columnIndex === 1
+                          ? "space-y-6 md:border-l md:border-slate-800 md:pl-12"
+                          : "space-y-6"
+                      }
+                    >
+                      {column.map((feature) => (
+                        <li key={feature.title} className="flex gap-4">
+                          <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500 text-base font-semibold text-white shadow shadow-indigo-900/40">
+                            ✓
+                          </span>
+                          <div>
+                            <div className="font-semibold text-white">{feature.title}</div>
+                            <p className="text-sm text-slate-300">{feature.description}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
+              </div>
             </div>
-          </div>
-        </section>
-
-        <section className="bg-slate-900">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">How it works</h2>
-            <ol className="mt-12 grid gap-10 md:grid-cols-3">
-              {steps.map((step, index) => (
-                <li key={step.title} className="flex flex-col gap-4">
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-2xl font-bold text-white ring-1 ring-white/20">
-                    {index + 1}
-                  </span>
-                  <div className="font-semibold text-white">{step.title}</div>
-                  <p className="text-sm text-slate-300">{step.description}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        <section className="bg-slate-950">
-          <div className="mx-auto max-w-6xl px-6 py-16">
-            <h2 className="text-center text-sm font-semibold uppercase tracking-[0.3em] text-indigo-300">Built-in integrations</h2>
-            <div className="mt-10 grid gap-6 text-center text-lg font-medium text-slate-200 sm:grid-cols-3">
-              {integrations.map((item) => (
-                <div key={item} className="rounded-full border border-white/10 bg-white/5 px-6 py-3 backdrop-blur-sm">
-                  {item}
-                </div>
-              ))}
+            <div>
+              <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                Key Features — Developer Experience
+              </h2>
+              <div className="mt-12 grid gap-10 md:grid-cols-2 md:gap-16">
+                {developerFeatureColumns
+                  .filter((column) => column.length > 0)
+                  .map((column, columnIndex) => (
+                    <ul
+                      key={`developer-column-${columnIndex}`}
+                      className={
+                        columnIndex === 1
+                          ? "space-y-6 md:border-l md:border-slate-800 md:pl-12"
+                          : "space-y-6"
+                      }
+                    >
+                      {column.map((feature) => (
+                        <li key={feature.title} className="flex gap-4">
+                          <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500 text-base font-semibold text-white shadow shadow-indigo-900/40">
+                            ✓
+                          </span>
+                          <div>
+                            <div className="font-semibold text-white">{feature.title}</div>
+                            <p className="text-sm text-slate-300">{feature.description}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
+              </div>
             </div>
           </div>
         </section>
