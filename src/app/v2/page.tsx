@@ -1,6 +1,24 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+const frictionPoints = [
+  {
+    title: "Decouple from External Dependencies",
+    description:
+      "Stop wrestling with third-party rate limits, latency, or unpredictable service outages during CI/CD. Maintain complete operational independence by running your identity layer as a local, containerized service.",
+  },
+  {
+    title: "On-Demand Environment Provisioning",
+    description:
+      "Achieve a clean state for every test run. Spin up isolated, pristine instances in seconds to ensure your E2E environment is perfectly synchronized with your application’s state and test data.",
+  },
+  {
+    title: "Guarantee Deterministic Test Cycles",
+    description:
+      "Eliminate the \"flakiness\" inherent in shared staging environments. Ensure your authentication logic is verified against a stable, version-controlled provider that responds with 100% consistency, every single time.",
+  },
+];
+
 const productionFeatures = [
   {
     title: "OIDC Compliant",
@@ -140,6 +158,37 @@ export default function LandingV2() {
                   Sign in
                 </Link>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-slate-950">
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">The Auth Testing Standard</h2>
+            <blockquote className="mt-10 rounded-3xl border border-white/10 bg-slate-900/80 p-10 text-lg leading-8 text-slate-200 shadow-xl shadow-indigo-950/30">
+              <span className="block border-l-8 border-indigo-500/60 pl-8 italic text-slate-100">
+                A purpose-built, standards-compliant OIDC identity provider designed for testing. It simulates the behavior of a
+                production authentication server, allowing you to validate sign-ins, token handling, and redirect logic in isolated
+                environments without relying on real user accounts or external services. It is optimized for QA, local development,
+                and ephemeral CI pipelines where you need reliable, repeatable, and clean auth states.
+              </span>
+            </blockquote>
+          </div>
+        </section>
+
+        <section className="bg-slate-900">
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Eliminate Auth Friction</h2>
+            <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {frictionPoints.map((point) => (
+                <div
+                  key={point.title}
+                  className="flex flex-col gap-3 rounded-2xl border border-indigo-300/60 bg-white/5 p-8 shadow-lg shadow-indigo-950/40 ring-1 ring-indigo-400/40"
+                >
+                  <h3 className="text-xl font-semibold text-white">{point.title}</h3>
+                  <p className="text-base text-indigo-100/90">{point.description}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
