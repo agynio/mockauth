@@ -55,6 +55,22 @@ const developerFeatures = [
   },
 ];
 
+const deployableHighlights = [
+  {
+    title: "Built for the Stack",
+    description: "Next.js + Node + Postgres.",
+  },
+  {
+    title: "CI-Ready",
+    description:
+      "Includes unit, integration, and E2E tests (Playwright/Vitest) out of the box.",
+  },
+  {
+    title: "Vercel-Optimized",
+    description: "Designed for rapid deployment in ephemeral environments.",
+  },
+];
+
 const excellenceItems: { title: string; description: ReactNode }[] = [
   {
     title: "Autonomous Testing",
@@ -256,6 +272,23 @@ export default function Home() {
                     </ul>
                   ))}
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-slate-900">
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Deployable Anywhere</h2>
+            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {deployableHighlights.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-2xl border border-indigo-300/60 bg-white/5 p-8 shadow-lg shadow-indigo-950/40 ring-1 ring-indigo-400/40"
+                >
+                  <h3 className="text-xl font-semibold text-white">{item.title}</h3>
+                  <p className="mt-4 text-base text-indigo-100/90">{item.description}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
