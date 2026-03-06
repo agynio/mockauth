@@ -114,7 +114,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-indigo-950 text-slate-100">
+    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       <header className="absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <Link
@@ -135,22 +135,22 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        <div className="bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 text-white">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-white">
           <section className="relative overflow-hidden">
             <div className="pointer-events-none absolute inset-0">
-              <div className="absolute -left-32 top-10 h-72 w-72 rounded-full bg-white/15 blur-3xl" />
-              <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-violet-300/20 blur-3xl" />
-              <div className="absolute bottom-10 left-1/2 h-48 w-48 -translate-x-1/2 rotate-6 rounded-full bg-sky-300/20 blur-3xl" />
+              <div className="absolute -left-32 top-10 h-72 w-72 rounded-full bg-indigo-400/10 blur-3xl" />
+              <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-slate-200/10 blur-3xl" />
+              <div className="absolute bottom-10 left-1/2 h-48 w-48 -translate-x-1/2 rotate-6 rounded-full bg-blue-500/10 blur-3xl" />
             </div>
             <div className="relative mx-auto max-w-6xl px-6 pb-28 pt-32 sm:pb-36 sm:pt-40">
               <div className="max-w-3xl">
-                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-100/80">
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-100/80">
                   Ephemeral identity test rig
                 </p>
                 <h1 className="mt-6 text-6xl font-bold tracking-tight sm:text-7xl">
                   <span className="bg-gradient-to-r from-white via-violet-100 to-white bg-clip-text text-transparent">MockAuth</span>
                 </h1>
-                <p className="mt-6 text-lg leading-relaxed text-indigo-100/90">
+                <p className="mt-6 text-lg leading-relaxed text-slate-200/90">
                   Frictionless, production-realistic OIDC flows tailored for local development and CI pipelines. Launch a deterministic provider in seconds and validate every redirect, token, and scope with confidence.
                 </p>
                 <div className="mt-12 flex flex-wrap items-center gap-4">
@@ -170,7 +170,7 @@ export default function Home() {
                   <Link
                     data-testid="landing-sign-in-link"
                     href="/api/auth/signin/logto?callbackUrl=/admin"
-                    className="text-sm font-semibold text-indigo-100 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    className="text-sm font-semibold text-slate-200 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                   >
                     Sign in
                   </Link>
@@ -182,8 +182,8 @@ export default function Home() {
           <section>
             <div className="mx-auto max-w-6xl px-6 py-20">
               <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">The Auth Testing Standard</h2>
-              <blockquote className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-10 text-lg leading-8 text-indigo-100/90 shadow-xl shadow-indigo-900/30">
-                <span className="block border-l-8 border-white/20 pl-8 italic text-indigo-100">
+              <blockquote className="mt-10 rounded-3xl border border-white/15 bg-white/5 p-10 text-lg leading-8 text-slate-200 shadow-xl shadow-indigo-900/30">
+                <span className="block border-l-8 border-white/25 pl-8 italic text-slate-100">
                   A purpose-built, standards-compliant OIDC identity provider designed for testing. It simulates the behavior of a
                   production authentication server, allowing you to validate sign-ins, token handling, and redirect logic in isolated
                   environments without relying on real user accounts or external services. It is optimized for QA, local development,
@@ -200,10 +200,10 @@ export default function Home() {
                 {frictionPoints.map((point) => (
                   <div
                     key={point.title}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/20 bg-white/10 p-8 shadow-lg shadow-indigo-900/30 ring-1 ring-white/15"
+                    className="flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/5 p-8 shadow-lg shadow-black/30 ring-1 ring-white/20"
                   >
                     <h3 className="text-xl font-semibold text-white">{point.title}</h3>
-                    <p className="text-base text-indigo-100/90">{point.description}</p>
+                    <p className="text-base text-slate-200">{point.description}</p>
                   </div>
                 ))}
               </div>
@@ -224,18 +224,18 @@ export default function Home() {
                         key={`production-column-${columnIndex}`}
                         className={
                           columnIndex === 1
-                            ? "space-y-6 md:border-l md:border-white/15 md:pl-12"
+                            ? "space-y-6 md:border-l md:border-white/20 md:pl-12"
                             : "space-y-6"
                         }
                       >
                         {column.map((feature) => (
                           <li key={feature.title} className="flex gap-4">
-                            <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500 text-base font-semibold text-white shadow shadow-indigo-900/40">
+                            <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-base font-semibold text-white ring-1 ring-white/20 shadow shadow-black/30">
                               ✓
                             </span>
                             <div>
                               <div className="font-semibold text-white">{feature.title}</div>
-                              <p className="text-sm text-indigo-100/80">{feature.description}</p>
+                              <p className="text-sm text-slate-200">{feature.description}</p>
                             </div>
                           </li>
                         ))}
@@ -255,18 +255,18 @@ export default function Home() {
                         key={`developer-column-${columnIndex}`}
                         className={
                           columnIndex === 1
-                            ? "space-y-6 md:border-l md:border-white/15 md:pl-12"
+                            ? "space-y-6 md:border-l md:border-white/20 md:pl-12"
                             : "space-y-6"
                         }
                       >
                         {column.map((feature) => (
                           <li key={feature.title} className="flex gap-4">
-                            <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500 text-base font-semibold text-white shadow shadow-indigo-900/40">
+                            <span className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-base font-semibold text-white ring-1 ring-white/20 shadow shadow-black/30">
                               ✓
                             </span>
                             <div>
                               <div className="font-semibold text-white">{feature.title}</div>
-                              <p className="text-sm text-indigo-100/80">{feature.description}</p>
+                              <p className="text-sm text-slate-200">{feature.description}</p>
                             </div>
                           </li>
                         ))}
@@ -284,10 +284,10 @@ export default function Home() {
                 {deployableHighlights.map((item) => (
                   <div
                     key={item.title}
-                    className="rounded-2xl border border-white/20 bg-white/10 p-8 shadow-lg shadow-indigo-900/30 ring-1 ring-white/15"
+                    className="rounded-2xl border border-white/15 bg-white/5 p-8 shadow-lg shadow-black/30 ring-1 ring-white/20"
                   >
                     <h3 className="text-xl font-semibold text-white">{item.title}</h3>
-                    <p className="mt-4 text-base text-indigo-100/90">{item.description}</p>
+                    <p className="mt-4 text-base text-slate-200">{item.description}</p>
                   </div>
                 ))}
               </div>
@@ -300,10 +300,10 @@ export default function Home() {
               <ol className="mt-12 space-y-6 sm:pl-4">
                 {excellenceItems.map((item, index) => (
                   <li key={item.title} className="flex gap-4">
-                    <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-base font-semibold text-indigo-200">
+                    <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-base font-semibold text-slate-100">
                       {index + 1}
                     </span>
-                    <p className="leading-relaxed text-base text-indigo-100/90">
+                    <p className="leading-relaxed text-base text-slate-200">
                       <span className="font-semibold text-white">{item.title}:</span> {item.description}
                     </p>
                   </li>
