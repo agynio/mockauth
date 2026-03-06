@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
@@ -11,23 +12,47 @@ const ldLibrarySegments = (process.env.PLAYWRIGHT_LD_LIBRARY_PATH ?? "")
     path.isAbsolute(segment) ? segment : path.resolve(projectRoot, segment),
   );
 
+const headlessShellPath = path.resolve(
+  projectRoot,
+  ".playwright-browsers",
+  "chromium_headless_shell-1208",
+  "chrome-linux",
+  "headless_shell",
+);
+
 const chromiumLdLibraryPath = [
   "/usr/lib/x86_64-linux-gnu",
   "/lib/x86_64-linux-gnu",
   ...ldLibrarySegments,
-  path.resolve(
-    projectRoot,
-    ".playwright-browsers",
-    "chromium_headless_shell-1208",
-    "chrome-headless-shell-linux64",
-  ),
+  path.dirname(headlessShellPath),
 ]
   .filter(Boolean)
   .join(":");
 
+const chromiumExecutablePath = (() => {
+  if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE) {
+    return process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+  }
+
+  if (process.arch === "x64" && fs.existsSync(headlessShellPath)) {
+    return headlessShellPath;
+  }
+
+  const fullChromiumBinary = path.resolve(
+    projectRoot,
+    ".playwright-browsers",
+    "chromium-1208",
+    "chrome-linux",
+    "chrome",
+  );
+
+  return fullChromiumBinary;
+})();
+
 export default defineConfig({
   testDir: "tests/e2e",
   timeout: 120_000,
+  retries: process.env.CI ? 1 : 0,
   expect: {
     timeout: 10_000,
   },
@@ -35,6 +60,14 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
     trace: "on-first-retry",
     launchOptions: {
+      executablePath: chromiumExecutablePath,
+      args: [
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--use-gl=swiftshader",
+        "--no-zygote",
+      ],
       env: {
         ...process.env,
         LD_LIBRARY_PATH: chromiumLdLibraryPath,
