@@ -140,7 +140,7 @@ export default function Home() {
                 <p className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-100/80">
                   Ephemeral identity test rig
                 </p>
-                <h1 className="mt-6 text-balance text-6xl font-bold tracking-tight sm:text-7xl">
+                <h1 className="mt-6 text-balance text-6xl font-bold tracking-tight leading-tight sm:text-7xl">
                   <span className="bg-gradient-to-r from-white via-violet-100 to-white bg-clip-text text-transparent">MockAuth</span>
                 </h1>
                 <p className="mt-6 text-lg leading-relaxed text-indigo-100/90">
@@ -187,7 +187,7 @@ export default function Home() {
                     className="flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/5 p-8 shadow-lg shadow-black/30 ring-1 ring-white/20"
                   >
                     <h3 className="text-xl font-semibold tracking-tight text-white">{point.title}</h3>
-                    <p className="text-base text-indigo-100/90">{point.description}</p>
+                    <p className="text-base leading-relaxed text-indigo-100/90">{point.description}</p>
                   </div>
                 ))}
               </div>
@@ -219,7 +219,7 @@ export default function Home() {
                             </span>
                             <div>
                               <div className="font-semibold tracking-tight text-white">{feature.title}</div>
-                              <p className="text-sm text-indigo-100/80">{feature.description}</p>
+                              <p className="text-sm leading-relaxed text-indigo-100/80">{feature.description}</p>
                             </div>
                           </li>
                         ))}
@@ -250,7 +250,7 @@ export default function Home() {
                             </span>
                             <div>
                               <div className="font-semibold tracking-tight text-white">{feature.title}</div>
-                              <p className="text-sm text-indigo-100/80">{feature.description}</p>
+                              <p className="text-sm leading-relaxed text-indigo-100/80">{feature.description}</p>
                             </div>
                           </li>
                         ))}
@@ -271,7 +271,7 @@ export default function Home() {
                     className="rounded-2xl border border-white/15 bg-white/5 p-8 shadow-lg shadow-black/30 ring-1 ring-white/20"
                   >
                     <h3 className="text-xl font-semibold tracking-tight text-white">{item.title}</h3>
-                    <p className="mt-4 text-base text-indigo-100/90">{item.description}</p>
+                    <p className="mt-4 text-base leading-relaxed text-indigo-100/90">{item.description}</p>
                   </div>
                 ))}
               </div>

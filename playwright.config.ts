@@ -52,6 +52,7 @@ const chromiumExecutablePath = (() => {
 export default defineConfig({
   testDir: "tests/e2e",
   timeout: 120_000,
+  retries: process.env.CI ? 1 : 0,
   expect: {
     timeout: 10_000,
   },
@@ -60,6 +61,13 @@ export default defineConfig({
     trace: "on-first-retry",
     launchOptions: {
       executablePath: chromiumExecutablePath,
+      args: [
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--use-gl=swiftshader",
+        "--no-zygote",
+      ],
       env: {
         ...process.env,
         LD_LIBRARY_PATH: chromiumLdLibraryPath,
