@@ -47,6 +47,13 @@ const env = {
     .join(':'),
 };
 
+env.PLAYWRIGHT_LD_LIBRARY_PATH = [
+  process.env.PLAYWRIGHT_LD_LIBRARY_PATH ?? '',
+  process.env.LD_LIBRARY_PATH ?? '',
+]
+  .filter(Boolean)
+  .join(':');
+
 const runSpec = (spec) =>
   new Promise((resolve, reject) => {
     process.stdout.write(`\n=== Running ${spec} ===\n`);
