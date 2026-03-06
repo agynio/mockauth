@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 
 const frictionPoints = [
   {
@@ -116,13 +115,7 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       <header className="absolute inset-x-0 top-0 z-20">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-          <Link
-            href="/"
-            className="text-lg font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          >
-            MockAuth
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-end px-6 py-6">
           <a
             href="https://github.com/agynio/mockauth"
             target="_blank"
@@ -165,15 +158,6 @@ export default function Home() {
                   >
                     View on GitHub
                   </a>
-                </div>
-                <div className="mt-5">
-                  <Link
-                    data-testid="landing-sign-in-link"
-                    href="/api/auth/signin/logto?callbackUrl=/admin"
-                    className="text-sm font-semibold text-indigo-100 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  >
-                    Sign in
-                  </Link>
                 </div>
               </div>
             </div>
