@@ -252,6 +252,26 @@ export const requestProviderTokens = async (
     params.set("client_secret", secret);
   }
 
+  const includeAuthHeader = Boolean(authorization);
+  const includeClientSecretInBody = params.has("client_secret");
+  const hasClientId = params.has("client_id");
+  const grantType = params.get("grant_type");
+  const includesRedirectUri = params.has("redirect_uri");
+  const includesCode = params.has("code");
+  const includesRefreshToken = params.has("refresh_token");
+
+  console.debug("proxy_provider_token_request", {
+    provider: config.providerType,
+    authMethod,
+    includeAuthHeader,
+    includeClientSecretInBody,
+    hasClientId,
+    grantType,
+    includesRedirectUri,
+    includesCode,
+    includesRefreshToken,
+  });
+
   const response = await fetch(config.tokenEndpoint, {
     method: "POST",
     headers: authorization ? { ...headers, authorization } : headers,

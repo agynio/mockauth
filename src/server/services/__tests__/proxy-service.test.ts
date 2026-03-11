@@ -108,6 +108,7 @@ describe("requestProviderTokens", () => {
           upstreamTokenEndpointAuthMethod: method,
           upstreamClientSecretEncrypted: method === "none" ? null : encrypt("secret"),
         });
+        const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
 
         await requestProviderTokens(config, body);
 
@@ -127,6 +128,19 @@ describe("requestProviderTokens", () => {
         } else {
           expect(params.has("client_secret")).toBe(false);
         }
+
+        expect(debugSpy).toHaveBeenCalledTimes(1);
+        expect(debugSpy).toHaveBeenCalledWith("proxy_provider_token_request", {
+          provider: config.providerType,
+          authMethod: config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+          includeAuthHeader: usesAuthorization,
+          includeClientSecretInBody: params.has("client_secret"),
+          hasClientId: params.has("client_id"),
+          grantType: params.get("grant_type"),
+          includesRedirectUri: params.has("redirect_uri"),
+          includesCode: params.has("code"),
+          includesRefreshToken: params.has("refresh_token"),
+        });
       },
     );
   });
