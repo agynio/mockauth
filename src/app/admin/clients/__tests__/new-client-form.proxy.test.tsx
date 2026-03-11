@@ -168,6 +168,7 @@ describe("NewClientForm proxy mode", () => {
         jwksUri: "https://idp.example.test/oauth2/jwks.json",
         upstreamClientId: "upstream-client",
         upstreamClientSecret: "secret-upstream",
+        upstreamTokenEndpointAuthMethod: "client_secret_basic",
         defaultScopes: ["openid", "profile", "offline_access"],
         scopeMapping: { "profile:read": ["openid", "profile"] },
         pkceSupported: true,
@@ -190,5 +191,47 @@ describe("NewClientForm proxy mode", () => {
 
     expect(screen.getByText("Credentials")).toBeInTheDocument();
     expect(screen.getByText("Client ID")).toBeInTheDocument();
+  });
+
+  it("allows selecting upstream auth method and displays provider redirect", async () => {
+    const user = renderForm();
+
+    mockCreateClientAction.mockResolvedValue({
+      success: "Client created",
+      data: {
+        clientId: "proxy-client",
+        providerRedirectUri: "https://mockauth.test/r/api-default/oidc/proxy/callback",
+      },
+    });
+
+    await user.type(screen.getByLabelText("Client name"), "Proxy Auth Method");
+    await user.click(screen.getByRole("tab", { name: "Proxy" }));
+
+    await user.type(screen.getByLabelText("Authorization endpoint"), "https://upstream.example.com/oauth2/auth");
+    await user.type(screen.getByLabelText("Token endpoint"), "https://upstream.example.com/oauth2/token");
+    await user.type(screen.getByLabelText("Provider client ID"), "proxy-upstream");
+
+    const authField = screen.getByText("Token endpoint auth").closest("div");
+    expect(authField).not.toBeNull();
+    const authSelect = within(authField as HTMLElement).getByRole("combobox");
+    expect(authSelect).toHaveValue("client_secret_basic");
+    await user.selectOptions(authSelect, "client_secret_post");
+    expect(authSelect).toHaveValue("client_secret_post");
+
+    await user.click(screen.getByRole("button", { name: "Create client" }));
+
+    await waitFor(() => expect(mockCreateClientAction).toHaveBeenCalledTimes(1));
+    expect(mockCreateClientAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "proxy",
+        proxyConfig: expect.objectContaining({
+          upstreamTokenEndpointAuthMethod: "client_secret_post",
+        }),
+      }),
+    );
+
+    expect(screen.getByTestId("provider-redirect-uri")).toHaveTextContent(
+      "https://mockauth.test/r/api-default/oidc/proxy/callback",
+    );
   });
 });

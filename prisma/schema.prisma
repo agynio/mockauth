@@ -313,6 +313,7 @@ model ProxyProviderConfig {
   jwksUri                     String?
   upstreamClientId            String
   upstreamClientSecretEncrypted String?
+  upstreamTokenEndpointAuthMethod TokenEndpointAuthMethod @default(client_secret_basic)
   defaultScopes               String[]           @default([])
   scopeMapping                Json?
   pkceSupported               Boolean            @default(false)
