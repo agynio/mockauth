@@ -93,8 +93,8 @@ export default {
       },
       backgroundImage: {
         "hero-gradient": "var(--gradient-hero)",
-        "hero-gradient-bloom": "var(--gradient-hero-bloom)",
-        "hero-gradient-bloom-alt": "var(--gradient-hero-bloom-alt)",
+        "hero-gradient-bloom": "var(--gradient-hero-bloom-1)",
+        "hero-gradient-bloom-alt": "var(--gradient-hero-bloom-2)",
         "cta-gradient": "var(--gradient-cta)",
         "cta-highlight": "var(--gradient-cta-highlight)",
       },

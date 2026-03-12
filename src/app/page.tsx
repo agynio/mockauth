@@ -134,8 +134,24 @@ export default function Home() {
       <main className="flex-1">
         <section className="relative overflow-hidden bg-hero-gradient text-primary-foreground">
           <div className="absolute inset-0">
-            <div aria-hidden className="pointer-events-none absolute inset-0 bg-hero-gradient-bloom" />
-            <div aria-hidden className="pointer-events-none absolute inset-0 bg-hero-gradient-bloom-alt" />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: "var(--gradient-hero-bloom-1)",
+                opacity: "var(--gradient-hero-bloom-1-alpha)",
+                filter: "blur(var(--gradient-hero-bloom-1-blur))",
+              }}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: "var(--gradient-hero-bloom-2)",
+                opacity: "var(--gradient-hero-bloom-2-alpha)",
+                filter: "blur(var(--gradient-hero-bloom-2-blur))",
+              }}
+            />
           </div>
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
             <div className="relative z-10 max-w-3xl">
