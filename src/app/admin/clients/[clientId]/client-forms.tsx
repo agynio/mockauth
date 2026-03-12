@@ -630,10 +630,7 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
                 </Alert>
               ) : null}
               {!isAnyWildcard && (isHostWildcard || isPathWildcard) ? (
-                <Alert
-                  data-testid="redirect-wildcard-warning"
-                  className="mt-3 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40"
-                >
+                <Alert variant="warning" data-testid="redirect-wildcard-warning" className="mt-3">
                   <AlertTitle>Wildcard redirects are for QA</AlertTitle>
                   <AlertDescription>
                     Host and path wildcards are intended for QA environments only and must not be used for production tenants.

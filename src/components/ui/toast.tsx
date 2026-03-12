@@ -12,7 +12,7 @@ const ToastViewport = React.forwardRef<React.ElementRef<typeof ToastPrimitives.V
   ({ className, ...props }, ref) => (
     <ToastPrimitives.Viewport
       ref={ref}
-      className={cn("fixed bottom-4 right-4 z-50 flex max-h-screen w-full max-w-sm flex-col gap-2", className)}
+      className={cn("fixed bottom-4 right-4 z-50 flex max-h-screen w-full max-w-sm flex-col gap-2 p-2", className)}
       {...props}
     />
   ),
@@ -20,8 +20,10 @@ const ToastViewport = React.forwardRef<React.ElementRef<typeof ToastPrimitives.V
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 
 const toastVariants = {
-  default: "border bg-background text-foreground",
-  destructive: "destructive border-destructive/40 text-destructive-foreground",
+  default: "border border-border bg-surface-2 text-foreground",
+  success: "border border-success-500/50 bg-success-500/10 text-success-500",
+  warning: "border border-warning-500/50 bg-warning-500/10 text-warning-500",
+  destructive: "border border-error-500/60 bg-error-500/10 text-error-500",
 };
 
 const Toast = React.forwardRef<
@@ -31,7 +33,7 @@ const Toast = React.forwardRef<
   <ToastPrimitives.Root
     ref={ref}
     className={cn(
-      "pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border px-4 py-3 shadow-lg transition data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full",
+      "pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-xl border px-4 py-3 shadow-xl ring-offset-background transition data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full",
       toastVariants[variant],
       className,
     )}
@@ -46,7 +48,14 @@ const ToastClose = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Close>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
 >(({ className, ...props }, ref) => (
-  <ToastPrimitives.Close ref={ref} className={cn("absolute right-3 top-3 rounded-sm opacity-60 transition hover:opacity-100", className)} {...props}>
+  <ToastPrimitives.Close
+    ref={ref}
+    className={cn(
+      "absolute right-3 top-3 rounded-md opacity-60 ring-offset-background transition hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      className,
+    )}
+    {...props}
+  >
     <X className="h-4 w-4" />
   </ToastPrimitives.Close>
 ));

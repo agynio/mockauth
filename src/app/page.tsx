@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { buttonVariants } from "@/components/ui/button-variants";
+import { cn } from "@/lib/utils";
+
 const frictionPoints = [
   {
     title: "Decouple from External Dependencies",
@@ -87,29 +90,33 @@ const excellenceItems: { title: string; description: ReactNode }[] = [
     description: (
       <>
         You need to instantly model various authentication scenarios—such as specific scopes or{" "}
-        <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs text-slate-800">email_verified</code>{" "}
+        <code className="rounded-md bg-surface-3 px-1.5 py-0.5 font-mono text-xs text-brand-400">email_verified</code>{" "}
         states—without the overhead of manual user provisioning.
       </>
     ),
   },
 ];
 
-const primaryHeroButtonClasses =
-  "inline-flex items-center justify-center rounded-full bg-white px-8 py-4 text-base font-semibold text-indigo-700 shadow-lg shadow-indigo-950/40 transition hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+const primaryHeroButtonClasses = cn(
+  buttonVariants({ size: "lg" }),
+  "bg-cta-gradient text-primary-foreground shadow-xl transition hover:brightness-110 focus-visible:ring-brand-400",
+);
 
-const secondaryHeroLinkClasses =
-  "inline-flex items-center justify-center rounded-full border border-white/70 bg-white/10 px-8 py-4 text-base font-semibold text-white/90 shadow-lg shadow-indigo-950/20 transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+const secondaryHeroLinkClasses = cn(
+  buttonVariants({ variant: "outline", size: "lg" }),
+  "border-border-strong/80 bg-surface-0/10 text-foreground/90 backdrop-blur-sm transition hover:border-brand-400/60 hover:bg-surface-0/20",
+);
 
 export default function Home() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <Link
             href="/"
-            className="text-lg font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="text-lg font-semibold text-primary-foreground transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             MockAuth
           </Link>
@@ -117,7 +124,7 @@ export default function Home() {
             href="https://github.com/agynio/mockauth"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-semibold text-white/90 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="text-sm font-semibold text-primary-foreground/90 transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             GitHub
           </a>
@@ -125,26 +132,20 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 text-white">
+        <section className="relative overflow-hidden bg-hero-gradient text-primary-foreground">
           <div className="absolute inset-0">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -top-32 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-violet-400/40 blur-3xl"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute bottom-[-6rem] right-[-4rem] h-96 w-96 rounded-full bg-indigo-500/30 blur-3xl"
-            />
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-hero-gradient-bloom" />
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-hero-gradient-bloom-alt" />
           </div>
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
             <div className="relative z-10 max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-100/80">
-                Ephemeral identity test rig
-              </p>
+              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-400/80">Ephemeral identity test rig</p>
               <h1 className="mt-6 text-6xl font-bold tracking-tight sm:text-7xl">
-                <span className="bg-gradient-to-r from-white via-violet-100 to-white bg-clip-text text-transparent">MockAuth</span>
+                <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
+                  MockAuth
+                </span>
               </h1>
-              <p className="mt-6 text-lg leading-relaxed text-indigo-100/90">
+              <p className="mt-6 text-lg leading-relaxed text-primary-foreground/85">
                 Frictionless, production-realistic OIDC flows tailored for local development and CI pipelines. Launch a
                 deterministic provider in seconds and validate every redirect, token, and scope with confidence.
               </p>
@@ -165,7 +166,7 @@ export default function Home() {
                 <Link
                   data-testid="landing-sign-in-link"
                   href="/api/auth/signin/logto?callbackUrl=/admin"
-                  className="text-sm font-semibold text-indigo-100 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  className="text-sm font-semibold text-primary-foreground/80 transition hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   Sign in
                 </Link>
@@ -174,11 +175,11 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-white">
+        <section className="bg-surface-0">
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">The Auth Testing Standard</h2>
-            <blockquote className="mt-10 rounded-3xl border border-indigo-200 bg-slate-50 p-10 text-lg leading-8 text-slate-700 shadow-md shadow-indigo-100">
-              <span className="block border-l-8 border-indigo-400 pl-8 italic">
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">The Auth Testing Standard</h2>
+            <blockquote className="mt-10 rounded-3xl border border-border bg-surface-2/80 p-10 text-lg leading-8 text-muted-foreground shadow-xl">
+              <span className="block border-l-4 border-brand-500/70 pl-8 italic text-foreground/80">
                 A purpose-built, standards-compliant OIDC identity provider designed for testing. It simulates the behavior of a
                 production authentication server, allowing you to validate sign-ins, token handling, and redirect logic in
                 isolated environments without relying on real user accounts or external services. It is optimized for QA, local
@@ -188,49 +189,49 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-slate-900 text-white">
+        <section className="bg-surface-1/80">
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Eliminate Auth Friction</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Eliminate Auth Friction</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
               {frictionPoints.map((point) => (
                 <div
                   key={point.title}
-                  className="flex flex-col gap-3 rounded-2xl border border-indigo-300/60 bg-white/5 p-8 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-300/40"
+                  className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
                 >
-                  <h3 className="text-xl font-semibold text-white">{point.title}</h3>
-                  <p className="text-base text-indigo-100/90">{point.description}</p>
+                  <h3 className="text-xl font-semibold text-foreground">{point.title}</h3>
+                  <p className="text-base text-muted-foreground">{point.description}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="bg-slate-100">
+        <section className="bg-surface-0/95">
           <div className="mx-auto max-w-6xl space-y-20 px-6 py-20">
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Key Features — Production-Grade Standards</h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Key Features — Production-Grade Standards</h2>
               <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
                 {productionFeatures.map((feature) => (
                   <div
                     key={feature.title}
-                    className="rounded-2xl border border-indigo-200 bg-white p-8 shadow-md shadow-indigo-200/40 ring-1 ring-indigo-200/60"
+                    className="rounded-2xl border border-border/70 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
                   >
-                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-slate-700">{feature.description}</p>
+                    <h3 className="text-xl font-semibold text-foreground">{feature.title}</h3>
+                    <p className="mt-4 text-base leading-relaxed text-muted-foreground">{feature.description}</p>
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Key Features — Developer Experience</h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Key Features — Developer Experience</h2>
               <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
                 {developerFeatures.map((feature) => (
                   <div
                     key={feature.title}
-                    className="rounded-2xl border border-indigo-200 bg-white p-8 shadow-md shadow-indigo-200/40 ring-1 ring-indigo-200/60"
+                    className="rounded-2xl border border-border/70 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
                   >
-                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-slate-700">{feature.description}</p>
+                    <h3 className="text-xl font-semibold text-foreground">{feature.title}</h3>
+                    <p className="mt-4 text-base leading-relaxed text-muted-foreground">{feature.description}</p>
                   </div>
                 ))}
               </div>
@@ -238,34 +239,34 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-slate-900 text-white">
+        <section className="bg-surface-1/80">
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Deployable Anywhere</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Deployable Anywhere</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {deployableHighlights.map((item) => (
                 <div
                   key={item.title}
-                  className="rounded-2xl border border-indigo-300/60 bg-white/5 p-8 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-300/40"
+                  className="rounded-2xl border border-border/60 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
                 >
-                  <h3 className="text-xl font-semibold text-white">{item.title}</h3>
-                  <p className="mt-4 text-base text-indigo-100/90">{item.description}</p>
+                  <h3 className="text-xl font-semibold text-foreground">{item.title}</h3>
+                  <p className="mt-4 text-base text-muted-foreground">{item.description}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="bg-white">
+        <section className="bg-surface-0/95">
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Where MockAuth Excels</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Where MockAuth Excels</h2>
             <ol className="mt-12 space-y-6 sm:pl-4">
               {excellenceItems.map((item, index) => (
                 <li key={item.title} className="flex gap-4">
-                  <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-base font-semibold text-indigo-700">
+                  <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-base font-semibold text-brand-400">
                     {index + 1}
                   </span>
-                  <p className="leading-relaxed text-base text-slate-700">
-                    <span className="font-semibold text-slate-900">{item.title}:</span> {item.description}
+                  <p className="leading-relaxed text-base text-muted-foreground">
+                    <span className="font-semibold text-foreground">{item.title}:</span> {item.description}
                   </p>
                 </li>
               ))}
@@ -273,16 +274,13 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-slate-100" id="quick-start">
+        <section className="bg-surface-1/80" id="quick-start">
           <div className="mx-auto max-w-6xl px-6 py-24">
-            <div className="relative overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 p-12 text-center shadow-2xl shadow-indigo-300/50">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.25),_rgba(255,255,255,0))]"
-              />
+            <div className="relative overflow-hidden rounded-3xl border border-border bg-cta-gradient p-12 text-center shadow-2xl">
+              <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-cta-highlight" />
               <div className="relative z-10">
-                <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Quick Start</h2>
-                <p className="mt-4 text-lg leading-relaxed text-indigo-100/90">
+                <h2 className="text-3xl font-semibold tracking-tight text-primary-foreground sm:text-4xl">Quick Start</h2>
+                <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
                   Drop MockAuth into your stack and run the full OIDC suite locally or in CI with a single command.
                 </p>
                 <div className="mt-10 flex flex-wrap justify-center gap-4">
@@ -304,14 +302,14 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-white/10 bg-slate-950">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-slate-300 sm:flex-row">
+      <footer className="border-t border-border/60 bg-surface-0/80">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <p>© {currentYear} MockAuth</p>
           <a
             href="https://github.com/agynio/mockauth"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-white/90 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="font-semibold text-muted-foreground transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             GitHub
           </a>

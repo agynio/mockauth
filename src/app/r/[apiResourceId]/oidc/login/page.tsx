@@ -60,15 +60,22 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
   const strategySummary = strategies.map((strategy) => strategy.title.toLowerCase()).join(" or ");
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl">
-        <h1 className="text-2xl font-semibold mb-2">Log in to {tenant.name}</h1>
-        <p className="text-sm text-slate-300 mb-6">
+    <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 text-foreground">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-1/90 p-8 shadow-2xl">
+        <h1 className="mb-2 text-2xl font-semibold">Log in to {tenant.name}</h1>
+        <p className="mb-6 text-sm text-muted-foreground">
           Enter any {strategySummary} to simulate an end-user signing in. The session is scoped to tenant {tenant.id}.
         </p>
         <LoginForm apiResourceId={apiResourceId} returnTo={returnTo} strategies={strategies} />
-        <p className="mt-4 text-xs text-slate-400">
-          Need to manage tenants? Visit the <Link href="/admin" className="underline">admin console</Link>.
+        <p className="mt-4 text-xs text-muted-foreground">
+          Need to manage tenants? Visit the{" "}
+          <Link
+            href="/admin"
+            className="font-semibold text-brand-400 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            admin console
+          </Link>
+          .
         </p>
       </div>
     </div>
