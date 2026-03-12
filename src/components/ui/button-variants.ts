@@ -10,7 +10,7 @@ export const buttonVariants = cva(
         outline: "border border-border bg-transparent text-primary hover:bg-surface-3 focus-visible:ring-brand-500",
         ghost: "bg-transparent text-foreground hover:bg-surface-2 active:bg-surface-3 focus-visible:ring-brand-500",
         destructive: "bg-destructive text-destructive-foreground hover:bg-error-700 active:bg-error-700 focus-visible:ring-error-500",
-        link: "text-brand-400 underline underline-offset-4 hover:text-brand-500 focus-visible:ring-0 focus-visible:ring-offset-0",
+        link: "text-brand-400 underline underline-offset-4 hover:text-brand-500 focus-visible:ring-brand-500 focus-visible:underline",
       },
       size: {
         default: "h-10 px-4",
