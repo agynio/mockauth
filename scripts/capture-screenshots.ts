@@ -37,6 +37,35 @@ async function captureHeroMobile(browser: string) {
   }
 }
 
+async function captureCtaDesktop(browser: string) {
+  const instance = await chromium.launch();
+  try {
+    const page = await instance.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.goto(`${BASE_URL}/`, { waitUntil: "networkidle" });
+    await page.locator("#quick-start").scrollIntoViewIfNeeded();
+    await waitForIdle(600);
+    const cta = await page.locator("#quick-start");
+    await cta.screenshot({ path: path.join(OUTPUT_DIR, `${browser}-cta-desktop.png`) });
+  } finally {
+    await instance.close();
+  }
+}
+
+async function captureCtaMobile(browser: string) {
+  const instance = await chromium.launch();
+  try {
+    const mobileContext = await instance.newContext({ ...devices["iPhone 14"], locale: "en-US" });
+    const page = await mobileContext.newPage();
+    await page.goto(`${BASE_URL}/`, { waitUntil: "networkidle" });
+    await page.locator("#quick-start").scrollIntoViewIfNeeded();
+    await waitForIdle(600);
+    const cta = await page.locator("#quick-start");
+    await cta.screenshot({ path: path.join(OUTPUT_DIR, `${browser}-cta-mobile.png`) });
+  } finally {
+    await instance.close();
+  }
+}
+
 async function createAdminSession() {
   const browser = await chromium.launch();
   try {
@@ -85,6 +114,8 @@ async function main() {
   await ensureOutputDir();
   await captureHeroDesktop("mockauth");
   await captureHeroMobile("mockauth");
+  await captureCtaDesktop("mockauth");
+  await captureCtaMobile("mockauth");
   await captureAdminClients("mockauth");
 }
 
