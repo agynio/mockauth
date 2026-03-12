@@ -76,41 +76,37 @@
 
     --gradient-hero-bloom-1-color: #a78bfa;
     --gradient-hero-bloom-1-alpha: 0.40;
+    --gradient-hero-bloom-1-width: 20rem;
+    --gradient-hero-bloom-1-height: 20rem;
+    --gradient-hero-bloom-1-top: -8rem;
+    --gradient-hero-bloom-1-left: 50%;
+    --gradient-hero-bloom-1-translate-x: -50%;
     --gradient-hero-bloom-1-blur: 64px;
+
     --gradient-hero-bloom-2-color: #6366f1;
     --gradient-hero-bloom-2-alpha: 0.30;
+    --gradient-hero-bloom-2-width: 24rem;
+    --gradient-hero-bloom-2-height: 24rem;
+    --gradient-hero-bloom-2-bottom: -6rem;
+    --gradient-hero-bloom-2-right: -4rem;
     --gradient-hero-bloom-2-blur: 64px;
 
-    --gradient-hero-bloom-1: radial-gradient(
-      circle at 25% 20%,
-      var(--gradient-hero-bloom-1-color) 0%,
-      transparent 60%
-    );
-    --gradient-hero-bloom-2: radial-gradient(
-      circle at 75% 80%,
-      var(--gradient-hero-bloom-2-color) 0%,
-      transparent 65%
-    );
+    --gradient-site-base: #020617;
 
-    --gradient-site-wash-angle: 145deg;
-    --gradient-site-wash-start: rgba(67, 56, 202, 0.18);
-    --gradient-site-wash-end: rgba(124, 58, 237, 0);
-
-    --gradient-cta-angle: 155deg;
-    --gradient-cta-start: #312e81;
-    --gradient-cta-mid: #4338ca;
-    --gradient-cta-end: #6366f1;
+    --gradient-cta-angle: 135deg;
+    --gradient-cta-start: #4338ca;
+    --gradient-cta-mid: #4f46e5;
+    --gradient-cta-end: #7c3aed;
     --gradient-cta: linear-gradient(
       var(--gradient-cta-angle),
       var(--gradient-cta-start) 0%,
       var(--gradient-cta-mid) 55%,
       var(--gradient-cta-end) 100%
     );
-    --gradient-cta-highlight-angle: 0deg;
-    --gradient-cta-highlight-start: rgba(167, 139, 250, 0.18);
-    --gradient-cta-highlight-end: rgba(99, 102, 241, 0);
-    --gradient-cta-highlight: linear-gradient(
-      var(--gradient-cta-highlight-angle),
+    --gradient-cta-highlight-start: rgba(255, 255, 255, 0.25);
+    --gradient-cta-highlight-end: rgba(255, 255, 255, 0);
+    --gradient-cta-highlight: radial-gradient(
+      circle at top left,
       var(--gradient-cta-highlight-start),
       var(--gradient-cta-highlight-end)
     );

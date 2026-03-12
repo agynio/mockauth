@@ -111,7 +111,10 @@ export default function Home() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div
+      className="flex min-h-screen flex-col text-foreground"
+      style={{ backgroundColor: "var(--gradient-site-base)" }}
+    >
       <header className="absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <Link
@@ -132,24 +135,39 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-hero-gradient text-primary-foreground">
-          <div className="absolute inset-0">
+        <section
+          className="relative overflow-hidden text-primary-foreground"
+          style={{
+            backgroundImage:
+              "linear-gradient(var(--gradient-hero-angle), var(--gradient-hero-start) 0%, var(--gradient-hero-mid) 50%, var(--gradient-hero-end) 100%)",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
             <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
+              className="absolute"
               style={{
-                background: "var(--gradient-hero-bloom-1)",
+                width: "var(--gradient-hero-bloom-1-width)",
+                height: "var(--gradient-hero-bloom-1-height)",
+                top: "var(--gradient-hero-bloom-1-top)",
+                left: "var(--gradient-hero-bloom-1-left)",
+                transform: "translateX(var(--gradient-hero-bloom-1-translate-x))",
+                backgroundColor: "var(--gradient-hero-bloom-1-color)",
                 opacity: "var(--gradient-hero-bloom-1-alpha)",
                 filter: "blur(var(--gradient-hero-bloom-1-blur))",
+                borderRadius: "9999px",
               }}
             />
             <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
+              className="absolute"
               style={{
-                background: "var(--gradient-hero-bloom-2)",
+                width: "var(--gradient-hero-bloom-2-width)",
+                height: "var(--gradient-hero-bloom-2-height)",
+                bottom: "var(--gradient-hero-bloom-2-bottom)",
+                right: "var(--gradient-hero-bloom-2-right)",
+                backgroundColor: "var(--gradient-hero-bloom-2-color)",
                 opacity: "var(--gradient-hero-bloom-2-alpha)",
                 filter: "blur(var(--gradient-hero-bloom-2-blur))",
+                borderRadius: "9999px",
               }}
             />
           </div>
@@ -292,8 +310,21 @@ export default function Home() {
 
         <section className="bg-surface-1/80" id="quick-start">
           <div className="mx-auto max-w-6xl px-6 py-24">
-            <div className="relative overflow-hidden rounded-3xl border border-border bg-cta-gradient p-12 text-center shadow-2xl">
-              <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-cta-highlight" />
+            <div
+              className="relative overflow-hidden rounded-3xl border border-border p-12 text-center shadow-2xl"
+              style={{
+                backgroundImage:
+                  "linear-gradient(var(--gradient-cta-angle), var(--gradient-cta-start) 0%, var(--gradient-cta-mid) 50%, var(--gradient-cta-end) 100%)",
+              }}
+            >
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 -z-10"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at top left, var(--gradient-cta-highlight-start), var(--gradient-cta-highlight-end))",
+                }}
+              />
               <div className="relative z-10">
                 <h2 className="text-3xl font-semibold tracking-tight text-primary-foreground sm:text-4xl">Quick Start</h2>
                 <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
