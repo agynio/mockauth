@@ -13,8 +13,8 @@ test("landing primary CTA is present with placeholder target", async ({ page }) 
   const githubLinks = page.getByRole("link", { name: "View on GitHub" });
   await expect(githubLinks.first()).toHaveAttribute("href", repoUrl);
 
-  const headerGithub = page
-    .getByRole("banner")
-    .getByRole("link", { name: "GitHub" });
-  await expect(headerGithub).toHaveAttribute("href", repoUrl);
+  const header = page.getByRole("banner");
+  const brandLink = header.getByRole("link", { name: "MockAuth" });
+  await expect(brandLink).toHaveAttribute("href", "/");
+  await expect(header.getByRole("link", { name: "GitHub" })).toHaveCount(0);
 });
