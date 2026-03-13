@@ -7,7 +7,7 @@ test("landing primary CTA is present with placeholder target", async ({ page }) 
 
   const getStartedCtas = page.getByRole("link", { name: "Get Started" });
   await expect(getStartedCtas).toHaveCount(2);
-  await expect(getStartedCtas.first()).toHaveAttribute("href", "#quick-start");
+  await expect(getStartedCtas.first()).toHaveAttribute("href", "/api/auth/signin/logto?callbackUrl=%2Fadmin");
   await expect(getStartedCtas.last()).toHaveAttribute("href", "#quick-start");
 
   const githubLinks = page.getByRole("link", { name: "View on GitHub" });

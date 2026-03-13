@@ -144,9 +144,9 @@ export default function Home() {
                 deterministic provider in seconds and validate every redirect, token, and scope with confidence.
               </p>
               <div className="mt-12 flex flex-wrap items-center gap-4">
-                <a href="#quick-start" className={primaryHeroButtonClasses}>
+                <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={primaryHeroButtonClasses}>
                   Get Started
-                </a>
+                </Link>
                 <a
                   href="https://github.com/agynio/mockauth"
                   target="_blank"
@@ -155,15 +155,6 @@ export default function Home() {
                 >
                   View on GitHub
                 </a>
-              </div>
-              <div className="mt-5">
-                <Link
-                  data-testid="landing-sign-in-link"
-                  href="/api/auth/signin/logto?callbackUrl=/admin"
-                  className="text-sm font-semibold text-primary-foreground/80 transition hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                >
-                  Sign in
-                </Link>
               </div>
             </div>
           </div>
