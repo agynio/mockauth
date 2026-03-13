@@ -119,21 +119,13 @@ export default function Home() {
       </div>
       <div className="relative z-10 flex min-h-screen flex-col text-foreground">
       <header className="absolute inset-x-0 top-0 z-20">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-start px-6 py-6">
           <Link
             href="/"
             className="text-lg font-semibold text-primary-foreground transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             MockAuth
           </Link>
-          <a
-            href="https://github.com/agynio/mockauth"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-semibold text-primary-foreground/90 transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            GitHub
-          </a>
         </div>
       </header>
 
