@@ -111,7 +111,10 @@ export default function Home() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div
+      className="flex min-h-screen flex-col text-foreground"
+      style={{ backgroundColor: "var(--bg-base)" }}
+    >
       <header className="absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <Link
@@ -139,34 +142,11 @@ export default function Home() {
               "linear-gradient(var(--gradient-hero-angle), var(--gradient-hero-start) 0%, var(--gradient-hero-mid) 50%, var(--gradient-hero-end) 100%)",
           }}
         >
-          <div className="pointer-events-none absolute inset-0" aria-hidden>
-            <div
-              className="absolute"
-              style={{
-                width: "var(--gradient-hero-bloom-1-width)",
-                height: "var(--gradient-hero-bloom-1-height)",
-                top: "var(--gradient-hero-bloom-1-top)",
-                left: "var(--gradient-hero-bloom-1-left)",
-                transform: "translateX(var(--gradient-hero-bloom-1-translate-x))",
-                backgroundColor: "var(--gradient-hero-bloom-1-color)",
-                opacity: "var(--gradient-hero-bloom-1-alpha)",
-                filter: "blur(var(--gradient-hero-bloom-1-blur))",
-                borderRadius: "9999px",
-              }}
-            />
-            <div
-              className="absolute"
-              style={{
-                width: "var(--gradient-hero-bloom-2-width)",
-                height: "var(--gradient-hero-bloom-2-height)",
-                bottom: "var(--gradient-hero-bloom-2-bottom)",
-                right: "var(--gradient-hero-bloom-2-right)",
-                backgroundColor: "var(--gradient-hero-bloom-2-color)",
-                opacity: "var(--gradient-hero-bloom-2-alpha)",
-                filter: "blur(var(--gradient-hero-bloom-2-blur))",
-                borderRadius: "9999px",
-              }}
-            />
+          <div className="hero-glow" aria-hidden>
+            <div className="hero-glow__layer" data-layer="1" />
+            <div className="hero-glow__layer" data-layer="2" />
+            <div className="hero-glow__layer" data-layer="3" />
+            <div className="hero-glow__layer" data-layer="4" />
           </div>
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
             <div className="relative z-10 max-w-3xl">
@@ -206,7 +186,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-surface-0">
+        <section style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">The Auth Testing Standard</h2>
             <blockquote className="mt-10 rounded-3xl border border-border bg-surface-2/80 p-10 text-lg leading-8 text-muted-foreground shadow-xl">
@@ -220,7 +200,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-surface-1">
+        <section style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Eliminate Auth Friction</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -237,7 +217,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-surface-0">
+        <section style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl space-y-20 px-6 py-20">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Key Features — Production-Grade Standards</h2>
@@ -270,7 +250,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-surface-1">
+        <section style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Deployable Anywhere</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -287,7 +267,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-surface-0">
+        <section style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Where MockAuth Excels</h2>
             <ol className="mt-12 space-y-6 sm:pl-4">
@@ -305,7 +285,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-surface-1" id="quick-start">
+        <section id="quick-start" style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl px-6 py-24">
             <div className="relative overflow-hidden rounded-3xl border border-border bg-surface-2 p-12 text-center shadow-2xl">
               <div className="relative z-10">
@@ -332,7 +312,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-border/60 bg-surface-0/80">
+      <footer className="border-t border-border/60" style={{ backgroundColor: "var(--bg-base)" }}>
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <p>© {currentYear} MockAuth</p>
           <a

@@ -5,6 +5,8 @@ import { chromium, devices } from "playwright";
 
 const BASE_URL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
 const OUTPUT_DIR = path.resolve(process.cwd(), "docs/qa");
+const shouldCaptureCta = process.env.CAPTURE_CTA !== "false";
+const shouldCaptureAdmin = process.env.CAPTURE_ADMIN !== "false";
 
 const waitForIdle = async (timeout = 1000) => new Promise((resolve) => setTimeout(resolve, timeout));
 
@@ -114,9 +116,13 @@ async function main() {
   await ensureOutputDir();
   await captureHeroDesktop("mockauth");
   await captureHeroMobile("mockauth");
-  await captureCtaDesktop("mockauth");
-  await captureCtaMobile("mockauth");
-  await captureAdminClients("mockauth");
+  if (shouldCaptureCta) {
+    await captureCtaDesktop("mockauth");
+    await captureCtaMobile("mockauth");
+  }
+  if (shouldCaptureAdmin) {
+    await captureAdminClients("mockauth");
+  }
 }
 
 main().catch((error) => {
