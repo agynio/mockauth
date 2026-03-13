@@ -128,7 +128,7 @@
     --border-strong: 226 32% 33%;
 
     --bg-base: #050517;
-    --background: 237 39% 7%;
+    --background: 240 64% 5%;
     --foreground: var(--text-primary);
     --card: var(--surface-2);
     --card-foreground: var(--text-primary);
@@ -145,75 +145,69 @@
 
     --glow-1-color: #2e1065;
     --glow-1-color-rgb: 46 16 101;
-    --glow-1-alpha: 0.36;
-    --glow-1-x: 28%;
-    --glow-1-y: 20%;
-    --glow-1-r1: 22vw;
-    --glow-1-r2: 52vw;
-    --glow-1-anim-duration: 60s;
-    --glow-1-anim-translate-x: 1.5%;
-    --glow-1-anim-translate-y: 1.0%;
-    --glow-1-anim-scale: 1.03;
-    --glow-1-anim-opacity-delta: 0.03;
+    --glow-1-alpha: 0.30;
+    --glow-1-x: 26%;
+    --glow-1-y: 24%;
+    --glow-1-r1: 24vw;
+    --glow-1-r2: 56vw;
+    --glow-1-anim-duration: 80s;
+    --glow-1-anim-translate-x: 1.2%;
+    --glow-1-anim-translate-y: 0.8%;
+    --glow-1-anim-scale: 1.02;
+    --glow-1-anim-opacity-delta: 0.02;
     --glow-1-anim-delay: 0s;
 
     --glow-2-color: #1e3a8a;
     --glow-2-color-rgb: 30 58 138;
-    --glow-2-alpha: 0.28;
+    --glow-2-alpha: 0.22;
     --glow-2-x: 78%;
-    --glow-2-y: 35%;
-    --glow-2-r1: 18vw;
-    --glow-2-r2: 44vw;
-    --glow-2-anim-duration: 48s;
-    --glow-2-anim-translate-x: 1.0%;
-    --glow-2-anim-translate-y: 1.5%;
-    --glow-2-anim-scale: 1.04;
+    --glow-2-y: 46%;
+    --glow-2-r1: 20vw;
+    --glow-2-r2: 48vw;
+    --glow-2-anim-duration: 60s;
+    --glow-2-anim-translate-x: 0.8%;
+    --glow-2-anim-translate-y: 1.2%;
+    --glow-2-anim-scale: 1.03;
     --glow-2-anim-opacity-delta: 0.02;
-    --glow-2-anim-delay: 8s;
+    --glow-2-anim-delay: 6s;
 
     --glow-3-color: #00e5ff;
     --glow-3-color-rgb: 0 229 255;
-    --glow-3-alpha: 0.12;
-    --glow-3-x: 60%;
-    --glow-3-y: 10%;
-    --glow-3-r1: 10vw;
-    --glow-3-r2: 26vw;
-    --glow-3-anim-duration: 36s;
-    --glow-3-anim-translate-x: 2.0%;
-    --glow-3-anim-translate-y: 2.0%;
-    --glow-3-anim-scale: 1.06;
-    --glow-3-anim-opacity-delta: 0.03;
-    --glow-3-anim-delay: 4s;
-
-    --glow-4-color: #7c3aed;
-    --glow-4-color-rgb: 124 58 237;
-    --glow-4-alpha: 0.18;
-    --glow-4-x: 12%;
-    --glow-4-y: 80%;
-    --glow-4-r1: 24vw;
-    --glow-4-r2: 56vw;
-    --glow-4-anim-duration: 72s;
-    --glow-4-anim-translate-x: 1.0%;
-    --glow-4-anim-translate-y: 0.5%;
-    --glow-4-anim-scale: 1.02;
-    --glow-4-anim-opacity-delta: 0.02;
-    --glow-4-anim-delay: 12s;
+    --glow-3-alpha: 0.10;
+    --glow-3-x: 56%;
+    --glow-3-y: 12%;
+    --glow-3-r1: 12vw;
+    --glow-3-r2: 30vw;
+    --glow-3-anim-duration: 48s;
+    --glow-3-anim-translate-x: 1.5%;
+    --glow-3-anim-translate-y: 1.5%;
+    --glow-3-anim-scale: 1.04;
+    --glow-3-anim-opacity-delta: 0.02;
+    --glow-3-anim-delay: 10s;
   }
 
   @media (max-width: 640px) {
     .dark {
-      --glow-1-r2: 42vw;
-      --glow-2-r2: 36vw;
-      --glow-3-r2: 20vw;
-      --glow-4-r2: 46vw;
-      --glow-1-x: 35%;
+      --glow-1-x: 32%;
       --glow-1-y: 22%;
-      --glow-2-x: 70%;
-      --glow-2-y: 40%;
-      --glow-3-x: 55%;
-      --glow-3-y: 14%;
-      --glow-4-x: 16%;
-      --glow-4-y: 78%;
+      --glow-1-r1: 18vw;
+      --glow-1-r2: 44vw;
+      --glow-2-x: 72%;
+      --glow-2-y: 52%;
+      --glow-2-r1: 16vw;
+      --glow-2-r2: 38vw;
+      --glow-3-x: 54%;
+      --glow-3-y: 16%;
+      --glow-3-r1: 9vw;
+      --glow-3-r2: 22vw;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .dark {
+      --glow-1-r2: 62vw;
+      --glow-2-r2: 53vw;
+      --glow-3-r2: 33vw;
     }
   }
 
@@ -234,11 +228,6 @@
       --glow-3-anim-translate-y: 0%;
       --glow-3-anim-scale: 1;
       --glow-3-anim-opacity-delta: 0;
-      --glow-4-anim-duration: 0s;
-      --glow-4-anim-translate-x: 0%;
-      --glow-4-anim-translate-y: 0%;
-      --glow-4-anim-scale: 1;
-      --glow-4-anim-opacity-delta: 0;
     }
   }
 
@@ -258,16 +247,17 @@
     @apply rounded-md bg-surface-3 px-2 py-0.5 font-mono text-[13px] leading-[18px] text-brand-400;
   }
 
-  .hero-glow {
-    position: absolute;
+  .landing-glow {
+    position: fixed;
     inset: 0;
     pointer-events: none;
-    overflow: hidden;
-    isolation: isolate;
     z-index: 0;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
   }
 
-  .hero-glow__layer {
+  .landing-glow__layer {
     position: absolute;
     inset: 0;
     background-repeat: no-repeat;
@@ -278,7 +268,7 @@
     --glow-anim-translate-y: 0%;
     --glow-anim-scale: 1;
     --glow-anim-opacity-delta: 0;
-    animation-name: hero-glow-float;
+    animation-name: landing-glow-float;
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
     animation-direction: alternate;
@@ -293,7 +283,7 @@
     );
   }
 
-  .hero-glow__layer[data-layer="1"] {
+  .landing-glow__layer[data-layer="1"] {
     --glow-color-rgb: var(--glow-1-color-rgb);
     --glow-alpha: var(--glow-1-alpha);
     --glow-x: var(--glow-1-x);
@@ -308,7 +298,7 @@
     --glow-anim-opacity-delta: var(--glow-1-anim-opacity-delta);
   }
 
-  .hero-glow__layer[data-layer="2"] {
+  .landing-glow__layer[data-layer="2"] {
     --glow-color-rgb: var(--glow-2-color-rgb);
     --glow-alpha: var(--glow-2-alpha);
     --glow-x: var(--glow-2-x);
@@ -323,7 +313,7 @@
     --glow-anim-opacity-delta: var(--glow-2-anim-opacity-delta);
   }
 
-  .hero-glow__layer[data-layer="3"] {
+  .landing-glow__layer[data-layer="3"] {
     --glow-color-rgb: var(--glow-3-color-rgb);
     --glow-alpha: var(--glow-3-alpha);
     --glow-x: var(--glow-3-x);
@@ -338,22 +328,7 @@
     --glow-anim-opacity-delta: var(--glow-3-anim-opacity-delta);
   }
 
-  .hero-glow__layer[data-layer="4"] {
-    --glow-color-rgb: var(--glow-4-color-rgb);
-    --glow-alpha: var(--glow-4-alpha);
-    --glow-x: var(--glow-4-x);
-    --glow-y: var(--glow-4-y);
-    --glow-r1: var(--glow-4-r1);
-    --glow-r2: var(--glow-4-r2);
-    --glow-anim-duration: var(--glow-4-anim-duration);
-    --glow-anim-delay: var(--glow-4-anim-delay);
-    --glow-anim-translate-x: var(--glow-4-anim-translate-x);
-    --glow-anim-translate-y: var(--glow-4-anim-translate-y);
-    --glow-anim-scale: var(--glow-4-anim-scale);
-    --glow-anim-opacity-delta: var(--glow-4-anim-opacity-delta);
-  }
-
-  @keyframes hero-glow-float {
+  @keyframes landing-glow-float {
     0%,
     100% {
       transform: translate3d(0, 0, 0) scale(1);
