@@ -287,7 +287,21 @@ export default function Home() {
 
         <section id="quick-start" style={{ backgroundColor: "var(--bg-base)" }}>
           <div className="mx-auto max-w-6xl px-6 py-24">
-            <div className="relative overflow-hidden rounded-3xl border border-border bg-surface-2 p-12 text-center shadow-2xl">
+            <div
+              className="relative overflow-hidden rounded-3xl border border-border p-12 text-center shadow-2xl"
+              style={{
+                backgroundImage:
+                  "linear-gradient(var(--gradient-cta-angle), var(--gradient-cta-start) 0%, var(--gradient-cta-mid) 55%, var(--gradient-cta-end) 100%)",
+              }}
+            >
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at top left, var(--gradient-cta-highlight-start), var(--gradient-cta-highlight-end))",
+                }}
+              />
               <div className="relative z-10">
                 <h2 className="text-3xl font-semibold tracking-tight text-primary-foreground sm:text-4xl">Quick Start</h2>
                 <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
