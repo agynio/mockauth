@@ -3,19 +3,19 @@ import Link from "next/link";
 
 const frictionPoints = [
   {
-    title: "Decouple from External Dependencies",
+    title: "No dependency on external IdPs",
     description:
-      "Stop wrestling with third-party rate limits, latency, or unpredictable service outages during CI/CD. Maintain complete operational independence by running your identity layer as a local, containerized service.",
+      "Run authentication locally without relying on third-party providers, rate limits, or outages.",
   },
   {
-    title: "On-Demand Environment Provisioning",
+    title: "Spin up test environments instantly",
     description:
-      "Achieve a clean state for every test run. Spin up isolated, pristine instances in seconds to ensure your E2E environment is perfectly synchronized with your application’s state and test data.",
+      "Start a clean OIDC provider in seconds for CI runs, preview environments, or local development.",
   },
   {
-    title: "Guarantee Deterministic Test Cycles",
+    title: "Deterministic authentication flows",
     description:
-      "Eliminate the \"flakiness\" inherent in shared staging environments. Ensure your authentication logic is verified against a stable, version-controlled provider that responds with 100% consistency, every single time.",
+      "Ensure tests behave the same every time with predictable tokens, redirects, and scopes.",
   },
 ];
 
@@ -190,7 +190,7 @@ export default function Home() {
 
         <section className="bg-slate-900 text-white">
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Eliminate Auth Friction</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Why MockAuth</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
               {frictionPoints.map((point) => (
                 <div
