@@ -117,29 +117,58 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-400/80">Ephemeral identity test rig</p>
-              <h1 className="mt-6 text-6xl font-bold tracking-tight sm:text-7xl">
-                <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
-                  MockAuth
-                </span>
-              </h1>
-              <p className="mt-6 text-lg leading-relaxed text-primary-foreground/85">
-                Frictionless, production-realistic OIDC flows tailored for local development and CI pipelines. Launch a
-                deterministic provider in seconds and validate every redirect, token, and scope with confidence.
-              </p>
-              <div className="mt-12 flex flex-wrap items-center gap-4">
-                <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={primaryHeroButtonClasses}>
-                  Get Started
-                </Link>
-                <a
-                  href="https://github.com/agynio/mockauth"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={secondaryHeroLinkClasses}
+            <div className="relative z-10 grid grid-cols-1 gap-10 md:grid-cols-2 md:items-start">
+              {/* Left column */}
+              <div className="max-w-3xl">
+                <h1 className="mt-0 text-6xl font-bold tracking-tight sm:text-7xl">
+                  <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
+                    MockAuth
+                  </span>
+                </h1>
+                <p className="mt-3 text-base text-primary-foreground/85">
+                  Mock OpenID Connect provider for testing and development
+                </p>
+                <p className="mt-6 text-lg leading-relaxed text-primary-foreground/85">
+                  Run realistic OIDC authentication flows — discovery, JWKS, and Authorization Code + PKCE — without running a full identity provider.
+                </p>
+                <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
+                  Spin up deterministic auth environments for QA, local development, preview deployments, and CI pipelines.
+                </p>
+                <div className="mt-8 flex flex-wrap items-center gap-4">
+                  <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={primaryHeroButtonClasses}>
+                    Get Started
+                  </Link>
+                  <a
+                    href="https://github.com/agynio/mockauth"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={secondaryHeroLinkClasses}
+                  >
+                    View on GitHub
+                  </a>
+                </div>
+              </div>
+
+              {/* Right column */}
+              <div className="md:pl-6">
+                <h3 id="example-endpoints" className="text-sm font-semibold text-foreground/90">
+                  Example OIDC endpoints
+                </h3>
+                <pre
+                  aria-labelledby="example-endpoints"
+                  className="mt-4 max-h-[22rem] overflow-x-auto rounded-2xl border border-border bg-surface-2/90 p-4 text-left text-sm text-foreground/90 shadow-lg ring-1 ring-brand-500/10"
                 >
-                  View on GitHub
-                </a>
+                  <code className="block whitespace-pre font-mono">{
+`Issuer
+https://mockauth.example.com/r/tenant_qa_default_resource/oidc
+
+Discovery
+https://mockauth.example.com/r/tenant_qa_default_resource/oidc/.well-known/openid-configuration
+
+Authorize
+https://mockauth.example.com/r/tenant_qa_default_resource/oidc/authorize`
+                  }</code>
+                </pre>
               </div>
             </div>
           </div>
