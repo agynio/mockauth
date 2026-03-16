@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
-
-import { buttonVariants } from "@/components/ui/button-variants";
-import { cn } from "@/lib/utils";
-
-const frictionPoints = [
+import Link from "next/link";import { buttonVariants } from "@/components/ui/button-variants";
+import { cn } from "@/lib/utils";const frictionPoints = [
   {
     title: "No dependency on external IdPs",
     description:
@@ -20,45 +16,27 @@ const frictionPoints = [
     description:
       "Ensure tests behave the same every time with predictable tokens, redirects, and scopes.",
   },
-];
-
-const productionFeatures = [
+];const coreFeatures = [
   {
-    title: "OIDC Compliant",
-    description:
-      "Standard endpoints (discovery, authorize, token, userinfo, JWKS) ensure your application interacts with it exactly as it would with a live identity provider.",
+    title: "OIDC compliant",
+    description: "Standard endpoints: discovery, authorize, token, userinfo, JWKS.",
   },
   {
-    title: "Secure Auth Flow",
-    description:
-      "Supports Authorization Code + PKCE—the industry standard for modern web and mobile apps.",
+    title: "Authorization Code + PKCE",
+    description: "Implements the industry-standard secure auth flow used by modern apps.",
   },
   {
-    title: "Redirect Safety",
-    description:
-      "Enforces strict control over allowed redirect URLs, providing the security verification your app expects.",
-  },
-];
-
-const developerFeatures = [
-  {
-    title: "Admin Console",
-    description:
-      "Manage tenants, clients, and RSA signing keys via a built-in UI (secured by Logto).",
+    title: "Redirect validation",
+    description: "Strict redirect URI enforcement to mirror production security.",
+  },  {
+    title: "Admin console",
+    description: "Manage tenants, clients, scopes, and signing keys via a simple UI.",
   },
   {
-    title: "Multi-Tenant by Design",
-    description:
-      "Separate namespaces ensure your app-specific configurations never clash across teams or environments.",
+    title: "Proxy mode",
+    description: "Forward authentication to a real identity provider while preserving validation rules.",
   },
-  {
-    title: "Proxy Mode",
-    description:
-      "Seamlessly broker OAuth/OIDC requests to an upstream IdP when you need to bridge to production services.",
-  },
-];
-
-const deployableHighlights = [
+];const deployableHighlights = [
   {
     title: "Built for the Stack",
     description: "Next.js + Node + Postgres.",
@@ -72,9 +50,7 @@ const deployableHighlights = [
     title: "Vercel-Optimized",
     description: "Designed for rapid deployment in ephemeral environments.",
   },
-];
-
-const excellenceItems: { title: string; description: ReactNode }[] = [
+];const excellenceItems: { title: string; description: ReactNode }[] = [
   {
     title: "Autonomous Testing",
     description:
@@ -95,22 +71,14 @@ const excellenceItems: { title: string; description: ReactNode }[] = [
       </>
     ),
   },
-];
-
-const primaryHeroButtonClasses = cn(
+];const primaryHeroButtonClasses = cn(
   buttonVariants({ size: "lg" }),
   "bg-cta-gradient text-primary-foreground shadow-xl transition hover:brightness-110 focus-visible:ring-brand-400",
-);
-
-const secondaryHeroLinkClasses = cn(
+);const secondaryHeroLinkClasses = cn(
   buttonVariants({ variant: "outline", size: "lg" }),
   "border-border-strong/80 bg-surface-0/10 text-foreground/90 backdrop-blur-sm transition hover:border-brand-400/60 hover:bg-surface-0/20",
-);
-
-export default function Home() {
-  const currentYear = new Date().getFullYear();
-
-  return (
+);export default function Home() {
+  const currentYear = new Date().getFullYear();  return (
     <>
       <div className="landing-glow" aria-hidden>
         <div className="landing-glow__layer" data-layer="1" />
@@ -127,9 +95,7 @@ export default function Home() {
             MockAuth
           </Link>
         </div>
-      </header>
-
-      <main className="relative z-10 flex-1">
+      </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
             <div className="relative z-10 max-w-3xl">
@@ -158,9 +124,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
-
-        <section>
+        </section>        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">The Auth Testing Standard</h2>
             <blockquote className="mt-10 rounded-3xl border border-border bg-surface-2/80 p-10 text-lg leading-8 text-muted-foreground shadow-xl">
@@ -172,9 +136,7 @@ export default function Home() {
               </span>
             </blockquote>
           </div>
-        </section>
-
-        <section>
+        </section>        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Why MockAuth</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -189,10 +151,8 @@ export default function Home() {
               ))}
             </div>
           </div>
-        </section>
-
-        <section>
-          <div className="mx-auto max-w-6xl space-y-20 px-6 py-20">
+        </section>        <section>
+          <div className="mx-auto max-w-6xl px-6 py-20">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Key Features — Production-Grade Standards</h2>
               <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -222,9 +182,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
-
-        <section>
+        </section>        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Deployable Anywhere</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -239,9 +197,7 @@ export default function Home() {
               ))}
             </div>
           </div>
-        </section>
-
-        <section>
+        </section>        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Where MockAuth Excels</h2>
             <ol className="mt-12 space-y-6 sm:pl-4">
@@ -257,9 +213,7 @@ export default function Home() {
               ))}
             </ol>
           </div>
-        </section>
-
-        <section id="quick-start">
+        </section>        <section id="quick-start">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <div
               className="relative overflow-hidden rounded-3xl border border-border p-12 text-center shadow-2xl"
@@ -298,9 +252,7 @@ export default function Home() {
             </div>
           </div>
         </section>
-      </main>
-
-      <footer className="relative z-10 border-t border-border/60">
+      </main>      <footer className="relative z-10 border-t border-border/60">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <p>© {currentYear} MockAuth</p>
           <a
