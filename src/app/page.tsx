@@ -117,7 +117,7 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 grid grid-cols-1 gap-10 md:grid-cols-2 md:items-start">
+            <div className="relative z-10 max-w-3xl">
               {/* Left column */}
               <div className="max-w-3xl">
                 <h1 className="mt-0 text-6xl font-bold tracking-tight sm:text-7xl">
@@ -147,17 +147,12 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-              </div>
 
-              {/* Right column */}
-              <div className="md:pl-6">
-                <h3 id="example-endpoints" className="text-sm font-semibold text-foreground/90">
-                  Example OIDC endpoints
-                </h3>
-                <pre
-                  aria-labelledby="example-endpoints"
-                  className="mt-4 max-h-[22rem] overflow-x-auto rounded-2xl border border-border bg-surface-2/90 p-4 text-left text-sm text-foreground/90 shadow-lg ring-1 ring-brand-500/10"
-                >
+</div>
+
+              <div className="mt-10">
+                <h3 id="example-endpoints" className="text-sm font-semibold text-foreground/90">Example OIDC endpoints</h3>
+                <pre aria-labelledby="example-endpoints" className="mt-4 overflow-x-auto rounded-2xl border border-border bg-surface-2/90 p-4 text-left text-sm text-foreground/90 shadow-lg ring-1 ring-brand-500/10">
                   <code className="block whitespace-pre font-mono">{
 `Issuer
 https://mockauth.example.com/r/tenant_qa_default_resource/oidc
@@ -170,7 +165,9 @@ https://mockauth.example.com/r/tenant_qa_default_resource/oidc/authorize`
                   }</code>
                 </pre>
               </div>
-            </div>
+
+              </div>
+
           </div>
         </section>
 
