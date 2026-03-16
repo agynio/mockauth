@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import TerminalEndpoints from "@/components/TerminalEndpoints";
 import type { LucideIcon } from "lucide-react";
 import { ShieldCheck, KeyRound, Link as LinkIcon, ServerCog, ArrowRightLeft, Repeat } from "lucide-react";
 
@@ -108,7 +109,7 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 max-w-3xl">
+            <div className="relative z-10 grid grid-cols-1 gap-10 md:grid-cols-2 md:items-center">
               {/* Left column */}
               <div className="max-w-3xl">
                 <h1 className="mt-0 text-6xl font-bold tracking-tight sm:text-7xl">
@@ -119,14 +120,14 @@ export default function Home() {
                 <p className="mt-3 text-base text-primary-foreground/85">
                   Mock OpenID Connect provider for testing and development
                 </p>
-                <p className="mt-6 text-lg leading-relaxed text-primary-foreground/85">
+                <p className="mt-6 text-lg leading-[1.8] text-primary-foreground/85">
                   Run realistic OIDC authentication flows — discovery, JWKS, and Authorization Code + PKCE — without running a full identity provider.
                 </p>
-                <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
+                <p className="mt-4 text-lg leading-[1.8] text-primary-foreground/85">
                   Spin up deterministic auth environments for QA, local development, preview deployments, and CI pipelines.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-4">
-                  <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={primaryHeroButtonClasses}>
+                  <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={cn(primaryHeroButtonClasses, "animate-pulse")}>
                     Get Started
                   </Link>
                   <a
@@ -138,27 +139,21 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-
-</div>
-
-              <div className="mt-10">
-                <h3 id="example-endpoints" className="text-sm font-semibold text-foreground/90">Example OIDC endpoints</h3>
-                <pre aria-labelledby="example-endpoints" className="mt-4 overflow-x-auto rounded-2xl border border-border bg-surface-2/90 p-4 text-left text-sm text-foreground/90 shadow-lg ring-1 ring-brand-500/10">
-                  <code className="block whitespace-pre font-mono">{
-`Issuer
-https://mockauth.example.com/r/tenant_qa_default_resource/oidc
-
-Discovery
-https://mockauth.example.com/r/tenant_qa_default_resource/oidc/.well-known/openid-configuration
-
-Authorize
-https://mockauth.example.com/r/tenant_qa_default_resource/oidc/authorize`
-                  }</code>
-                </pre>
               </div>
 
+              {/* Right column: terminal window with glow */}
+              <div className="relative">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -inset-8 -z-10 rounded-[2rem] blur-3xl"
+                  style={{
+                    backgroundImage:
+                      "radial-gradient(1200px 500px at 70% 30%, rgba(124, 58, 237, 0.15), rgba(124, 58, 237, 0))",
+                  }}
+                />
+                <TerminalEndpoints />
               </div>
-
+            </div>
           </div>
         </section>
 
