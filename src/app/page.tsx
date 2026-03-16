@@ -2,27 +2,17 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import TerminalEndpoints from "@/components/TerminalEndpoints";
 import type { LucideIcon } from "lucide-react";
-import { ShieldCheck, KeyRound, Link as LinkIcon, ServerCog, ArrowRightLeft, Repeat } from "lucide-react";
+import { ShieldCheck, KeyRound, Link as LinkIcon, ServerCog, ArrowRightLeft, Repeat, CloudOff, Rocket, ArrowRight } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
-const frictionPoints = [
-  {
-    title: "No dependency on external IdPs",
-    description:
-      "Run authentication locally without relying on third-party providers, rate limits, or outages.",
-  },
-  {
-    title: "Spin up test environments instantly",
-    description:
-      "Start a clean OIDC provider in seconds for CI runs, preview environments, or local development.",
-  },
-  {
-    title: "Deterministic authentication flows",
-    description:
-      "Ensure tests behave the same every time with predictable tokens, redirects, and scopes.",
-  },
+type FrictionPoint = { title: string; description: string; icon: LucideIcon };
+
+const frictionPoints: FrictionPoint[] = [
+  { title: "No dependency on external IdPs", description: "Run authentication locally without relying on third-party providers, rate limits, or outages.", icon: CloudOff },
+  { title: "Spin up test environments instantly", description: "Start a clean OIDC provider in seconds for CI runs, preview environments, or local development.", icon: Rocket },
+  { title: "Deterministic authentication flows", description: "Ensure tests behave the same every time with predictable tokens, redirects, and scopes.", icon: Repeat },
 ];
 
 type CoreFeature = { title: string; description: string; icon: LucideIcon };
@@ -153,15 +143,40 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Why MockAuth</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {frictionPoints.map((point) => (
+              {frictionPoints.map((point) => {
+              const Icon = point.icon;
+              return (
                 <div
                   key={point.title}
-                  className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
+                  className="group rounded-xl border border-transparent bg-transparent p-0 text-left transition hover:border-slate-700 hover:shadow-lg hover:bg-surface-2/20"
                 >
-                  <h3 className="text-xl font-semibold text-foreground">{point.title}</h3>
-                  <p className="text-base text-muted-foreground">{point.description}</p>
+                  <Icon aria-hidden className="h-6 w-6 text-brand-400" />
+                  <h3 className="mt-4 text-[20px] font-bold text-foreground">{point.title}</h3>
+                  <p className="mt-2 text-[15px] text-slate-400">{point.description}</p>
                 </div>
-              ))}
+              );
+            })}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div className="mx-auto max-w-6xl px-6 py-12">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
+              <div className="rounded-md border border-slate-700/60 bg-transparent px-3 py-2 text-sm text-foreground/90">
+                <div className="font-semibold text-foreground">Your App</div>
+                <div className="text-xs text-muted-foreground">SPA/mobile/web</div>
+              </div>
+              <ArrowRight aria-hidden className="h-5 w-5 text-slate-500" />
+              <div className="rounded-md border border-slate-700/60 bg-transparent px-3 py-2 text-sm text-foreground/90">
+                <div className="font-semibold text-foreground">MockAuth OIDC</div>
+                <div className="text-xs text-muted-foreground">authorize/token/userinfo</div>
+              </div>
+              <ArrowRight aria-hidden className="h-5 w-5 text-slate-500" />
+              <div className="rounded-md border border-slate-700/60 bg-transparent px-3 py-2 text-sm text-foreground/90">
+                <div className="font-semibold text-foreground">Backend/API</div>
+                <div className="text-xs text-muted-foreground">session/claims/validation</div>
+              </div>
             </div>
           </div>
         </section>
