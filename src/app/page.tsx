@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { ShieldCheck, KeyRound, Link as LinkIcon, ServerCog, ArrowRightLeft, Repeat } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
@@ -22,26 +24,15 @@ const frictionPoints = [
   },
 ];
 
-const coreFeatures = [
-  {
-    title: "OIDC compliant",
-    description: "Standard endpoints: discovery, authorize, token, userinfo, JWKS.",
-  },
-  {
-    title: "Authorization Code + PKCE",
-    description: "Implements the industry-standard secure auth flow used by modern apps.",
-  },
-  {
-    title: "Redirect validation",
-    description: "Strict redirect URI enforcement to mirror production security.",
-  },  {
-    title: "Admin console",
-    description: "Manage tenants, clients, scopes, and signing keys via a simple UI.",
-  },
-  {
-    title: "Proxy mode",
-    description: "Forward authentication to a real identity provider while preserving validation rules.",
-  },
+type CoreFeature = { title: string; description: string; icon: LucideIcon };
+
+const coreFeatures: CoreFeature[] = [
+  { title: "OIDC Compliant", description: "Standard endpoints: discovery, authorize, token, userinfo, and JWKS.", icon: ShieldCheck },
+  { title: "Auth Code + PKCE", description: "Implements industry-standard flows used by modern SPAs and mobile apps.", icon: KeyRound },
+  { title: "Redirect Validation", description: "Strict URI enforcement to mirror production security environments.", icon: LinkIcon },
+  { title: "Admin Console", description: "Manage tenants, clients, and signing keys via a streamlined UI.", icon: ServerCog },
+  { title: "Proxy Mode", description: "Forward authentication to real IdPs while preserving local validation rules.", icon: ArrowRightLeft },
+  { title: "Deterministic Auth", description: "Predictable tokens and scopes for stable, repeatable automated testing.", icon: Repeat },
 ];
 
 const deployableHighlights = [
@@ -192,20 +183,21 @@ https://mockauth.example.com/r/tenant_qa_default_resource/oidc/authorize`
           <div className="mx-auto max-w-6xl px-6 py-20">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Core Features</h2>
-              <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {coreFeatures.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="rounded-2xl border border-border/70 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
-                  >
-                    <h3 className="text-xl font-semibold text-foreground">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-muted-foreground">{feature.description}</p>
-                  </div>
-                ))}
-              </div>
+              <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3">
+  {coreFeatures.map((feature) => {
+    const Icon = feature.icon;
+    return (
+      <div key={feature.title} className="flex flex-col text-left">
+        <Icon aria-hidden className="h-6 w-6 text-brand-400" />
+        <h3 className="mt-4 text-lg font-semibold text-foreground">{feature.title}</h3>
+        <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
+      </div>
+    );
+  })}
+</div>
             </div>
-          </div>
-        </section>
+</div>
+</section>
 
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
