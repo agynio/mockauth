@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
-import Link from "next/link";import { buttonVariants } from "@/components/ui/button-variants";
-import { cn } from "@/lib/utils";const frictionPoints = [
+import Link from "next/link";
+
+import { buttonVariants } from "@/components/ui/button-variants";
+import { cn } from "@/lib/utils";
+
+const frictionPoints = [
   {
     title: "No dependency on external IdPs",
     description:
@@ -16,7 +20,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
     description:
       "Ensure tests behave the same every time with predictable tokens, redirects, and scopes.",
   },
-];const coreFeatures = [
+];
+
+const coreFeatures = [
   {
     title: "OIDC compliant",
     description: "Standard endpoints: discovery, authorize, token, userinfo, JWKS.",
@@ -36,7 +42,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
     title: "Proxy mode",
     description: "Forward authentication to a real identity provider while preserving validation rules.",
   },
-];const deployableHighlights = [
+];
+
+const deployableHighlights = [
   {
     title: "Built for the Stack",
     description: "Next.js + Node + Postgres.",
@@ -50,7 +58,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
     title: "Vercel-Optimized",
     description: "Designed for rapid deployment in ephemeral environments.",
   },
-];const excellenceItems: { title: string; description: ReactNode }[] = [
+];
+
+const excellenceItems: { title: string; description: ReactNode }[] = [
   {
     title: "Autonomous Testing",
     description:
@@ -74,10 +84,14 @@ import { cn } from "@/lib/utils";const frictionPoints = [
 ];const primaryHeroButtonClasses = cn(
   buttonVariants({ size: "lg" }),
   "bg-cta-gradient text-primary-foreground shadow-xl transition hover:brightness-110 focus-visible:ring-brand-400",
-);const secondaryHeroLinkClasses = cn(
+);
+
+const secondaryHeroLinkClasses = cn(
   buttonVariants({ variant: "outline", size: "lg" }),
   "border-border-strong/80 bg-surface-0/10 text-foreground/90 backdrop-blur-sm transition hover:border-brand-400/60 hover:bg-surface-0/20",
-);export default function Home() {
+);
+
+export default function Home() {
   const currentYear = new Date().getFullYear();  return (
     <>
       <div className="landing-glow" aria-hidden>
@@ -124,7 +138,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
               </div>
             </div>
           </div>
-        </section>        <section>
+        </section>
+
+        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">The Auth Testing Standard</h2>
             <blockquote className="mt-10 rounded-3xl border border-border bg-surface-2/80 p-10 text-lg leading-8 text-muted-foreground shadow-xl">
@@ -136,7 +152,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
               </span>
             </blockquote>
           </div>
-        </section>        <section>
+        </section>
+
+        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Why MockAuth</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -151,26 +169,14 @@ import { cn } from "@/lib/utils";const frictionPoints = [
               ))}
             </div>
           </div>
-        </section>        <section>
+        </section>
+
+        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Key Features — Production-Grade Standards</h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Core Features</h2>
               <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {productionFeatures.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="rounded-2xl border border-border/70 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
-                  >
-                    <h3 className="text-xl font-semibold text-foreground">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-muted-foreground">{feature.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Key Features — Developer Experience</h2>
-              <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {developerFeatures.map((feature) => (
+                {coreFeatures.map((feature) => (
                   <div
                     key={feature.title}
                     className="rounded-2xl border border-border/70 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
@@ -182,7 +188,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
               </div>
             </div>
           </div>
-        </section>        <section>
+        </section>
+
+        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Deployable Anywhere</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -197,7 +205,9 @@ import { cn } from "@/lib/utils";const frictionPoints = [
               ))}
             </div>
           </div>
-        </section>        <section>
+        </section>
+
+        <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Where MockAuth Excels</h2>
             <ol className="mt-12 space-y-6 sm:pl-4">
