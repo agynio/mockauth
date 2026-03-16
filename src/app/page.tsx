@@ -46,40 +46,37 @@ const coreFeatures = [
 
 const deployableHighlights = [
   {
-    title: "Built for the Stack",
-    description: "Next.js + Node + Postgres.",
-  },
-  {
-    title: "CI-Ready",
+    title: "Works in CI pipelines",
     description:
-      "Includes unit, integration, and E2E tests (Playwright/Vitest) out of the box.",
+      "Run automated tests with full OIDC flows using deterministic authentication.",
   },
   {
-    title: "Vercel-Optimized",
-    description: "Designed for rapid deployment in ephemeral environments.",
+    title: "Perfect for preview environments",
+    description:
+      "Spin up authentication for every deployment without provisioning identity tenants.",
+  },
+  {
+    title: "Simple local development",
+    description:
+      "Run MockAuth locally and test OAuth/OIDC integrations before production.",
   },
 ];
 
 const excellenceItems: { title: string; description: ReactNode }[] = [
   {
-    title: "Autonomous Testing",
+    title: "Autonomous testing",
     description:
-      "You’re developing apps that require OIDC login but need to remain completely decoupled from production identity providers.",
+      "Develop apps that require OIDC login while remaining completely independent from production identity providers.",
   },
   {
-    title: "Reliability Engineering",
+    title: "Reliable authentication tests",
     description:
-      "You require consistent token validation and redirect behavior that remains stable regardless of external provider updates.",
+      "Ensure token validation and redirect behavior remain stable regardless of upstream provider changes.",
   },
   {
-    title: "Rapid Simulation",
-    description: (
-      <>
-        You need to instantly model various authentication scenarios—such as specific scopes or{" "}
-        <code className="rounded-md bg-surface-3 px-1.5 py-0.5 font-mono text-xs text-brand-400">email_verified</code>{" "}
-        states—without the overhead of manual user provisioning.
-      </>
-    ),
+    title: "Simulating authentication scenarios",
+    description:
+      "Model different scopes, user identifiers, and claims without manual user provisioning.",
   },
 ];const primaryHeroButtonClasses = cn(
   buttonVariants({ size: "lg" }),
@@ -192,7 +189,7 @@ export default function Home() {
 
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Deployable Anywhere</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Designed for real development workflows</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {deployableHighlights.map((item) => (
                 <div
@@ -209,7 +206,7 @@ export default function Home() {
 
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Where MockAuth Excels</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
             <ol className="mt-12 space-y-6 sm:pl-4">
               {excellenceItems.map((item, index) => (
                 <li key={item.title} className="flex gap-4">
