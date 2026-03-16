@@ -173,20 +173,6 @@ https://mockauth.example.com/r/tenant_qa_default_resource/oidc/authorize`
 
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">The Auth Testing Standard</h2>
-            <blockquote className="mt-10 rounded-3xl border border-border bg-surface-2/80 p-10 text-lg leading-8 text-muted-foreground shadow-xl">
-              <span className="block border-l-4 border-brand-500/70 pl-8 italic text-foreground/80">
-                A purpose-built, standards-compliant OIDC identity provider designed for testing. It simulates the behavior of a
-                production authentication server, allowing you to validate sign-ins, token handling, and redirect logic in
-                isolated environments without relying on real user accounts or external services. It is optimized for QA, local
-                development, and ephemeral CI pipelines where you need reliable, repeatable, and clean auth states.
-              </span>
-            </blockquote>
-          </div>
-        </section>
-
-        <section>
-          <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Why MockAuth</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
               {frictionPoints.map((point) => (
