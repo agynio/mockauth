@@ -109,7 +109,7 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 grid grid-cols-1 gap-8 md:grid-cols-[3fr_2fr] md:items-center">
+            <div className="relative z-10 relative z-10 max-w-3xl">
               {/* Left column */}
               <div className="max-w-3xl">
                 <h1 className="mt-0 text-6xl font-bold tracking-tight sm:text-7xl">
@@ -141,19 +141,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Right column: terminal window with glow */}
-              <div className="relative">
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute -inset-8 -z-10 rounded-[2rem] blur-3xl"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(1200px 500px at 70% 30%, rgba(124, 58, 237, 0.15), rgba(124, 58, 237, 0))",
-                  }}
-                />
+              <div className="mt-10">
                 <TerminalEndpoints />
               </div>
-            </div>
+
+              </div>
           </div>
         </section>
 
