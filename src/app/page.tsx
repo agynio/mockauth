@@ -109,7 +109,7 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 grid grid-cols-1 gap-10 md:grid-cols-2 md:items-center">
+            <div className="relative z-10 grid grid-cols-1 gap-8 md:grid-cols-[3fr_2fr] md:items-center">
               {/* Left column */}
               <div className="max-w-3xl">
                 <h1 className="mt-0 text-6xl font-bold tracking-tight sm:text-7xl">
@@ -120,10 +120,10 @@ export default function Home() {
                 <p className="mt-3 text-base text-primary-foreground/85">
                   Mock OpenID Connect provider for testing and development
                 </p>
-                <p className="mt-6 text-lg leading-[1.8] text-primary-foreground/85">
+                <p className="mt-4 max-w-[540px] text-lg leading-[1.8] text-primary-foreground/85">
                   Run realistic OIDC authentication flows — discovery, JWKS, and Authorization Code + PKCE — without running a full identity provider.
                 </p>
-                <p className="mt-4 text-lg leading-[1.8] text-primary-foreground/85">
+                <p className="mt-3 max-w-[540px] text-lg leading-[1.8] text-primary-foreground/85">
                   Spin up deterministic auth environments for QA, local development, preview deployments, and CI pipelines.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-4">

@@ -38,30 +38,32 @@ export default function TerminalEndpoints() {
     >
       {/* Window chrome */}
       <div className="flex items-center gap-2 border-b border-brand-700/40 px-4 py-3">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" />
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 opacity-60" />
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 opacity-60" />
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 opacity-60" />
         <h3 id="example-endpoints" className="ml-4 text-xs font-semibold text-foreground/80">
           Example OIDC endpoints
         </h3>
       </div>
 
       {/* Body */}
-      <div className="p-4">
+      <div className="p-6">
         <ul className="space-y-5">
           {endpoints.map((e) => (
             <li key={e.label} className="group relative">
               <div className="text-xs font-semibold text-cyan-300">{e.label}</div>
-              <code className="mt-1 block overflow-x-auto whitespace-pre font-mono text-sm text-foreground/90">
+              <div className="mt-1 rounded-md bg-[#1e293b] px-3 py-2">
+                <code className="block overflow-x-auto whitespace-pre font-mono text-sm text-foreground/90">
                 {e.url}
               </code>
+              </div>
               <button
                 type="button"
                 onClick={() => copy(e.url)}
                 aria-label={`Copy ${e.label} URL`}
                 title={`Copy ${e.label} URL`}
                 className={cn(
-                  "absolute right-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded-md",
+                  "absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-md",
                   "text-foreground/60 hover:text-foreground",
                   "opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100",
                 )}
