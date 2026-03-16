@@ -78,7 +78,15 @@ const excellenceItems: { title: string; description: ReactNode }[] = [
     description:
       "Model different scopes, user identifiers, and claims without manual user provisioning.",
   },
-];const primaryHeroButtonClasses = cn(
+];
+
+const faqItems: { q: string; a: string }[] = [
+  { q: "Is MockAuth a production identity provider?", a: "No. It is designed for development, QA, and automated testing environments." },
+  { q: "Is it OIDC compliant?", a: "Yes. MockAuth implements discovery, JWKS, and Authorization Code + PKCE flows." },
+  { q: "Can it proxy to a real identity provider?", a: "Yes. Proxy mode allows MockAuth to forward requests to an upstream OIDC provider." },
+  { q: "Does it validate redirect URIs?", a: "Yes. Redirect URIs are validated with strict matching by default." },
+];
+const primaryHeroButtonClasses = cn(
   buttonVariants({ size: "lg" }),
   "bg-cta-gradient text-primary-foreground shadow-xl transition hover:brightness-110 focus-visible:ring-brand-400",
 );
@@ -259,6 +267,21 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section>
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">FAQ</h2>
+            <dl className="mt-12 space-y-6">
+              {faqItems.map((item) => (
+                <div key={item.q}>
+                  <dt className="text-base font-semibold text-foreground">{item.q}</dt>
+                  <dd className="mt-2 text-base leading-relaxed text-muted-foreground">{item.a}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
       </main>      <footer className="relative z-10 border-t border-border/60">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <p>© {currentYear} MockAuth</p>
