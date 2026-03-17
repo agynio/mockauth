@@ -41,7 +41,7 @@ const deployableHighlights = [
   {
     title: "Works in CI pipelines",
     description:
-      "Run automated tests with full OIDC flows using deterministic authentication.",
+      "Run automated tests with full OIDC flows and predictable authentication.",
   },
   {
     title: "Perfect for preview environments",
