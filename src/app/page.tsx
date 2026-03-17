@@ -114,13 +114,11 @@ export default function Home() {
               {/* Left column */}
               <div className="w-full">
                 <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
-                  <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
-                    MockAuth
-                  </span>
-                </h1>
+  A mock OpenID Connect provider for QA and automated tests.
+</h1>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-    Mock OpenID Connect provider for testing and development
-  </h2>
+  Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server
+</h2>
                 <h3 className="mt-4 text-xl leading-[1.7] text-foreground/90">
                   Run realistic OIDC authentication flows — discovery, JWKS, and Authorization Code + PKCE — without running a full identity provider.
                 </h3>
