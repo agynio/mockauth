@@ -9,11 +9,11 @@ import { cn } from "@/lib/utils";
 
 const frictionPoints = [
   {
-    title: "No dependency on external IdPs",
+    title: "No dependency on external identity providers",
     description: "Run authentication locally without relying on third-party providers, rate limits, or outages.",
   },
   {
-    title: "Spin up test environments instantly",
+    title: "Spin up auth environments instantly",
     description: "Start a clean OIDC provider in seconds for CI runs, preview environments, or local development.",
   },
   {
