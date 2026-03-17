@@ -150,15 +150,7 @@ export default function Home() {
               </div>
           </div>
         </section>
-
-        <section>
-          <div className="mx-auto max-w-6xl px-6 py-16">
-            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Drop-in for standard OIDC clients</h2>
-            <p className="mt-4 text-base text-muted-foreground">NextAuth.js • openid-client • Spring Security • Authlib • Passport.js</p>
-          </div>
-        </section>
-
-        <section>
+<section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Why MockAuth</h2>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
