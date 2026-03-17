@@ -113,7 +113,7 @@ export default function Home() {
             <div aria-hidden className="pointer-events-none absolute right-6 top-24 h-[420px] w-[420px] rounded-full bg-brand-400/15 blur-3xl" />
             <div >
               {/* Left column */}
-              <div className="w-full max-w-[620px]">
+              <div className="w-full max-w-[1000px]">
                 <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
                   <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
                     MockAuth
@@ -122,7 +122,7 @@ export default function Home() {
                 <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
   A mock OpenID Connect provider for QA and automated tests.
 </h2>
-                <h3 className="mt-5 max-w-[560px] text-xl leading-[1.7] text-foreground/90">
+                <h3 className="mt-5 text-xl leading-[1.7] text-foreground/90">
   Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server.
 </h3>
                                 <div className="mt-7 flex flex-wrap items-center gap-4">
@@ -138,7 +138,7 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-                <div className="mt-10 w-full max-w-[1100px]">
+                <div className="mt-10 w-full max-w-[560px]">
                   <TerminalEndpoints />
                 </div>
               </div>
