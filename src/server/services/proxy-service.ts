@@ -5,7 +5,6 @@ import { prisma } from "@/server/db/client";
 import { generateOpaqueToken, hashOpaqueToken } from "@/server/crypto/opaque-token";
 import { DomainError } from "@/server/errors";
 import { encrypt, decrypt } from "@/server/crypto/key-vault";
-import { isLinkedInTokenEndpoint } from "@/lib/upstream-provider";
 
 const PROXY_TRANSACTION_TTL_MINUTES = 5;
 const PROXY_TOKEN_EXCHANGE_TTL_MINUTES = 5;
@@ -233,9 +232,8 @@ export const requestProviderTokens = async (
   const params = new URLSearchParams(body);
   params.set("client_id", config.upstreamClientId);
 
-  const isLinkedInEndpoint = isLinkedInTokenEndpoint(config.tokenEndpoint);
   const configuredAuthMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
-  const authMethod = isLinkedInEndpoint ? "client_secret_post" : configuredAuthMethod;
+  const authMethod = configuredAuthMethod;
   let authorization: string | null = null;
 
   const readUpstreamSecret = (method: "client_secret_basic" | "client_secret_post") => {
@@ -255,18 +253,6 @@ export const requestProviderTokens = async (
     params.set("client_secret", secret);
   }
 
-  if (isLinkedInEndpoint) {
-    authorization = null;
-    if (!params.has("client_secret")) {
-      const secret = readUpstreamSecret("client_secret_post");
-      params.set("client_secret", secret);
-    }
-    console.debug("proxy_provider_token_request_override", {
-      upstreamProvider: "linkedin",
-      enforcedAuthMethod: "client_secret_post",
-    });
-  }
-
   const includeAuthHeader = Boolean(authorization);
   const includeClientSecretInBody = params.has("client_secret");
   const hasClientId = params.has("client_id");
@@ -274,8 +260,6 @@ export const requestProviderTokens = async (
   const includesRedirectUri = params.has("redirect_uri");
   const includesCode = params.has("code");
   const includesRefreshToken = params.has("refresh_token");
-  const upstreamProvider = isLinkedInEndpoint ? "linkedin" : config.providerType;
-  const enforcedAuthMethod = isLinkedInEndpoint ? "client_secret_post" : null;
 
   console.debug("proxy_provider_token_request", {
     provider: config.providerType,
@@ -287,8 +271,6 @@ export const requestProviderTokens = async (
     includesRedirectUri,
     includesCode,
     includesRefreshToken,
-    upstreamProvider,
-    enforcedAuthMethod,
   });
 
   const response = await fetch(config.tokenEndpoint, {

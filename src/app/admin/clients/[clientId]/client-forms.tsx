@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Check, Copy, Eye, EyeOff, Loader2, Trash2, X } from "lucide-react";
@@ -39,7 +39,6 @@ import { RHFSelectField, type RHFSelectOption } from "@/components/rhf/rhf-selec
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { cn } from "@/lib/utils";
-import { isLinkedInTokenEndpoint } from "@/lib/upstream-provider";
 import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import type { JwtSigningAlg } from "@/generated/prisma/client";
@@ -1474,33 +1473,26 @@ export function UpdateProxyProviderConfigForm({
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "scopeMappings" });
   const watchTokenEndpoint = useWatch({ control: form.control, name: "tokenEndpoint", defaultValue: initialConfig.tokenEndpoint });
-  const watchUpstreamTokenAuthMethod = useWatch({
-    control: form.control,
-    name: "upstreamTokenEndpointAuthMethod",
-    defaultValue: initialConfig.upstreamTokenEndpointAuthMethod,
-  });
-  const linkedInTokenEndpoint = isLinkedInTokenEndpoint(watchTokenEndpoint);
-  const { setValue } = form;
-
-  useEffect(() => {
-    if (!linkedInTokenEndpoint) {
-      return;
+  const linkedInTokenEndpoint = useMemo(() => {
+    if (!watchTokenEndpoint) {
+      return false;
     }
-    if (watchUpstreamTokenAuthMethod === "client_secret_post") {
-      return;
+    const trimmed = watchTokenEndpoint.trim();
+    if (!trimmed) {
+      return false;
     }
-    setValue("upstreamTokenEndpointAuthMethod", "client_secret_post", {
-      shouldDirty: true,
-      shouldTouch: true,
-      shouldValidate: true,
-    });
-  }, [linkedInTokenEndpoint, watchUpstreamTokenAuthMethod, setValue]);
+    try {
+      const hostname = new URL(trimmed).hostname.toLowerCase();
+      return hostname === "linkedin.com" || hostname.endsWith(".linkedin.com");
+    } catch {
+      return false;
+    }
+  }, [watchTokenEndpoint]);
 
   const tokenAuthOptions: RHFSelectOption<"client_secret_basic" | "client_secret_post" | "none">[] = [
     {
       value: "client_secret_basic",
       label: "HTTP Basic (client_secret_basic)",
-      itemProps: { disabled: linkedInTokenEndpoint },
     },
     {
       value: "client_secret_post",
@@ -1509,12 +1501,11 @@ export function UpdateProxyProviderConfigForm({
     {
       value: "none",
       label: "Public client (none)",
-      itemProps: { disabled: linkedInTokenEndpoint },
     },
   ];
 
   const tokenAuthDescription = linkedInTokenEndpoint
-    ? "LinkedIn requires client_secret_post. Other methods are disabled."
+    ? "LinkedIn commonly expects client_secret_post. Choose POST body if LinkedIn rejects HTTP Basic."
     : "Determines how MockAuth authenticates to the upstream token endpoint.";
 
   const onSubmit = form.handleSubmit((values) => {
