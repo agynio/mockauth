@@ -136,7 +136,12 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-              </div>
+              
+              <p className="mt-4 text-sm text-foreground/80">
+                Drop-in for standard OIDC clients: <span className="text-muted-foreground">NextAuth.js • openid-client • Spring Security • Authlib • Passport.js</span>
+              </p>
+
+</div>
 
               <div className="mt-10">
                 <TerminalEndpoints />
