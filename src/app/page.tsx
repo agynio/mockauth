@@ -119,11 +119,11 @@ export default function Home() {
                   </span>
                 </h1>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-    Mock OpenID Connect provider for testing and development
-  </h2>
+  A mock OpenID Connect provider for QA and automated tests.
+</h2>
                 <h3 className="mt-4 text-xl leading-[1.7] text-foreground/90">
-                  Run realistic OIDC authentication flows — discovery, JWKS, and Authorization Code + PKCE — without running a full identity provider.
-                </h3>
+  Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server.
+</h3>
                 <p className="mt-3 text-lg leading-[1.7] text-muted-foreground">
                   Spin up deterministic auth environments for QA, local development, preview deployments, and CI pipelines.
                 </p>
