@@ -75,7 +75,7 @@ const excellenceItems: { title: string; description: ReactNode }[] = [
 
 const faqItems: { q: string; a: string }[] = [
   { q: "Is MockAuth a production identity provider?", a: "No. It is designed for development, QA, and automated testing environments." },
-  { q: "Is it OIDC compliant?", a: "Yes. MockAuth implements discovery, JWKS, and Authorization Code + PKCE flows." },
+  { q: "Is it OIDC compliant?", a: "Yes. MockAuth exposes standard OIDC endpoints including discovery, JWKS, and Authorization Code + PKCE." },
   { q: "Can it proxy to a real identity provider?", a: "Yes. Proxy mode allows MockAuth to forward requests to an upstream OIDC provider." },
   { q: "Does it validate redirect URIs?", a: "Yes. Redirect URIs are validated with strict matching by default." },
 ];
