@@ -130,7 +130,9 @@ describe("requestProviderTokens", () => {
         }
 
         expect(debugSpy).toHaveBeenCalledTimes(1);
-        expect(debugSpy).toHaveBeenCalledWith("proxy_provider_token_request", {
+        const debugCall = debugSpy.mock.calls[0];
+        expect(debugCall[0]).toBe("proxy_provider_token_request");
+        expect(debugCall[1]).toMatchObject({
           provider: config.providerType,
           authMethod: config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
           includeAuthHeader: usesAuthorization,
@@ -140,9 +142,49 @@ describe("requestProviderTokens", () => {
           includesRedirectUri: params.has("redirect_uri"),
           includesCode: params.has("code"),
           includesRefreshToken: params.has("refresh_token"),
+          upstreamProvider: config.providerType,
+          enforcedAuthMethod: null,
         });
       },
     );
+  });
+
+  it("forces client_secret_post for LinkedIn token endpoints", async () => {
+    const fetchSpy = mockFetch();
+    const config = buildConfig({
+      tokenEndpoint: "https://www.linkedin.com/oauth/v2/accessToken",
+      upstreamTokenEndpointAuthMethod: "client_secret_basic",
+    });
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    await requestProviderTokens(config, grantBodies.authorization_code);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0];
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const params = toParams(init?.body);
+
+    expect(headers.authorization).toBeUndefined();
+    expect(params.get("client_secret")).toBe("secret");
+    expect(params.get("client_id")).toBe("up-client");
+    expect(params.get("grant_type")).toBe("authorization_code");
+
+    expect(debugSpy).toHaveBeenCalledTimes(2);
+    const [overrideCall, mainCall] = debugSpy.mock.calls;
+    expect(overrideCall[0]).toBe("proxy_provider_token_request_override");
+    expect(overrideCall[1]).toMatchObject({
+      upstreamProvider: "linkedin",
+      enforcedAuthMethod: "client_secret_post",
+    });
+    expect(mainCall[0]).toBe("proxy_provider_token_request");
+    expect(mainCall[1]).toMatchObject({
+      provider: config.providerType,
+      authMethod: "client_secret_post",
+      includeAuthHeader: false,
+      includeClientSecretInBody: true,
+      upstreamProvider: "linkedin",
+      enforcedAuthMethod: "client_secret_post",
+    });
   });
 
   it("throws when a secret-backed method is selected without a secret", async () => {

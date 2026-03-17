@@ -35,10 +35,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-import { RHFSelectField } from "@/components/rhf/rhf-select-field";
+import { RHFSelectField, type RHFSelectOption } from "@/components/rhf/rhf-select-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { cn } from "@/lib/utils";
+import { isLinkedInTokenEndpoint } from "@/lib/upstream-provider";
 import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import type { JwtSigningAlg } from "@/generated/prisma/client";
@@ -1472,6 +1473,49 @@ export function UpdateProxyProviderConfigForm({
   }, [initialConfig, form]);
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "scopeMappings" });
+  const watchTokenEndpoint = useWatch({ control: form.control, name: "tokenEndpoint", defaultValue: initialConfig.tokenEndpoint });
+  const watchUpstreamTokenAuthMethod = useWatch({
+    control: form.control,
+    name: "upstreamTokenEndpointAuthMethod",
+    defaultValue: initialConfig.upstreamTokenEndpointAuthMethod,
+  });
+  const linkedInTokenEndpoint = isLinkedInTokenEndpoint(watchTokenEndpoint);
+  const { setValue } = form;
+
+  useEffect(() => {
+    if (!linkedInTokenEndpoint) {
+      return;
+    }
+    if (watchUpstreamTokenAuthMethod === "client_secret_post") {
+      return;
+    }
+    setValue("upstreamTokenEndpointAuthMethod", "client_secret_post", {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  }, [linkedInTokenEndpoint, watchUpstreamTokenAuthMethod, setValue]);
+
+  const tokenAuthOptions: RHFSelectOption<"client_secret_basic" | "client_secret_post" | "none">[] = [
+    {
+      value: "client_secret_basic",
+      label: "HTTP Basic (client_secret_basic)",
+      itemProps: { disabled: linkedInTokenEndpoint },
+    },
+    {
+      value: "client_secret_post",
+      label: "POST body (client_secret_post)",
+    },
+    {
+      value: "none",
+      label: "Public client (none)",
+      itemProps: { disabled: linkedInTokenEndpoint },
+    },
+  ];
+
+  const tokenAuthDescription = linkedInTokenEndpoint
+    ? "LinkedIn requires client_secret_post. Other methods are disabled."
+    : "Determines how MockAuth authenticates to the upstream token endpoint.";
 
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
@@ -1567,13 +1611,9 @@ export function UpdateProxyProviderConfigForm({
           name="upstreamTokenEndpointAuthMethod"
           label="Token endpoint auth"
           placeholder="Select auth method"
-          options={[
-            { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
-            { value: "client_secret_post", label: "POST body (client_secret_post)" },
-            { value: "none", label: "Public client (none)" },
-          ]}
+          options={tokenAuthOptions}
           disabled={disableForm}
-          description="Determines how MockAuth authenticates to the upstream token endpoint."
+          description={tokenAuthDescription}
         />
 
         <div className="grid gap-4 md:grid-cols-2">

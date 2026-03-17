@@ -147,6 +147,199 @@ describe("Proxy client OAuth flow", () => {
     upstreamTokenResponses = [];
   });
 
+  it("enforces LinkedIn token endpoint auth requirements", async () => {
+    const localSecret = "linkedin-local-secret";
+    const upstreamSecret = "linkedin-upstream-secret";
+
+    const proxyClient = await prisma.client.create({
+      data: {
+        tenantId,
+        clientId: `proxy_linkedin_${randomUUID().slice(0, 8)}`,
+        name: "LinkedIn Proxy Client",
+        clientType: "CONFIDENTIAL",
+        tokenEndpointAuthMethod: "client_secret_post",
+        clientSecretHash: await hashSecret(localSecret),
+        clientSecretEncrypted: encrypt(localSecret),
+        oauthClientMode: "proxy",
+        allowedScopes: ["openid", "profile"],
+        authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
+        redirectUris: {
+          create: [{ uri: "https://proxy-linkedin.test/callback", type: "EXACT" }],
+        },
+        proxyConfig: {
+          create: {
+            providerType: "oauth2",
+            authorizationEndpoint: "https://www.linkedin.com/oauth/v2/authorization",
+            tokenEndpoint: "https://www.linkedin.com/oauth/v2/accessToken",
+            upstreamClientId: "linkedin-up-client",
+            upstreamClientSecretEncrypted: encrypt(upstreamSecret),
+            defaultScopes: ["openid", "profile"],
+            scopeMapping: { profile: ["r_liteprofile"] },
+            pkceSupported: true,
+            oidcEnabled: false,
+            promptPassthroughEnabled: true,
+            loginHintPassthroughEnabled: true,
+            passthroughTokenResponse: false,
+            upstreamTokenEndpointAuthMethod: "client_secret_basic",
+          },
+        },
+      },
+    });
+
+    cleanupClientIds.push(proxyClient.id);
+
+    const codeVerifier = "linkedin-code-verifier-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const codeChallenge = computeS256Challenge(codeVerifier);
+
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: proxyClient.clientId,
+        redirectUri: "https://proxy-linkedin.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        state: "linkedin-state",
+        codeChallenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        loginHint: "linkedin-user@example.com",
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${proxyClient.clientId}`,
+    );
+
+    expect(authorize.type).toBe("redirect");
+    const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
+    expect(proxyCookie?.value).toBeDefined();
+
+    const providerAuthorizeUrl = new URL(authorize.redirectTo);
+    expect(providerAuthorizeUrl.origin).toBe("https://www.linkedin.com");
+    expect(providerAuthorizeUrl.searchParams.get("client_id")).toBe("linkedin-up-client");
+    const transactionId = providerAuthorizeUrl.searchParams.get("state");
+    expect(transactionId).toBe(proxyCookie?.value);
+
+    const parseParams = (body: unknown) => {
+      if (!body) {
+        return new URLSearchParams();
+      }
+      if (typeof body === "string") {
+        return new URLSearchParams(body);
+      }
+      if (body instanceof URLSearchParams) {
+        return new URLSearchParams(body);
+      }
+      return new URLSearchParams(body as string);
+    };
+
+    const responses: Array<Record<string, unknown>> = [
+      {
+        access_token: "linkedin-access-token",
+        token_type: "Bearer",
+        expires_in: 3600,
+        refresh_token: "linkedin-refresh-token",
+        scope: "openid profile",
+      },
+      {
+        access_token: "linkedin-access-token-2",
+        token_type: "Bearer",
+        expires_in: 1800,
+        refresh_token: "linkedin-refresh-token-2",
+        scope: "openid profile",
+      },
+    ];
+
+    const seenRequests: Array<{ headers: Record<string, string>; params: URLSearchParams }> = [];
+
+    const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const params = parseParams(init?.body);
+      seenRequests.push({ headers, params });
+
+      if (headers.authorization) {
+        return new Response(JSON.stringify({ error: "unexpected_authorization" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (params.get("client_secret") !== upstreamSecret) {
+        return new Response(JSON.stringify({ error: "invalid_client" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const payload = responses.shift();
+      if (!payload) {
+        return new Response(JSON.stringify({ error: "unexpected" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const callback = await handleProxyCallback({
+      apiResourceId,
+      state: transactionId!,
+      code: "linkedin-provider-code",
+      transactionCookie: proxyCookie?.value,
+      origin: "https://mockauth.test",
+    });
+
+    expect(callback.redirectTo).toContain("https://proxy-linkedin.test/callback");
+    const appRedirect = new URL(callback.redirectTo);
+    const appCode = appRedirect.searchParams.get("code");
+    expect(appCode).toBeTruthy();
+
+    const tokens = await completeProxyAuthorizationCodeGrant({
+      apiResourceId,
+      code: appCode!,
+      redirectUri: "https://proxy-linkedin.test/callback",
+      codeVerifier,
+      authMethod: "client_secret_post",
+      clientIdFromRequest: null,
+      clientSecret: localSecret,
+    });
+
+    expect(tokens).toMatchObject({
+      access_token: "linkedin-access-token",
+      refresh_token: "linkedin-refresh-token",
+      token_type: "Bearer",
+    });
+
+    const refreshed = await completeProxyRefreshGrant({
+      apiResourceId,
+      clientId: proxyClient.clientId,
+      refreshToken: "linkedin-refresh-token",
+      scope: "openid profile",
+      authMethod: "client_secret_post",
+      clientSecret: localSecret,
+    });
+
+    expect(refreshed).toMatchObject({
+      access_token: "linkedin-access-token-2",
+      refresh_token: "linkedin-refresh-token-2",
+      token_type: "Bearer",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(seenRequests).toHaveLength(2);
+    const [authorizationRequest, refreshRequest] = seenRequests;
+    expect(authorizationRequest.headers.authorization).toBeUndefined();
+    expect(refreshRequest.headers.authorization).toBeUndefined();
+    expect(authorizationRequest.params.get("client_secret")).toBe(upstreamSecret);
+    expect(refreshRequest.params.get("client_secret")).toBe(upstreamSecret);
+    expect(authorizationRequest.params.get("client_id")).toBe("linkedin-up-client");
+    expect(refreshRequest.params.get("client_id")).toBe("linkedin-up-client");
+
+    fetchMock.mockRestore();
+  });
+
   afterAll(async () => {
     await clearSession(tenantId, sessionToken);
     await Promise.all(

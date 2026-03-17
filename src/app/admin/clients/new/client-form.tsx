@@ -22,7 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { RHFSelectField } from "@/components/rhf/rhf-select-field";
+import { RHFSelectField, type RHFSelectOption } from "@/components/rhf/rhf-select-field";
+import { isLinkedInTokenEndpoint } from "@/lib/upstream-provider";
 
 const scopeMappingSchema = z.object({
   appScope: z.string().optional(),
@@ -324,6 +325,13 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
   } | null>(null);
 
   const watchMode = useWatch({ control: form.control, name: "mode" });
+  const watchTokenEndpoint = useWatch({ control: form.control, name: "proxyConfig.tokenEndpoint", defaultValue: "" });
+  const watchUpstreamAuthMethod = useWatch({
+    control: form.control,
+    name: "proxyConfig.upstreamTokenEndpointAuthMethod",
+    defaultValue: "client_secret_basic",
+  });
+  const isLinkedInEndpoint = isLinkedInTokenEndpoint(watchTokenEndpoint);
   const { getValues, setValue } = form;
 
   useEffect(() => {
@@ -365,6 +373,44 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       });
     }
   }, [watchMode, getValues, setValue]);
+
+  useEffect(() => {
+    if (watchMode !== "proxy") {
+      return;
+    }
+    if (!isLinkedInEndpoint) {
+      return;
+    }
+    if (watchUpstreamAuthMethod === "client_secret_post") {
+      return;
+    }
+    setValue("proxyConfig.upstreamTokenEndpointAuthMethod", "client_secret_post", {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  }, [isLinkedInEndpoint, watchMode, watchUpstreamAuthMethod, setValue]);
+
+  const tokenAuthOptions: RHFSelectOption<"client_secret_basic" | "client_secret_post" | "none">[] = [
+    {
+      value: "client_secret_basic",
+      label: "HTTP Basic (client_secret_basic)",
+      itemProps: { disabled: isLinkedInEndpoint },
+    },
+    {
+      value: "client_secret_post",
+      label: "POST body (client_secret_post)",
+    },
+    {
+      value: "none",
+      label: "Public client (none)",
+      itemProps: { disabled: isLinkedInEndpoint },
+    },
+  ];
+
+  const tokenAuthDescription = isLinkedInEndpoint
+    ? "LinkedIn requires client_secret_post. Other methods are disabled."
+    : "Determines how MockAuth authenticates to the upstream token endpoint.";
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -627,13 +673,9 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
               name="proxyConfig.upstreamTokenEndpointAuthMethod"
               label="Token endpoint auth"
               placeholder="Select auth method"
-              options={[
-                { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
-                { value: "client_secret_post", label: "POST body (client_secret_post)" },
-                { value: "none", label: "Public client (none)" },
-              ]}
+              options={tokenAuthOptions}
               disabled={pending}
-              description="Determines how MockAuth authenticates to the upstream token endpoint."
+              description={tokenAuthDescription}
             />
 
             <div className="grid gap-4 md:grid-cols-2">
