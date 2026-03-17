@@ -270,7 +270,7 @@ export default function Home() {
               <div className="relative z-10">
                 <h2 className="text-3xl font-semibold tracking-tight text-primary-foreground sm:text-4xl">Quick Start</h2>
                 <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
-                  Drop MockAuth into your stack and run the full OIDC suite locally or in CI with a single command.
+                  Drop MockAuth into your stack and run full OIDC flows locally or in CI with a single command.
                 </p>
                 <div className="mt-10 flex flex-wrap justify-center gap-4">
                   <a href="#quick-start" className={primaryHeroButtonClasses}>
