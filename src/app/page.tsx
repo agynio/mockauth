@@ -59,7 +59,7 @@ const excellenceItems: { title: string; description: ReactNode }[] = [
   {
     title: "Autonomous testing",
     description:
-      "Develop apps that require OIDC login while remaining completely independent from production identity providers.",
+      "Develop apps that require OIDC login without relying on production identity providers.",
   },
   {
     title: "Reliable authentication tests",
@@ -69,7 +69,7 @@ const excellenceItems: { title: string; description: ReactNode }[] = [
   {
     title: "Simulating authentication scenarios",
     description:
-      "Model different scopes, user identifiers, and claims without manual user provisioning.",
+      "Simulate scopes, identifiers, and claims without manual user provisioning.",
   },
 ];
 
