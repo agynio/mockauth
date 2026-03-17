@@ -110,9 +110,10 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-[1200px] px-6 py-24 sm:py-32 min-h-screen">
-            <div className="grid items-start gap-16 [grid-template-columns:1.1fr_0.9fr]">
+            <div aria-hidden className="pointer-events-none absolute right-6 top-24 h-[420px] w-[420px] rounded-full bg-brand-400/15 blur-3xl" />
+            <div className="grid items-start gap-12 [grid-template-columns:minmax(540px,_620px)_minmax(500px,_560px)]">
               {/* Left column */}
-              <div className="w-full max-w-[520px]">
+              <div className="w-full max-w-[620px]">
                 <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
                   <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
                     MockAuth
@@ -121,7 +122,7 @@ export default function Home() {
                 <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
   A mock OpenID Connect provider for QA and automated tests.
 </h2>
-                <h3 className="mt-4 text-xl leading-[1.7] text-foreground/90">
+                <h3 className="mt-5 max-w-[560px] text-xl leading-[1.7] text-foreground/90">
   Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server.
 </h3>
                                 <div className="mt-7 flex flex-wrap items-center gap-4">
@@ -140,7 +141,7 @@ export default function Home() {
               </div>
 
               {/* Right column */}
-              <div className="w-full max-w-[460px] self-start">
+              <div className="w-full max-w-[560px] self-start">
                 <TerminalEndpoints />
               </div>
 
