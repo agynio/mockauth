@@ -22,15 +22,19 @@ const frictionPoints = [
   },
 ];
 
-type CoreFeature = { title: string; description: string; icon: LucideIcon };
+type CoreFeature = { title: string; description: ReactNode; icon: LucideIcon };
 
 const coreFeatures: CoreFeature[] = [
-  { title: "OIDC Compliant", description: "Standard endpoints: discovery, authorize, token, userinfo, and JWKS.", icon: ShieldCheck },
+  { title: "OIDC Compliant", description: (<strong>Standard endpoints: discovery, authorize, token, userinfo, and JWKS.</strong>), icon: ShieldCheck },
   { title: "Auth Code + PKCE", description: "Implements industry-standard flows used by modern SPAs and mobile apps.", icon: KeyRound },
-  { title: "Redirect Validation", description: "Strict URI enforcement to mirror production security environments.", icon: LinkIcon },
+  { title: "Redirect Validation", description: "Strict redirect URI validation to mirror production security rules.", icon: LinkIcon },
   { title: "Admin Console", description: "Manage tenants, clients, and signing keys via a streamlined UI.", icon: ServerCog },
   { title: "Proxy Mode", description: "Forward authentication to real IdPs while preserving local validation rules.", icon: ArrowRightLeft },
-  { title: "Deterministic Auth", description: "Predictable tokens and scopes for stable, repeatable automated testing.", icon: Repeat },
+  { title: "Deterministic authentication", description: (
+    <>
+      Predictable tokens and scopes for stable automated tests.
+    </>
+  ), icon: Repeat },
 ];
 
 const deployableHighlights = [
