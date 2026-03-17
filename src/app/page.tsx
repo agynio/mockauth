@@ -124,10 +124,7 @@ export default function Home() {
                 <h3 className="mt-4 text-xl leading-[1.7] text-foreground/90">
   Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server.
 </h3>
-                <p className="mt-3 text-lg leading-[1.7] text-muted-foreground">
-                  Spin up deterministic auth environments for QA, local development, preview deployments, and CI pipelines.
-                </p>
-                <div className="mt-8 flex flex-wrap items-center gap-4">
+                                <div className="mt-8 flex flex-wrap items-center gap-4">
                   <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={cn(primaryHeroButtonClasses, "animate-pulse")}>
                     Get Started
                   </Link>
@@ -140,10 +137,6 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-              
-              <p className="mt-4 text-sm text-foreground/80">
-                Drop-in for standard OIDC clients: <span className="text-muted-foreground">NextAuth.js • openid-client • Spring Security • Authlib • Passport.js</span>
-              </p>
 
 </div>
 
