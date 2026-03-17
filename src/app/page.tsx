@@ -140,7 +140,7 @@ export default function Home() {
               </div>
 
               {/* Right column */}
-              <div className="w-full max-w-[460px]">
+              <div className="w-full max-w-[460px] self-start">
                 <TerminalEndpoints />
               </div>
 
