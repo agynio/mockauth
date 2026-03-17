@@ -177,7 +177,7 @@ export default function Home() {
             <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
               <div className="rounded-md border border-slate-700/60 bg-transparent px-3 py-2 text-sm text-foreground/90">
                 <div className="font-semibold text-foreground">Your App</div>
-                <div className="text-xs text-muted-foreground">SPA/mobile/web</div>
+                <div className="text-xs text-muted-foreground">web / mobile / SPA</div>
               </div>
               <ArrowRight aria-hidden className="h-5 w-5 text-slate-500" />
               <div className="rounded-md border border-slate-700/60 bg-transparent px-3 py-2 text-sm text-foreground/90">
@@ -186,8 +186,8 @@ export default function Home() {
               </div>
               <ArrowRight aria-hidden className="h-5 w-5 text-slate-500" />
               <div className="rounded-md border border-slate-700/60 bg-transparent px-3 py-2 text-sm text-foreground/90">
-                <div className="font-semibold text-foreground">Backend/API</div>
-                <div className="text-xs text-muted-foreground">session/claims/validation</div>
+                <div className="font-semibold text-foreground">Backend / API</div>
+                <div className="text-xs text-muted-foreground">token validation & sessions</div>
               </div>
             </div>
           </div>
