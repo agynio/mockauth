@@ -153,6 +153,11 @@ export default function Home() {
 <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Why MockAuth</h2>
+            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+              Testing authentication flows with real identity providers is slow, fragile, and difficult to automate.
+              <br />
+              MockAuth gives you a predictable OIDC provider designed for QA.
+            </p>
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
               {frictionPoints.map((point) => (
               <div
