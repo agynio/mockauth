@@ -105,8 +105,8 @@ export default function Home() {
         </div>
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
-          <div className="relative w-full px-6 py-24 sm:py-32 min-h-screen flex items-center">
-            <div className="relative z-10 w-full">
+          <div className="relative mx-auto max-w-6xl px-6 py-24 sm:py-32 min-h-screen flex items-center">
+            <div className="relative z-10 w-full max-w-3xl">
               {/* Left column */}
               <div className="w-full">
                 <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
