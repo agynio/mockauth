@@ -106,21 +106,21 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 w-full">
+            <div className="relative z-10 w-full max-w-3xl">
               {/* Left column */}
               <div className="w-full">
-                <h1 className="mt-0 text-6xl font-bold tracking-tight sm:text-7xl">
+                <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
                   <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
                     MockAuth
                   </span>
                 </h1>
-                <p className="mt-3 text-base text-primary-foreground/85">
-                  Mock OpenID Connect provider for testing and development
-                </p>
-                <p className="mt-4 text-lg leading-[1.8] text-primary-foreground/85">
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+    Mock OpenID Connect provider for testing and development
+  </h2>
+                <h3 className="mt-4 text-xl leading-[1.7] text-foreground/90">
                   Run realistic OIDC authentication flows — discovery, JWKS, and Authorization Code + PKCE — without running a full identity provider.
-                </p>
-                <p className="mt-3 text-lg leading-[1.8] text-primary-foreground/85">
+                </h3>
+                <p className="mt-3 text-lg leading-[1.7] text-muted-foreground">
                   Spin up deterministic auth environments for QA, local development, preview deployments, and CI pipelines.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-4">
