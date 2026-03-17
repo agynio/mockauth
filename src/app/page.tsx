@@ -111,7 +111,7 @@ export default function Home() {
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-[1200px] px-6 py-24 sm:py-32 min-h-screen">
             <div aria-hidden className="pointer-events-none absolute right-6 top-24 h-[420px] w-[420px] rounded-full bg-brand-400/15 blur-3xl" />
-            <div className="items-start">
+            <div >
               {/* Left column */}
               <div className="w-full max-w-[620px]">
                 <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
