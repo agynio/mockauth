@@ -47,12 +47,12 @@ export default function TerminalEndpoints() {
       </div>
 
       {/* Body */}
-      <div className="p-6">
-        <ul className="space-y-5">
+      <div className="p-5">
+        <ul className="space-y-2.5">
           {endpoints.map((e) => (
             <li key={e.label} className="group relative">
-              <div className="text-xs font-semibold text-cyan-300">{e.label}</div>
-              <div className="mt-1 rounded-md bg-[#1e293b] px-3 py-2">
+              <div className="text-[13px] font-semibold uppercase tracking-wider text-foreground/70">{e.label}</div>
+              <div className="mt-1 rounded-md bg-[#1e293b] px-3 py-3">
                 <code className="block overflow-x-auto whitespace-pre font-mono text-sm text-foreground/90">
                 {e.url}
               </code>

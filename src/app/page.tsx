@@ -109,22 +109,22 @@ export default function Home() {
         </div>
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
-          <div className="relative mx-auto max-w-6xl px-6 py-24 sm:py-32 min-h-screen flex items-center">
-            <div className="relative z-10 w-full max-w-3xl">
+          <div className="relative mx-auto max-w-[1200px] px-6 py-24 sm:py-32 min-h-screen">
+            <div className="grid items-start gap-16 [grid-template-columns:1.1fr_0.9fr]">
               {/* Left column */}
-              <div className="w-full">
+              <div className="w-full max-w-[520px]">
                 <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
                   <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
                     MockAuth
                   </span>
                 </h1>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
   A mock OpenID Connect provider for QA and automated tests.
 </h2>
                 <h3 className="mt-4 text-xl leading-[1.7] text-foreground/90">
   Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server.
 </h3>
-                                <div className="mt-8 flex flex-wrap items-center gap-4">
+                                <div className="mt-7 flex flex-wrap items-center gap-4">
                   <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={cn(primaryHeroButtonClasses, "animate-pulse")}>
                     Get Started
                   </Link>
@@ -137,14 +137,14 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
+              </div>
 
-</div>
-
-              <div className="mt-10">
+              {/* Right column */}
+              <div className="w-full max-w-[460px]">
                 <TerminalEndpoints />
               </div>
 
-              </div>
+            </div>
           </div>
         </section>
 <section>
