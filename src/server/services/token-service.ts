@@ -130,6 +130,7 @@ export const issueTokensFromCode = async (params: {
     tenantId: code.tenantId,
     clientId: code.clientId,
     traceId,
+    severity: "ERROR" as const,
     authMethod,
     clientSecretInBody: auditContext?.clientSecretInBody,
     requestContext: auditContext?.requestContext ?? null,

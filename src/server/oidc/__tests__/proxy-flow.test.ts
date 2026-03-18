@@ -235,6 +235,105 @@ describe("Proxy client OAuth flow", () => {
     fetchMock.mockRestore();
   });
 
+  it("records an ERROR audit entry when the proxy callback exchange fails", async () => {
+    const codeVerifier = "verifier-error-callback-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const codeChallenge = computeS256Challenge(codeVerifier);
+
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: proxyClientClientId,
+        redirectUri: "https://proxy-client.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        state: "app-state-error",
+        codeChallenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${proxyClientClientId}`,
+    );
+
+    const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
+    const providerAuthorizeUrl = new URL(authorize.redirectTo);
+    const transactionId = providerAuthorizeUrl.searchParams.get("state");
+    expect(proxyCookie?.value).toBeDefined();
+    expect(transactionId).toBe(proxyCookie?.value);
+
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "invalid_grant", error_description: "Bad code" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const callback = await handleProxyCallback({
+      apiResourceId,
+      state: transactionId!,
+      code: "provider-bad-code",
+      transactionCookie: proxyCookie?.value,
+      origin: "https://mockauth.test",
+    });
+
+    expect(callback.redirectTo).toContain("error=invalid_grant");
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: { tenantId, traceId: transactionId ?? undefined, eventType: "PROXY_CALLBACK_ERROR" },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(auditLog).not.toBeNull();
+    expect(auditLog).toMatchObject({
+      severity: "ERROR",
+      clientId: proxyClientId,
+      traceId: transactionId,
+      eventType: "PROXY_CALLBACK_ERROR",
+    });
+
+    fetchMock.mockRestore();
+  });
+
+  it("records an ERROR audit entry when proxy refresh fails upstream", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "invalid_grant", error_description: "Refresh rejected" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      completeProxyRefreshGrant({
+        apiResourceId,
+        clientId: proxyClientClientId,
+        refreshToken: "bad-refresh-token",
+        scope: "openid profile",
+        authMethod: "none",
+        clientSecret: null,
+      }),
+    ).rejects.toMatchObject({ options: { code: "invalid_grant" } });
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        clientId: proxyClientId,
+        eventType: "PROXY_CALLBACK_ERROR",
+        message: "Proxy provider refresh failed",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(auditLog).not.toBeNull();
+    expect(auditLog).toMatchObject({
+      severity: "ERROR",
+      clientId: proxyClientId,
+      traceId: null,
+      eventType: "PROXY_CALLBACK_ERROR",
+    });
+
+    fetchMock.mockRestore();
+  });
+
   it("brokers flows when the upstream provider requires client_secret_post", async () => {
     const localSecret = "local-post-secret";
     const upstreamSecret = "upstream-post-secret";

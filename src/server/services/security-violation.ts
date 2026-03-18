@@ -1,12 +1,14 @@
 import { DomainError } from "@/server/errors";
 import { recordSecurityViolation } from "@/server/services/audit-service";
 import type { RequestContext } from "@/server/utils/request-context";
+import type { AuditLogSeverity } from "@/lib/audit-log";
 import type { SecurityViolationDetails, SecurityViolationReason, TokenAuthMethod } from "@/server/services/audit-event";
 
 export type SecurityViolationContext = {
   tenantId: string;
   clientId?: string | null;
   traceId?: string | null;
+  severity?: AuditLogSeverity;
   authMethod?: TokenAuthMethod | null;
   clientSecretInBody?: boolean | null;
   requestContext?: RequestContext | null;

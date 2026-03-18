@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/server/db/client";
+import type { AuditLogSeverity } from "@/lib/audit-log";
 import type { RequestContext } from "@/server/utils/request-context";
 import {
   buildSecurityViolationDetails,
@@ -15,6 +16,7 @@ type SecurityViolationInput = {
   clientId?: string | null;
   traceId?: string | null;
   reason: SecurityViolationReason;
+  severity?: AuditLogSeverity;
   authMethod?: TokenAuthMethod | null;
   clientSecretInBody?: boolean | null;
   expectedAuthMethod?: TokenAuthMethod | null;
@@ -78,7 +80,7 @@ export const recordSecurityViolation = async (input: SecurityViolationInput) => 
     traceId: input.traceId ?? null,
     actorId: null,
     eventType: "SECURITY_VIOLATION",
-    severity: "WARN",
+    severity: input.severity ?? "WARN",
     message,
     details: buildSecurityViolationDetails({
       reason: input.reason,

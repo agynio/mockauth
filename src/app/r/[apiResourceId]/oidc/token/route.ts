@@ -95,12 +95,13 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         tenantId: codeRecord.tenantId,
         clientId: codeRecord.clientId,
         traceId: codeRecord.traceId ?? null,
+        severity: "ERROR" as const,
         authMethod,
         clientSecretInBody,
         requestContext,
       });
       if (codeRecord.apiResourceId !== apiResourceId) {
-        void reportViolation("issuer_mismatch", {
+        await reportViolation("issuer_mismatch", {
           expectedApiResourceId: codeRecord.apiResourceId,
           receivedApiResourceId: apiResourceId,
         });
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       }
 
       if (clientId && codeRecord.client.clientId !== clientId) {
-        void reportViolation("client_mismatch", {
+        await reportViolation("client_mismatch", {
           expectedClientId: codeRecord.client.clientId,
           receivedClientId: clientId,
         });
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       }
 
       if (codeRecord.client.tokenEndpointAuthMethod !== authMethod) {
-        void reportViolation("auth_method_mismatch", {
+        await reportViolation("auth_method_mismatch", {
           expectedAuthMethod: codeRecord.client.tokenEndpointAuthMethod,
           receivedAuthMethod: authMethod,
         });
