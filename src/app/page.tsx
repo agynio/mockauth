@@ -133,7 +133,7 @@ export default function Home() {
                     href="https://github.com/agynio/mockauth"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={secondaryHeroLinkClasses}
+                    className={cn(secondaryHeroLinkClasses, "px-7 py-3.5 text-base")}
                   >
                     View on GitHub
                   </a>
@@ -156,7 +156,7 @@ export default function Home() {
     return (
       <div key={feature.title} className="flex flex-col text-left">
         <Icon aria-hidden className="h-6 w-6 text-brand-400" />
-        <h3 className="mt-4 text-lg font-semibold text-foreground">{feature.title}</h3>
+        <h3 className="mt-3 text-lg font-semibold tracking-tight text-foreground">{feature.title}</h3>
         <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
       </div>
     );
@@ -176,7 +176,7 @@ export default function Home() {
                   className="rounded-2xl border border-border/60 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
                 >
                   <h3 className="text-xl font-semibold text-foreground">{item.title}</h3>
-                  <p className="mt-4 text-base text-muted-foreground">{item.description}</p>
+                  <p className="mt-4 text-base text-foreground/75">{item.description}</p>
                 </div>
               ))}
             </div>
@@ -186,10 +186,10 @@ export default function Home() {
         <section>
           <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
-            <ol className="mt-10 space-y-6 sm:pl-4">
+            <ol className="mt-10 space-y-8 sm:pl-4">
               {excellenceItems.map((item, index) => (
                 <li key={item.title} className="flex gap-4">
-                  <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-base font-semibold text-brand-400">
+                  <span className="mt-[6px] inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-semibold text-brand-400 ring-1 ring-brand-400/30 shadow-[0_0_24px_rgba(56,189,248,0.25)]">
                     {index + 1}
                   </span>
                   <p className="leading-relaxed text-base text-muted-foreground">
@@ -202,7 +202,7 @@ export default function Home() {
         </section>        <section id="quick-start">
           <div className="mx-auto max-w-6xl px-6 py-20">
             <div
-              className="relative overflow-hidden rounded-3xl border border-border p-12 text-center shadow-2xl"
+              className="relative overflow-hidden rounded-3xl border border-border px-12 py-10 text-center shadow-2xl"
               style={{
                 backgroundImage:
                   "linear-gradient(var(--gradient-cta-angle), var(--gradient-cta-start) 0%, var(--gradient-cta-mid) 55%, var(--gradient-cta-end) 100%)",
@@ -218,11 +218,11 @@ export default function Home() {
               />
               <div className="relative z-10">
                 <h2 className="text-3xl font-semibold tracking-tight text-primary-foreground sm:text-4xl">Quick Start</h2>
-                <p className="mt-4 text-lg leading-relaxed text-primary-foreground/85">
+                <p className="mt-4 text-lg leading-relaxed text-primary-foreground/90">
                   Drop MockAuth into your stack and run full OIDC flows locally or in CI with a single command.
                 </p>
                 <div className="mt-10 flex flex-wrap justify-center gap-4">
-                  <a href="#quick-start" className={primaryHeroButtonClasses}>
+                  <a href="#quick-start" className={cn(primaryHeroButtonClasses, "px-7 py-3.5 text-base")}>
                     Get Started
                   </a>
                   <a
@@ -242,11 +242,11 @@ export default function Home() {
         <section>
           <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">FAQ</h2>
-            <dl className="mt-10 space-y-6">
+            <dl className="mt-10 space-y-8">
               {faqItems.map((item) => (
                 <div key={item.q}>
                   <dt className="text-base font-semibold text-foreground">{item.q}</dt>
-                  <dd className="mt-2 text-base leading-relaxed text-muted-foreground">{item.a}</dd>
+                  <dd className="mt-2 text-base leading-relaxed text-foreground/75">{item.a}</dd>
                 </div>
               ))}
             </dl>
