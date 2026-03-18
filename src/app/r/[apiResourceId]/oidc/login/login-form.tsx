@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import type { EmailVerifiedMode } from "@/server/oidc/auth-strategy";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 type StrategyOption = {
   key: "username" | "email";
@@ -29,30 +31,30 @@ export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProp
     const inputType = option.key === "email" ? "email" : "text";
     return (
       <div key={option.key} className="space-y-4">
-        <label className="space-y-2 block text-sm">
-          <span className="text-slate-200 flex items-center justify-between">
+        <label className="block space-y-2 text-sm text-foreground">
+          <span className="flex items-center justify-between">
             {option.title}
-            <span className="text-[0.7rem] uppercase text-slate-400">
+            <span className="text-[0.7rem] uppercase text-muted-foreground">
               {option.subSource === "entered" ? "Sub: entered" : "Sub: uuid"}
             </span>
           </span>
-          <p className="text-xs text-slate-400">{option.description}</p>
-          <input
+          <p className="text-xs text-muted-foreground">{option.description}</p>
+          <Input
             type={inputType}
             name={inputName}
             required={isActive}
             disabled={!isActive}
             autoComplete="off"
-            className="w-full rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-70"
+            className="h-11 text-base"
             placeholder={option.placeholder}
             data-testid={`login-${option.key}-input`}
           />
         </label>
         {option.key === "email" && option.emailVerifiedMode === "user_choice" ? (
           <fieldset className="space-y-2" disabled={!isActive}>
-            <legend className="text-xs font-semibold uppercase text-slate-400">Email verified flag</legend>
+            <legend className="text-xs font-semibold uppercase text-muted-foreground">Email verified flag</legend>
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="flex items-center gap-2 text-xs text-slate-200">
+              <label className="flex items-center gap-2 text-xs text-foreground">
                 <input
                   type="radio"
                   name="email_verified_preference"
@@ -60,11 +62,11 @@ export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProp
                   checked={emailVerifiedPreference === "true"}
                   onChange={() => setEmailVerifiedPreference("true")}
                   disabled={!isActive}
-                  className="h-4 w-4"
+                  className="h-4 w-4 rounded-full border border-border text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 />
                 Verified
               </label>
-              <label className="flex items-center gap-2 text-xs text-slate-200">
+              <label className="flex items-center gap-2 text-xs text-foreground">
                 <input
                   type="radio"
                   name="email_verified_preference"
@@ -72,12 +74,14 @@ export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProp
                   checked={emailVerifiedPreference === "false"}
                   onChange={() => setEmailVerifiedPreference("false")}
                   disabled={!isActive}
-                  className="h-4 w-4"
+                  className="h-4 w-4 rounded-full border border-border text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 />
                 Unverified
               </label>
             </div>
-            <p className="text-[0.7rem] text-slate-400">Choose how the email_verified claim should appear for this login.</p>
+            <p className="text-[0.7rem] text-muted-foreground">
+              Choose how the email_verified claim should appear for this login.
+            </p>
           </fieldset>
         ) : null}
       </div>
@@ -96,7 +100,11 @@ export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProp
         >
           <TabsList className="grid w-full grid-cols-2" data-testid="login-strategy-tabs">
             {strategies.map((option) => (
-              <TabsTrigger key={option.key} value={option.key} className="data-[state=active]:bg-amber-50 data-[state=active]:text-slate-900">
+              <TabsTrigger
+                key={option.key}
+                value={option.key}
+                className="data-[state=active]:bg-surface-2 data-[state=active]:text-foreground data-[state=active]:shadow data-[state=active]:ring-1 data-[state=active]:ring-brand-500/20"
+              >
                 {option.title}
               </TabsTrigger>
             ))}
@@ -111,12 +119,9 @@ export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProp
         renderStrategyFields(strategies[0]!, true)
       )}
 
-      <button
-        type="submit"
-        className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-slate-950 hover:bg-amber-300"
-      >
+      <Button type="submit" size="lg" className="w-full text-base">
         Continue
-      </button>
+      </Button>
     </form>
   );
 }

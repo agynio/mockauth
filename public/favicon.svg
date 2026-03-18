@@ -1,0 +1,7 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MockAuth icon" color="#7C3AED">
+  <rect width="64" height="64" rx="16" fill="currentColor" />
+  <path
+    d="M16 46V18h9.2l6.8 11.4L38.8 18H48v28h-7v-14l-7.2 10.6h-5.6L21 32v14h-5z"
+    fill="#FFFFFF"
+  />
+</svg>

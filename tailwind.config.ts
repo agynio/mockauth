@@ -24,6 +24,20 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        surface: {
+          0: "hsl(var(--surface-0))",
+          1: "hsl(var(--surface-1))",
+          2: "hsl(var(--surface-2))",
+          3: "hsl(var(--surface-3))",
+        },
+        overlay: "hsl(var(--overlay) / <alpha-value>)",
+        brand: {
+          400: "hsl(var(--brand-400))",
+          500: "hsl(var(--brand-500))",
+          600: "hsl(var(--brand-600))",
+          700: "hsl(var(--brand-700))",
+          800: "hsl(var(--brand-800))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -43,6 +57,9 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          400: "hsl(var(--accent-400))",
+          500: "hsl(var(--accent-500))",
+          600: "hsl(var(--accent-600))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -51,6 +68,18 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        success: {
+          500: "hsl(var(--success-500))",
+          700: "hsl(var(--success-700))",
+        },
+        warning: {
+          500: "hsl(var(--warning-500))",
+          700: "hsl(var(--warning-700))",
+        },
+        error: {
+          500: "hsl(var(--error-500))",
+          700: "hsl(var(--error-700))",
         },
       },
       borderRadius: {
@@ -61,6 +90,13 @@ export default {
       fontFamily: {
         sans: ["var(--font-geist-sans)", ...fontFamily.sans],
         mono: ["var(--font-geist-mono)", ...fontFamily.mono],
+      },
+      backgroundImage: {
+        "hero-gradient": "var(--gradient-hero)",
+        "hero-gradient-bloom": "var(--gradient-hero-bloom-1)",
+        "hero-gradient-bloom-alt": "var(--gradient-hero-bloom-2)",
+        "cta-gradient": "var(--gradient-cta)",
+        "cta-highlight": "var(--gradient-cta-highlight)",
       },
       keyframes: {
         "accordion-down": {

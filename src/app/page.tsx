@@ -1,292 +1,232 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import TerminalEndpoints from "@/components/TerminalEndpoints";
+import type { LucideIcon } from "lucide-react";
+import { ShieldCheck, KeyRound, Link as LinkIcon, ServerCog, ArrowRightLeft, Repeat } from "lucide-react";
+
+import { buttonVariants } from "@/components/ui/button-variants";
+import { cn } from "@/lib/utils";
 
 const frictionPoints = [
   {
-    title: "Decouple from External Dependencies",
-    description:
-      "Stop wrestling with third-party rate limits, latency, or unpredictable service outages during CI/CD. Maintain complete operational independence by running your identity layer as a local, containerized service.",
+    title: "No dependency on external identity providers",
+    description: "Run authentication locally without relying on third-party providers, rate limits, or outages.",
   },
   {
-    title: "On-Demand Environment Provisioning",
-    description:
-      "Achieve a clean state for every test run. Spin up isolated, pristine instances in seconds to ensure your E2E environment is perfectly synchronized with your application’s state and test data.",
+    title: "Spin up auth environments instantly",
+    description: "Start a clean OIDC provider in seconds for CI runs, preview environments, or local development.",
   },
   {
-    title: "Guarantee Deterministic Test Cycles",
-    description:
-      "Eliminate the \"flakiness\" inherent in shared staging environments. Ensure your authentication logic is verified against a stable, version-controlled provider that responds with 100% consistency, every single time.",
+    title: "Deterministic authentication flows",
+    description: "Ensure tests behave the same every time with predictable tokens, redirects, and scopes.",
   },
 ];
 
-const productionFeatures = [
-  {
-    title: "OIDC Compliant",
-    description:
-      "Standard endpoints (discovery, authorize, token, userinfo, JWKS) ensure your application interacts with it exactly as it would with a live identity provider.",
-  },
-  {
-    title: "Secure Auth Flow",
-    description:
-      "Supports Authorization Code + PKCE—the industry standard for modern web and mobile apps.",
-  },
-  {
-    title: "Redirect Safety",
-    description:
-      "Enforces strict control over allowed redirect URLs, providing the security verification your app expects.",
-  },
-];
+type CoreFeature = { title: string; description: ReactNode; icon: LucideIcon };
 
-const developerFeatures = [
-  {
-    title: "Admin Console",
-    description:
-      "Manage tenants, clients, and RSA signing keys via a built-in UI (secured by Logto).",
-  },
-  {
-    title: "Multi-Tenant by Design",
-    description:
-      "Separate namespaces ensure your app-specific configurations never clash across teams or environments.",
-  },
-  {
-    title: "Proxy Mode",
-    description:
-      "Seamlessly broker OAuth/OIDC requests to an upstream IdP when you need to bridge to production services.",
-  },
+const coreFeatures: CoreFeature[] = [
+  { title: "OIDC Compliant", description: (<strong>Standard endpoints: discovery, authorize, token, userinfo, and JWKS.</strong>), icon: ShieldCheck },
+  { title: "Auth Code + PKCE", description: "Implements industry-standard flows used by modern SPAs and mobile apps.", icon: KeyRound },
+  { title: "Redirect Validation", description: "Strict redirect URI validation to mirror production security rules.", icon: LinkIcon },
+  { title: "Admin Console", description: "Manage tenants, clients, and signing keys via a streamlined UI.", icon: ServerCog },
+  { title: "Proxy Mode", description: "Forward authentication to real IdPs while preserving local validation rules.", icon: ArrowRightLeft },
+  { title: "Deterministic authentication", description: (
+    <>
+      Predictable tokens and scopes for stable automated tests.
+    </>
+  ), icon: Repeat },
 ];
 
 const deployableHighlights = [
   {
-    title: "Built for the Stack",
-    description: "Next.js + Node + Postgres.",
-  },
-  {
-    title: "CI-Ready",
+    title: "Works in CI pipelines",
     description:
-      "Includes unit, integration, and E2E tests (Playwright/Vitest) out of the box.",
+      "Run automated tests with full OIDC flows and predictable authentication.",
   },
   {
-    title: "Vercel-Optimized",
-    description: "Designed for rapid deployment in ephemeral environments.",
+    title: "Perfect for preview environments",
+    description:
+      "Spin up authentication for every deployment without provisioning identity tenants.",
+  },
+  {
+    title: "Simple local development",
+    description:
+      "Run MockAuth locally and test OAuth/OIDC integrations before production.",
   },
 ];
 
 const excellenceItems: { title: string; description: ReactNode }[] = [
   {
-    title: "Autonomous Testing",
+    title: "Autonomous testing",
     description:
-      "You’re developing apps that require OIDC login but need to remain completely decoupled from production identity providers.",
+      "Develop apps that require OIDC login without relying on production identity providers.",
   },
   {
-    title: "Reliability Engineering",
+    title: "Reliable authentication tests",
     description:
-      "You require consistent token validation and redirect behavior that remains stable regardless of external provider updates.",
+      "Ensure token validation and redirect behavior remain stable regardless of upstream provider changes.",
   },
   {
-    title: "Rapid Simulation",
-    description: (
-      <>
-        You need to instantly model various authentication scenarios—such as specific scopes or{" "}
-        <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs text-slate-800">email_verified</code>{" "}
-        states—without the overhead of manual user provisioning.
-      </>
-    ),
+    title: "Simulating authentication scenarios",
+    description:
+      "Simulate scopes, identifiers, and claims without manual user provisioning.",
   },
 ];
 
-const primaryHeroButtonClasses =
-  "inline-flex items-center justify-center rounded-full bg-white px-8 py-4 text-base font-semibold text-indigo-700 shadow-lg shadow-indigo-950/40 transition hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+const faqItems: { q: string; a: string }[] = [
+  { q: "Is MockAuth a production identity provider?", a: "No. It is designed for development, QA, and automated testing environments." },
+  { q: "Is it OIDC compliant?", a: "Yes. MockAuth exposes standard OIDC endpoints including discovery, JWKS, and Authorization Code + PKCE." },
+  { q: "Can it proxy to a real identity provider?", a: "Yes. Proxy mode allows MockAuth to forward requests to an upstream OIDC provider." },
+  { q: "Does it validate redirect URIs?", a: "Yes. Redirect URIs are validated with strict matching by default." },
+];
+const primaryHeroButtonClasses = cn(
+  buttonVariants({ size: "lg" }),
+  "bg-cta-gradient text-primary-foreground shadow-xl transition hover:brightness-110 focus-visible:ring-brand-400",
+);
 
-const secondaryHeroLinkClasses =
-  "inline-flex items-center justify-center rounded-full border border-white/70 bg-white/10 px-8 py-4 text-base font-semibold text-white/90 shadow-lg shadow-indigo-950/20 transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+const secondaryHeroLinkClasses = cn(
+  buttonVariants({ variant: "outline", size: "lg" }),
+  "border-border-strong/80 bg-surface-0/10 text-foreground/90 backdrop-blur-sm transition hover:border-brand-400/60 hover:bg-surface-0/20",
+);
 
 export default function Home() {
-  const currentYear = new Date().getFullYear();
-
-  return (
-    <div className="flex min-h-screen flex-col bg-slate-950">
+  const currentYear = new Date().getFullYear();  return (
+    <>
+      <div className="landing-glow" aria-hidden>
+        <div className="landing-glow__layer" data-layer="1" />
+        <div className="landing-glow__layer" data-layer="2" />
+        <div className="landing-glow__layer" data-layer="3" />
+      </div>
+      <div className="relative z-10 flex min-h-screen flex-col text-foreground">
       <header className="absolute inset-x-0 top-0 z-20">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-start px-6 py-6">
           <Link
             href="/"
-            className="text-lg font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="text-lg font-semibold text-primary-foreground transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             MockAuth
           </Link>
-          <a
-            href="https://github.com/agynio/mockauth"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-semibold text-white/90 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          >
-            GitHub
-          </a>
         </div>
-      </header>
-
-      <main className="flex-1">
-        <section className="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 text-white">
-          <div className="absolute inset-0">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -top-32 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-violet-400/40 blur-3xl"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute bottom-[-6rem] right-[-4rem] h-96 w-96 rounded-full bg-indigo-500/30 blur-3xl"
-            />
-          </div>
-          <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-32 sm:pb-32 sm:pt-40">
-            <div className="relative z-10 max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-100/80">
-                Ephemeral identity test rig
-              </p>
-              <h1 className="mt-6 text-6xl font-bold tracking-tight sm:text-7xl">
-                <span className="bg-gradient-to-r from-white via-violet-100 to-white bg-clip-text text-transparent">MockAuth</span>
-              </h1>
-              <p className="mt-6 text-lg leading-relaxed text-indigo-100/90">
-                Frictionless, production-realistic OIDC flows tailored for local development and CI pipelines. Launch a
-                deterministic provider in seconds and validate every redirect, token, and scope with confidence.
-              </p>
-              <div className="mt-12 flex flex-wrap items-center gap-4">
-                <a href="#quick-start" className={primaryHeroButtonClasses}>
-                  Get Started
-                </a>
-                <a
-                  href="https://github.com/agynio/mockauth"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={secondaryHeroLinkClasses}
-                >
-                  View on GitHub
-                </a>
-              </div>
-              <div className="mt-5">
-                <Link
-                  data-testid="landing-sign-in-link"
-                  href="/api/auth/signin/logto?callbackUrl=/admin"
-                  className="text-sm font-semibold text-indigo-100 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  Sign in
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">The Auth Testing Standard</h2>
-            <blockquote className="mt-10 rounded-3xl border border-indigo-200 bg-slate-50 p-10 text-lg leading-8 text-slate-700 shadow-md shadow-indigo-100">
-              <span className="block border-l-8 border-indigo-400 pl-8 italic">
-                A purpose-built, standards-compliant OIDC identity provider designed for testing. It simulates the behavior of a
-                production authentication server, allowing you to validate sign-ins, token handling, and redirect logic in
-                isolated environments without relying on real user accounts or external services. It is optimized for QA, local
-                development, and ephemeral CI pipelines where you need reliable, repeatable, and clean auth states.
-              </span>
-            </blockquote>
-          </div>
-        </section>
-
-        <section className="bg-slate-900 text-white">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Eliminate Auth Friction</h2>
-            <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {frictionPoints.map((point) => (
-                <div
-                  key={point.title}
-                  className="flex flex-col gap-3 rounded-2xl border border-indigo-300/60 bg-white/5 p-8 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-300/40"
-                >
-                  <h3 className="text-xl font-semibold text-white">{point.title}</h3>
-                  <p className="text-base text-indigo-100/90">{point.description}</p>
+      </header>      <main className="relative z-10 flex-1">
+        <section className="relative text-primary-foreground">
+          <div className="relative mx-auto max-w-[1200px] px-6 py-24 sm:py-32 min-h-screen">
+            <div aria-hidden className="pointer-events-none absolute right-[12%] top-24 h-[420px] w-[420px] rounded-full bg-brand-400/15 blur-3xl" />
+            <div >
+              {/* Left column */}
+              <div className="w-full max-w-[1000px]">
+                <h1 className="mt-0 text-5xl font-bold tracking-tight leading-[0.95] sm:text-7xl">
+                  <span className="bg-gradient-to-r from-primary-foreground via-brand-400 to-primary-foreground bg-clip-text text-transparent">
+                    MockAuth
+                  </span>
+                </h1>
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-3xl">
+  A mock OpenID Connect provider for QA and automated tests.
+</h2>
+                <h3 className="mt-5 text-xl leading-[1.7] text-foreground/90">
+  <span>Simulate real OIDC authentication — tokens, redirects, and scopes</span>
+  <span className="block">without running a production identity server.</span>
+</h3>
+                                <div className="mt-7 flex flex-wrap items-center gap-4">
+                  <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={cn(primaryHeroButtonClasses, "animate-pulse")}>
+                    Get Started
+                  </Link>
+                  <a
+                    href="https://github.com/agynio/mockauth"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(secondaryHeroLinkClasses, "px-7 py-3.5 text-base")}
+                  >
+                    View on GitHub
+                  </a>
                 </div>
-              ))}
+                <div className="mt-8 w-full max-w-[640px]">
+                  <TerminalEndpoints />
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
-
-        <section className="bg-slate-100">
-          <div className="mx-auto max-w-6xl space-y-20 px-6 py-20">
+        <section>
+          <div className="mx-auto max-w-6xl px-6 py-16">
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Key Features — Production-Grade Standards</h2>
-              <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {productionFeatures.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="rounded-2xl border border-indigo-200 bg-white p-8 shadow-md shadow-indigo-200/40 ring-1 ring-indigo-200/60"
-                  >
-                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-slate-700">{feature.description}</p>
-                  </div>
-                ))}
-              </div>
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Core Features</h2>
+              <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-3">
+  {coreFeatures.map((feature) => {
+    const Icon = feature.icon;
+    return (
+      <div key={feature.title} className="group flex flex-col text-left transition-transform hover:-translate-y-0.5">
+        <Icon aria-hidden className="h-7 w-7 text-brand-400" />
+        <h3 className="mt-3 text-lg font-semibold tracking-tight text-foreground">{feature.title}</h3>
+        <p className="mt-2 text-base text-muted-foreground">{feature.description}</p>
+      </div>
+    );
+  })}
+</div>
             </div>
-            <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Key Features — Developer Experience</h2>
-              <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-                {developerFeatures.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="rounded-2xl border border-indigo-200 bg-white p-8 shadow-md shadow-indigo-200/40 ring-1 ring-indigo-200/60"
-                  >
-                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
-                    <p className="mt-4 text-base leading-relaxed text-slate-700">{feature.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+</div>
+</section>
 
-        <section className="bg-slate-900 text-white">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Deployable Anywhere</h2>
-            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <section>
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Designed for real development workflows</h2>
+            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {deployableHighlights.map((item) => (
                 <div
                   key={item.title}
-                  className="rounded-2xl border border-indigo-300/60 bg-white/5 p-8 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-300/40"
+                  className="rounded-2xl border border-border/50 bg-surface-2/95 p-8 shadow-lg ring-1 ring-brand-500/15 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-500/10"
                 >
-                  <h3 className="text-xl font-semibold text-white">{item.title}</h3>
-                  <p className="mt-4 text-base text-indigo-100/90">{item.description}</p>
+                  <h3 className="text-xl font-semibold text-foreground">{item.title}</h3>
+                  <p className="mt-4 text-base text-foreground/70">{item.description}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="bg-white">
-          <div className="mx-auto max-w-6xl px-6 py-20">
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Where MockAuth Excels</h2>
-            <ol className="mt-12 space-y-6 sm:pl-4">
+        <section>
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
+            <div className="relative">
+              <span aria-hidden className="pointer-events-none absolute left-6 top-0 bottom-0 w-px bg-border/35" />
+              <ol className="mt-10 space-y-7 sm:pl-4">
               {excellenceItems.map((item, index) => (
-                <li key={item.title} className="flex gap-4">
-                  <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-base font-semibold text-indigo-700">
+                <li key={item.title} className="flex items-center gap-4">
+                  <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-semibold text-brand-400 ring-1 ring-brand-400/30 shadow-[0_0_24px_rgba(56,189,248,0.25)]">
                     {index + 1}
                   </span>
-                  <p className="leading-relaxed text-base text-slate-700">
-                    <span className="font-semibold text-slate-900">{item.title}:</span> {item.description}
+                  <p className="leading-relaxed text-base text-muted-foreground">
+                    <span className="font-semibold text-foreground">{item.title}:</span> {item.description}
                   </p>
                 </li>
               ))}
             </ol>
-          </div>
-        </section>
-
-        <section className="bg-slate-100" id="quick-start">
-          <div className="mx-auto max-w-6xl px-6 py-24">
-            <div className="relative overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 p-12 text-center shadow-2xl shadow-indigo-300/50">
+              </div>
+            </div>
+        </section>        <section id="quick-start">
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <div
+              className="relative overflow-hidden rounded-3xl border border-border px-12 py-9 text-center shadow-2xl"
+              style={{
+                backgroundImage:
+                  "linear-gradient(var(--gradient-cta-angle), var(--gradient-cta-start) 0%, var(--gradient-cta-mid) 55%, var(--gradient-cta-end) 100%)",
+              }}
+            >
               <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.25),_rgba(255,255,255,0))]"
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at top left, var(--gradient-cta-highlight-start), var(--gradient-cta-highlight-end))",
+                }}
               />
               <div className="relative z-10">
-                <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Quick Start</h2>
-                <p className="mt-4 text-lg leading-relaxed text-indigo-100/90">
-                  Drop MockAuth into your stack and run the full OIDC suite locally or in CI with a single command.
+                <h2 className="text-3xl font-semibold tracking-tight text-primary-foreground sm:text-4xl">Quick Start</h2>
+                <p className="mt-4 text-lg leading-relaxed text-primary-foreground/90">
+                  Drop MockAuth into your stack and run full OIDC flows locally or in CI with a single command.
                 </p>
                 <div className="mt-10 flex flex-wrap justify-center gap-4">
-                  <a href="#quick-start" className={primaryHeroButtonClasses}>
+                  <a href="#quick-start" className={cn(primaryHeroButtonClasses, "px-7 py-3.5 text-base")}>
                     Get Started
                   </a>
                   <a
@@ -302,21 +242,35 @@ export default function Home() {
             </div>
           </div>
         </section>
-      </main>
 
-      <footer className="border-t border-white/10 bg-slate-950">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-slate-300 sm:flex-row">
+        <section>
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">FAQ</h2>
+            <dl className="mt-10 space-y-8">
+              {faqItems.map((item) => (
+                <div key={item.q}>
+                  <dt className="text-base font-semibold text-foreground">{item.q}</dt>
+                  <dd className="mt-2 text-base leading-relaxed text-foreground/70">{item.a}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
+      </main>      <footer className="relative z-10 border-t border-border/60">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <p>© {currentYear} MockAuth</p>
           <a
             href="https://github.com/agynio/mockauth"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-white/90 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="font-semibold text-muted-foreground transition hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             GitHub
           </a>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 }

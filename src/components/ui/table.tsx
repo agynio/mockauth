@@ -20,7 +20,7 @@ const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes
 TableBody.displayName = "TableBody";
 
 const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(({ className, ...props }, ref) => (
-  <tr ref={ref} className={cn("transition hover:bg-muted/50", className)} {...props} />
+  <tr ref={ref} className={cn("transition hover:bg-surface-2/70", className)} {...props} />
 ));
 TableRow.displayName = "TableRow";
 
@@ -43,7 +43,7 @@ TableCell.displayName = "TableCell";
 
 const TableFooter = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
   ({ className, ...props }, ref) => (
-    <tfoot ref={ref} className={cn("bg-muted/50 font-medium text-foreground", className)} {...props} />
+    <tfoot ref={ref} className={cn("bg-surface-2/80 font-medium text-foreground", className)} {...props} />
   ),
 );
 TableFooter.displayName = "TableFooter";

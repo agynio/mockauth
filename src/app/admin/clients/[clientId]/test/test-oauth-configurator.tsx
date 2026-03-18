@@ -158,7 +158,7 @@ export function TestOAuthConfigurator({
         testId="test-oauth-redirect"
       />
       {!redirectAllowed ? (
-        <Alert className="border-amber-500/60 bg-amber-50 text-amber-900" data-testid="test-oauth-warning">
+        <Alert variant="warning" data-testid="test-oauth-warning">
           <AlertTitle>Allow this redirect first</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>Add {defaultRedirectUri} to the client before launching a test.</p>

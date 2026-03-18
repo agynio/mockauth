@@ -41,10 +41,10 @@ export default function AuthErrorPage({ searchParams }: ErrorPageProps) {
   )}`;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-16">
-      <div className="mx-auto w-full max-w-xl rounded-xl border bg-background p-8 shadow-sm">
+    <main className="flex min-h-screen items-center justify-center bg-surface-0 px-4 py-16 text-foreground">
+      <div className="mx-auto w-full max-w-xl rounded-2xl border border-border bg-surface-2 p-8 shadow-xl">
         <div className="flex items-center gap-3">
-          <AlertCircle className="h-6 w-6 text-destructive" aria-hidden />
+          <AlertCircle className="h-6 w-6 text-error-500" aria-hidden />
           <div>
             <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Sign-in error</p>
             <h1 className="text-2xl font-semibold leading-tight text-foreground">{copy.title}</h1>
@@ -62,7 +62,10 @@ export default function AuthErrorPage({ searchParams }: ErrorPageProps) {
           </Link>
           <a
             href={supportHref}
-            className={cn(buttonVariants({ variant: "outline", size: "lg" }), "flex items-center gap-2")}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "lg" }),
+              "flex items-center gap-2 border-border text-muted-foreground hover:text-foreground",
+            )}
           >
             <LifeBuoy className="h-4 w-4" aria-hidden />
             Contact support
