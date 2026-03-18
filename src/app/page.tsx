@@ -123,7 +123,8 @@ export default function Home() {
   A mock OpenID Connect provider for QA and automated tests.
 </h2>
                 <h3 className="mt-5 text-xl leading-[1.7] text-foreground/90">
-  Simulate real OIDC authentication — tokens, redirects, and scopes — without running a production identity server.
+  <span>Simulate real OIDC authentication — tokens, redirects, and scopes</span>
+  <span className="block">without running a production identity server.</span>
 </h3>
                                 <div className="mt-7 flex flex-wrap items-center gap-4">
                   <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={cn(primaryHeroButtonClasses, "animate-pulse")}>
