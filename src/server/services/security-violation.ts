@@ -12,7 +12,10 @@ export type SecurityViolationContext = {
   requestContext?: RequestContext | null;
 };
 
-type SecurityViolationDetailOverrides = Omit<SecurityViolationDetails, "reason" | "authMethod" | "clientSecretInBody">;
+type SecurityViolationDetailOverrides = Omit<
+  SecurityViolationDetails<true>,
+  "reason" | "authMethod" | "clientSecretInBody"
+>;
 
 export class SecurityViolationError extends DomainError {
   public readonly details?: SecurityViolationDetailOverrides;

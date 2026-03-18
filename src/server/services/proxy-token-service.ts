@@ -19,6 +19,7 @@ import {
   toTokenResponsePayload,
   type TokenAuthMethod,
 } from "@/server/services/audit-event";
+import { auditRedactionState } from "@/server/services/audit-redaction";
 import {
   createSecurityViolationReporter,
   withSecurityViolationAudit,
@@ -42,6 +43,8 @@ type ProxyTokenAuditContext = {
   clientIdProvided?: boolean;
   includeAuthHeader?: boolean;
 };
+
+const includeSensitive = !auditRedactionState.redactionEnabled;
 
 export const isProxyCode = isProxyAuthorizationCode;
 
@@ -78,6 +81,7 @@ export const completeProxyAuthorizationCodeGrant = async (
       redirectUri: params.redirectUri,
       authorizationCode: params.code,
       includeAuthHeader: params.auditContext?.includeAuthHeader,
+      includeSensitive,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
@@ -217,6 +221,7 @@ export const completeProxyRefreshGrant = async (
       grantType: "refresh_token",
       refreshToken: params.refreshToken,
       includeAuthHeader: params.auditContext?.includeAuthHeader,
+      includeSensitive,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });

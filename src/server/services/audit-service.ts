@@ -1,7 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/server/db/client";
-import { env } from "@/server/env";
+import { auditRedactionState } from "@/server/services/audit-redaction";
 import type { RequestContext } from "@/server/utils/request-context";
 import {
   buildSecurityViolationDetails,
@@ -37,7 +37,7 @@ type SecurityViolationInput = {
   message?: string;
 };
 
-const redactionEnabled = env.AUDIT_LOG_REDACTION !== "off";
+const redactionEnabled = auditRedactionState.redactionEnabled;
 
 export const emitAuditEvent = async (input: AuditEventInput) => {
   const sanitizedDetails = sanitizeAuditDetails(input, { redactionEnabled });
@@ -102,6 +102,7 @@ export const recordSecurityViolation = async (input: SecurityViolationInput) => 
       expectedState: input.expectedState ?? undefined,
       receivedState: input.receivedState ?? undefined,
       clientSecret: input.clientSecret,
+      includeSensitive: !redactionEnabled,
     }),
     requestContext: input.requestContext ?? undefined,
   });

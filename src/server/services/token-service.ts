@@ -21,6 +21,7 @@ import {
   type TokenAuthMethod,
   type TokenResponsePayload,
 } from "@/server/services/audit-event";
+import { auditRedactionState } from "@/server/services/audit-redaction";
 import {
   createSecurityViolationReporter,
   SecurityViolationError,
@@ -31,6 +32,7 @@ import type { RequestContext } from "@/server/utils/request-context";
 
 const ID_TOKEN_TTL_SECONDS = 600;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
+const includeSensitive = !auditRedactionState.redactionEnabled;
 
 type CodeContext = AuthorizationCodeWithRelations;
 
@@ -156,6 +158,7 @@ export const issueTokensFromCode = async (params: {
       redirectUri,
       authorizationCode: authorizationCode ?? undefined,
       includeAuthHeader: auditContext?.includeAuthHeader,
+      includeSensitive,
     }),
     requestContext: auditContext?.requestContext ?? null,
   });

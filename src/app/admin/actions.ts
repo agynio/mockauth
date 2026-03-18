@@ -61,8 +61,10 @@ import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/o
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import { buildConfigChangedDetails, type ProxyProviderConfigSnapshot, type TokenAuthMethod } from "@/server/services/audit-event";
+import { auditRedactionState } from "@/server/services/audit-redaction";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
+const includeSensitive = !auditRedactionState.redactionEnabled;
 
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
@@ -339,6 +341,7 @@ const emitConfigChange = async (input: {
       proxyConfigAfter: input.proxyConfigAfter ?? undefined,
       authMethodBefore: input.authMethodBefore ?? undefined,
       authMethodAfter: input.authMethodAfter ?? undefined,
+      includeSensitive,
     }),
     requestContext,
   });

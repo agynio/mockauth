@@ -19,6 +19,7 @@ import {
   type AuditLogEventType,
   type AuditLogSeverity,
 } from "@/lib/audit-log";
+import type { AuditRedactionState } from "@/server/services/audit-redaction";
 
 type ClientSummary = { id: string; name: string; clientId: string };
 
@@ -54,7 +55,7 @@ type AuditLogsClientProps = {
   initialLogs: AuditLogRecord[];
   initialCursor: string | null;
   initialFilters: FilterState;
-  redactionEnabled: boolean;
+  redactionState: AuditRedactionState;
 };
 
 const formatEnumLabel = (value: string) =>
@@ -108,7 +109,7 @@ export const AuditLogsClient = ({
   initialLogs,
   initialCursor,
   initialFilters,
-  redactionEnabled,
+  redactionState,
 }: AuditLogsClientProps) => {
   const { toast } = useToast();
   const [filters, setFilters] = useState<FilterState>(initialFilters);
@@ -190,10 +191,22 @@ export const AuditLogsClient = ({
         <p className="mt-1 text-xs text-muted-foreground">Your role: {viewerRole.toLowerCase()}.</p>
       </header>
 
-      {!redactionEnabled ? (
+      {!redactionState.redactionEnabled ? (
         <Alert variant="destructive">
           <AlertTitle>Redaction disabled</AlertTitle>
-          <AlertDescription>Sensitive values are logged in this environment for QA/Debug only.</AlertDescription>
+          <AlertDescription>
+            {redactionState.vercelEnv === "production"
+              ? "Unredacted logging is enabled in production because AUDIT_LOG_ALLOW_UNREDACTED_IN_PROD=true. This is not recommended."
+              : "Sensitive values are logged in this environment for QA/Debug only."}
+          </AlertDescription>
+        </Alert>
+      ) : redactionState.productionGuardActive && !redactionState.redactionRequested ? (
+        <Alert className="border-amber-500/60 bg-amber-50 text-amber-900">
+          <AlertTitle>Redaction forced in production</AlertTitle>
+          <AlertDescription>
+            AUDIT_LOG_REDACTION=off is ignored in production unless AUDIT_LOG_ALLOW_UNREDACTED_IN_PROD=true (not
+            recommended).
+          </AlertDescription>
         </Alert>
       ) : null}
 

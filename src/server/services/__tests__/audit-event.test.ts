@@ -40,6 +40,7 @@ describe("sanitizeAuditDetails", () => {
       codeChallengeMethod: "S256",
       loginHint: "user@example.com",
       freshLoginRequested: true,
+      includeSensitive: true,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -85,6 +86,7 @@ describe("sanitizeAuditDetails", () => {
       codeChallenge: "provider-challenge",
       codeChallengeMethod: "S256",
       codeVerifier: "verifier-789",
+      includeSensitive: true,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -126,6 +128,7 @@ describe("sanitizeAuditDetails", () => {
       redirectUri: "https://app.example.com/callback",
       authorizationCode: "auth-code",
       includeAuthHeader: true,
+      includeSensitive: true,
     });
     const authCodeEvent: AuditEventInput = {
       ...baseEvent,
@@ -162,6 +165,7 @@ describe("sanitizeAuditDetails", () => {
       grantType: "refresh_token",
       refreshToken: "refresh-token",
       includeAuthHeader: false,
+      includeSensitive: true,
     });
     const refreshEvent: AuditEventInput = {
       ...baseEvent,
@@ -195,6 +199,7 @@ describe("sanitizeAuditDetails", () => {
       code: "provider-code",
       rawError: "invalid_grant",
       rawErrorDescription: "Invalid grant description",
+      includeSensitive: true,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -226,6 +231,7 @@ describe("sanitizeAuditDetails", () => {
       clientSecretInBody: true,
       expectedRedirectUri: "https://expected.example.com",
       receivedRedirectUri: "https://received.example.com",
+      includeSensitive: true,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -280,6 +286,7 @@ describe("sanitizeAuditDetails", () => {
       proxyConfigAfter: after,
       authMethodBefore: "client_secret_basic",
       authMethodAfter: "client_secret_post",
+      includeSensitive: true,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -298,5 +305,51 @@ describe("sanitizeAuditDetails", () => {
       authMethodBefore: "client_secret_basic",
       authMethodAfter: "client_secret_post",
     });
+  });
+
+  it("omits sensitive fields when includeSensitive is false", () => {
+    const details = buildAuthorizeReceivedDetails({
+      responseType: "code",
+      scope: "openid",
+      prompt: "login",
+      redirectUri: "https://app.example.com/callback",
+      state: "state-123",
+      nonce: "nonce-123",
+      codeChallenge: "challenge-123",
+      codeChallengeMethod: "S256",
+      loginHint: "user@example.com",
+      freshLoginRequested: true,
+      includeSensitive: false,
+    });
+
+    expect(details).toMatchObject({
+      responseType: "code",
+      scope: "openid",
+      codeChallengeMethod: "S256",
+      loginHintProvided: true,
+    });
+    expect(details).not.toHaveProperty("redirectUri");
+    expect(details).not.toHaveProperty("loginHint");
+
+    const tokenDetails = buildTokenAuthCodeReceivedDetails({
+      authMethod: "client_secret_post",
+      clientSecretInBody: true,
+      clientIdProvided: true,
+      clientId: "client-id",
+      clientSecret: "secret",
+      grantType: "authorization_code",
+      redirectUri: "https://app.example.com/callback",
+      authorizationCode: "auth-code",
+      includeAuthHeader: true,
+      includeSensitive: false,
+    });
+
+    expect(tokenDetails).toMatchObject({
+      authMethod: "client_secret_post",
+      clientSecretInBody: true,
+      clientIdProvided: true,
+    });
+    expect(tokenDetails).not.toHaveProperty("clientSecret");
+    expect(tokenDetails).not.toHaveProperty("authorizationCode");
   });
 });

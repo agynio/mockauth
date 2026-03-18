@@ -22,7 +22,13 @@ describe("AuditLogsClient", () => {
   const baseProps = {
     tenant: { id: "tenant_1", name: "Tenant One" },
     viewerRole: "OWNER",
-    redactionEnabled: true,
+    redactionState: {
+      redactionEnabled: true,
+      redactionRequested: true,
+      productionGuardActive: false,
+      allowUnredactedInProd: false,
+      vercelEnv: undefined,
+    },
     clients: [
       { id: "client_1", name: "App One", clientId: "app-one" },
       { id: "client_2", name: "App Two", clientId: "app-two" },
@@ -91,10 +97,43 @@ describe("AuditLogsClient", () => {
   });
 
   it("shows a warning when redaction is disabled", () => {
-    render(<AuditLogsClient {...baseProps} redactionEnabled={false} />);
+    render(
+      <AuditLogsClient
+        {...baseProps}
+        redactionState={{
+          redactionEnabled: false,
+          redactionRequested: false,
+          productionGuardActive: false,
+          allowUnredactedInProd: false,
+          vercelEnv: "preview",
+        }}
+      />,
+    );
 
     expect(
       screen.getByText("Sensitive values are logged in this environment for QA/Debug only."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a warning when production guard forces redaction", () => {
+    render(
+      <AuditLogsClient
+        {...baseProps}
+        redactionState={{
+          redactionEnabled: true,
+          redactionRequested: false,
+          productionGuardActive: true,
+          allowUnredactedInProd: false,
+          vercelEnv: "production",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Redaction forced in production")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "AUDIT_LOG_REDACTION=off is ignored in production unless AUDIT_LOG_ALLOW_UNREDACTED_IN_PROD=true (not recommended).",
+      ),
     ).toBeInTheDocument();
   });
 

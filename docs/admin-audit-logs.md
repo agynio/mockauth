@@ -52,5 +52,12 @@ To disable redaction for QA/debugging, set:
 AUDIT_LOG_REDACTION=off
 ```
 
+In Vercel production (`VERCEL_ENV=production`), redaction is forced on unless you explicitly set:
+
+```
+AUDIT_LOG_ALLOW_UNREDACTED_IN_PROD=true
+```
+
 When disabled, sensitive request parameters and configuration snapshots are logged in full. The admin UI shows a
-warning banner when redaction is turned off. Keep this disabled in production environments.
+warning banner when redaction is turned off or when a production override is blocking unredacted logging. Keep
+unredacted logging disabled in production environments.
