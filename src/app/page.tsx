@@ -138,7 +138,7 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-                <div className="mt-10 w-full max-w-[560px]">
+                <div className="mt-9 w-full max-w-[600px]">
                   <TerminalEndpoints />
                 </div>
               </div>
