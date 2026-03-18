@@ -63,6 +63,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     const requestContext = getRequestContextFromRequest(request);
     const clientSecretInBody = Boolean(validation.data.client_secret);
     const clientIdProvided = Boolean(clientId);
+    const includeAuthHeader = Boolean(basic);
 
     const { apiResourceId } = await context.params;
     const authMethod = basic ? "client_secret_basic" : clientSecret ? "client_secret_post" : "none";
@@ -78,7 +79,12 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
           authMethod,
           clientIdFromRequest: clientId,
           clientSecret,
-          auditContext: { requestContext, clientSecretInBody, clientIdProvided },
+          auditContext: {
+            requestContext,
+            clientSecretInBody,
+            clientIdProvided,
+            includeAuthHeader,
+          },
         });
 
         return Response.json(tokens);
@@ -94,17 +100,26 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         requestContext,
       });
       if (codeRecord.apiResourceId !== apiResourceId) {
-        reportViolation("issuer_mismatch");
+        void reportViolation("issuer_mismatch", {
+          expectedApiResourceId: codeRecord.apiResourceId,
+          receivedApiResourceId: apiResourceId,
+        });
         return Response.json({ error: "invalid_grant" }, { status: 400 });
       }
 
       if (clientId && codeRecord.client.clientId !== clientId) {
-        reportViolation("client_mismatch");
+        void reportViolation("client_mismatch", {
+          expectedClientId: codeRecord.client.clientId,
+          receivedClientId: clientId,
+        });
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 
       if (codeRecord.client.tokenEndpointAuthMethod !== authMethod) {
-        reportViolation("auth_method_mismatch");
+        void reportViolation("auth_method_mismatch", {
+          expectedAuthMethod: codeRecord.client.tokenEndpointAuthMethod,
+          receivedAuthMethod: authMethod,
+        });
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 
@@ -114,7 +129,15 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         redirectUri: validation.data.redirect_uri,
         clientSecret,
         origin: resolveOrigin(request),
-        auditContext: { requestContext, authMethod, clientSecretInBody, clientIdProvided },
+        authorizationCode: validation.data.code,
+        auditContext: {
+          requestContext,
+          authMethod,
+          clientSecretInBody,
+          clientIdProvided,
+          clientId: clientId ?? undefined,
+          includeAuthHeader,
+        },
       });
 
       return Response.json(tokens);
@@ -131,7 +154,12 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       scope: validation.data.scope,
       authMethod,
       clientSecret,
-      auditContext: { requestContext, clientSecretInBody, clientIdProvided },
+      auditContext: {
+        requestContext,
+        clientSecretInBody,
+        clientIdProvided,
+        includeAuthHeader,
+      },
     });
 
     return Response.json(tokens);

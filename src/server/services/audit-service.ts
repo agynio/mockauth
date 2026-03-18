@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/server/db/client";
+import { env } from "@/server/env";
 import type { RequestContext } from "@/server/utils/request-context";
 import {
   buildSecurityViolationDetails,
@@ -17,12 +18,29 @@ type SecurityViolationInput = {
   reason: SecurityViolationReason;
   authMethod?: TokenAuthMethod | null;
   clientSecretInBody?: boolean | null;
+  expectedAuthMethod?: TokenAuthMethod | null;
+  receivedAuthMethod?: TokenAuthMethod | null;
+  expectedClientId?: string | null;
+  receivedClientId?: string | null;
+  expectedRedirectUri?: string | null;
+  receivedRedirectUri?: string | null;
+  expectedApiResourceId?: string | null;
+  receivedApiResourceId?: string | null;
+  expectedCodeChallenge?: string | null;
+  receivedCodeVerifier?: string | null;
+  expectedCodeChallengeMethod?: string | null;
+  receivedCodeChallengeMethod?: string | null;
+  expectedState?: string | null;
+  receivedState?: string | null;
+  clientSecret?: string | null;
   requestContext?: RequestContext | null;
   message?: string;
 };
 
+const redactionEnabled = env.AUDIT_LOG_REDACTION !== "off";
+
 export const emitAuditEvent = async (input: AuditEventInput) => {
-  const sanitizedDetails = sanitizeAuditDetails(input);
+  const sanitizedDetails = sanitizeAuditDetails(input, { redactionEnabled });
 
   try {
     await prisma.auditLog.create({
@@ -69,6 +87,21 @@ export const recordSecurityViolation = async (input: SecurityViolationInput) => 
       reason: input.reason,
       authMethod: input.authMethod ?? undefined,
       clientSecretInBody: input.clientSecretInBody ?? undefined,
+      expectedAuthMethod: input.expectedAuthMethod ?? undefined,
+      receivedAuthMethod: input.receivedAuthMethod ?? undefined,
+      expectedClientId: input.expectedClientId ?? undefined,
+      receivedClientId: input.receivedClientId ?? undefined,
+      expectedRedirectUri: input.expectedRedirectUri ?? undefined,
+      receivedRedirectUri: input.receivedRedirectUri ?? undefined,
+      expectedApiResourceId: input.expectedApiResourceId ?? undefined,
+      receivedApiResourceId: input.receivedApiResourceId ?? undefined,
+      expectedCodeChallenge: input.expectedCodeChallenge ?? undefined,
+      receivedCodeVerifier: input.receivedCodeVerifier ?? undefined,
+      expectedCodeChallengeMethod: input.expectedCodeChallengeMethod ?? undefined,
+      receivedCodeChallengeMethod: input.receivedCodeChallengeMethod ?? undefined,
+      expectedState: input.expectedState ?? undefined,
+      receivedState: input.receivedState ?? undefined,
+      clientSecret: input.clientSecret,
     }),
     requestContext: input.requestContext ?? undefined,
   });

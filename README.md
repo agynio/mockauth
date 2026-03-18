@@ -111,6 +111,12 @@ updates). CI runs this script automatically before executing E2E specs.
   `/api/auth/signin/logto?callbackUrl=/admin` so they inherit the current host; reserve `NEXTAUTH_URL` for server-side
   NextAuth configuration only.
 
+### Audit logs
+
+- Audit log redaction is enabled by default. Set `AUDIT_LOG_REDACTION=off` only in QA/debug environments if you need to
+  capture full request and configuration payloads (tokens, codes, secrets, redirect parameters). The audit logs UI
+  shows a warning banner whenever redaction is disabled.
+
 ### Redirect wildcard policy
 
 - Redirect entries must be absolute URLs and use `https` unless they target `localhost`, `127.0.0.1`, or `::1` over

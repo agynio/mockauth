@@ -5,6 +5,7 @@ import { AuditLogsClient } from "@/app/admin/audit-logs/audit-logs-client";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AUDIT_LOG_EVENT_TYPES, AUDIT_LOG_SEVERITIES } from "@/lib/audit-log";
 import { authOptions } from "@/server/auth/options";
+import { env } from "@/server/env";
 import { listAuditLogs, toAuditLogEntry } from "@/server/services/audit-log-service";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { listClientSummaries } from "@/server/services/client-service";
@@ -80,6 +81,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Se
   ]);
 
   const initialLogs = auditLogs.logs.map((log) => toAuditLogEntry(log));
+  const redactionEnabled = env.AUDIT_LOG_REDACTION !== "off";
 
   return (
     <AuditLogsClient
@@ -88,6 +90,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Se
       clients={clients}
       initialLogs={initialLogs}
       initialCursor={auditLogs.nextCursor}
+      redactionEnabled={redactionEnabled}
       initialFilters={{
         clientId,
         eventType,

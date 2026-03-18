@@ -46,6 +46,9 @@ vi.mock("@/server/db/client", () => ({
     client: {
       findUnique: vi.fn(),
     },
+    proxyProviderConfig: {
+      findUnique: vi.fn(),
+    },
     redirectUri: {
       findUnique: vi.fn(),
       delete: vi.fn(),
@@ -76,6 +79,7 @@ const mockEnsureMembershipRole = vi.mocked(ensureMembershipRole);
 const mockCreateClient = vi.mocked(createClient);
 const mockUpsertProxyConfig = vi.mocked(upsertProxyProviderConfig);
 const mockFindClient = vi.mocked(prisma.client.findUnique);
+const mockFindProxyConfig = vi.mocked(prisma.proxyProviderConfig.findUnique);
 const mockGetRequestOrigin = vi.mocked(getRequestOrigin);
 const mockFindTenant = vi.mocked(prisma.tenant.findUnique);
 
@@ -96,6 +100,7 @@ describe("proxy client server actions", () => {
       oauthClientMode: "proxy",
     } as never);
     mockUpsertProxyConfig.mockResolvedValue(undefined);
+    mockFindProxyConfig.mockResolvedValue(null as never);
     mockGetRequestOrigin.mockResolvedValue("https://mockauth.test");
     mockFindTenant.mockResolvedValue({ defaultApiResourceId: "api-default" } as never);
   });

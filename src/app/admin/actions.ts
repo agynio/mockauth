@@ -49,6 +49,7 @@ import {
   getApiResourceForTenant,
 } from "@/server/services/api-resource-service";
 import { hasEnabledStrategy } from "@/server/oidc/auth-strategy";
+import { decrypt } from "@/server/crypto/key-vault";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { getRequestContext } from "@/server/utils/request-context";
@@ -59,7 +60,7 @@ import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/o
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
-import { buildConfigChangedDetails } from "@/server/services/audit-event";
+import { buildConfigChangedDetails, type ProxyProviderConfigSnapshot, type TokenAuthMethod } from "@/server/services/audit-event";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -124,6 +125,52 @@ const normalizeProxyConfigInput = (
   };
 
   return { normalized, keepExistingSecret };
+};
+
+const decryptProxySecret = (encrypted: string | null): string | undefined => {
+  if (!encrypted) {
+    return undefined;
+  }
+  try {
+    return decrypt(encrypted);
+  } catch (error) {
+    console.error("Unable to decrypt upstream client secret", error);
+    return undefined;
+  }
+};
+
+const buildProxyConfigSnapshot = (config: ProxyProviderConfigInput): ProxyProviderConfigSnapshot => {
+  const scopeMapping = config.scopeMapping
+    ? Object.fromEntries(
+        Object.entries(config.scopeMapping).map(([key, value]) => [
+          key,
+          Array.isArray(value)
+            ? value.map((scope) => scope.trim()).filter(Boolean)
+            : value
+                .split(/\s+/)
+                .map((scope) => scope.trim())
+                .filter(Boolean),
+        ]),
+      )
+    : undefined;
+
+  return {
+    providerType: config.providerType,
+    authorizationEndpoint: config.authorizationEndpoint,
+    tokenEndpoint: config.tokenEndpoint,
+    userinfoEndpoint: config.userinfoEndpoint ?? undefined,
+    jwksUri: config.jwksUri ?? undefined,
+    upstreamClientId: config.upstreamClientId,
+    upstreamClientSecret: config.upstreamClientSecret ?? undefined,
+    upstreamTokenEndpointAuthMethod: config.upstreamTokenEndpointAuthMethod ?? undefined,
+    defaultScopes: config.defaultScopes ?? undefined,
+    scopeMapping,
+    pkceSupported: Boolean(config.pkceSupported),
+    oidcEnabled: Boolean(config.oidcEnabled),
+    promptPassthroughEnabled: Boolean(config.promptPassthroughEnabled),
+    loginHintPassthroughEnabled: Boolean(config.loginHintPassthroughEnabled),
+    passthroughTokenResponse: Boolean(config.passthroughTokenResponse),
+  };
 };
 
 const validateProxyConfigInput = (config: z.infer<typeof proxyProviderConfigSchema> | undefined): string | null => {
@@ -269,6 +316,10 @@ const emitConfigChange = async (input: {
   resourceName?: string | null;
   clientId?: string | null;
   message: string;
+  proxyConfigBefore?: ProxyProviderConfigSnapshot | null;
+  proxyConfigAfter?: ProxyProviderConfigSnapshot | null;
+  authMethodBefore?: TokenAuthMethod | null;
+  authMethodAfter?: TokenAuthMethod | null;
 }) => {
   const requestContext = await getRequestContext();
   await emitAuditEvent({
@@ -284,6 +335,10 @@ const emitConfigChange = async (input: {
       resource: input.resource,
       resourceId: input.resourceId,
       resourceName: input.resourceName,
+      proxyConfigBefore: input.proxyConfigBefore ?? undefined,
+      proxyConfigAfter: input.proxyConfigAfter ?? undefined,
+      authMethodBefore: input.authMethodBefore ?? undefined,
+      authMethodAfter: input.authMethodAfter ?? undefined,
     }),
     requestContext,
   });
@@ -584,7 +639,46 @@ export const updateProxyClientConfigAction = async (
       return { error: "Proxy configuration is required" };
     }
 
-    await upsertProxyProviderConfig(client.id, normalized, { keepExistingSecret });
+    const existingConfig = await prisma.proxyProviderConfig.findUnique({ where: { clientId: client.id } });
+    const resolvedAuthMethod =
+      rawConfig.upstreamTokenEndpointAuthMethod ??
+      existingConfig?.upstreamTokenEndpointAuthMethod ??
+      normalized.upstreamTokenEndpointAuthMethod;
+    const normalizedConfig = {
+      ...normalized,
+      upstreamTokenEndpointAuthMethod: resolvedAuthMethod,
+    };
+    const existingSecret = existingConfig
+      ? decryptProxySecret(existingConfig.upstreamClientSecretEncrypted)
+      : undefined;
+    const proxyConfigBefore = existingConfig
+      ? buildProxyConfigSnapshot({
+          providerType: existingConfig.providerType,
+          authorizationEndpoint: existingConfig.authorizationEndpoint,
+          tokenEndpoint: existingConfig.tokenEndpoint,
+          userinfoEndpoint: existingConfig.userinfoEndpoint ?? undefined,
+          jwksUri: existingConfig.jwksUri ?? undefined,
+          upstreamClientId: existingConfig.upstreamClientId,
+          upstreamClientSecret: existingSecret ?? undefined,
+          upstreamTokenEndpointAuthMethod: existingConfig.upstreamTokenEndpointAuthMethod ?? undefined,
+          defaultScopes: existingConfig.defaultScopes ?? [],
+          scopeMapping: existingConfig.scopeMapping
+            ? (existingConfig.scopeMapping as ProxyProviderConfigInput["scopeMapping"])
+            : undefined,
+          pkceSupported: existingConfig.pkceSupported,
+          oidcEnabled: existingConfig.oidcEnabled,
+          promptPassthroughEnabled: existingConfig.promptPassthroughEnabled,
+          loginHintPassthroughEnabled: existingConfig.loginHintPassthroughEnabled,
+          passthroughTokenResponse: existingConfig.passthroughTokenResponse,
+        })
+      : undefined;
+    const resolvedSecret = keepExistingSecret ? existingSecret : normalizedConfig.upstreamClientSecret;
+    const proxyConfigAfter = buildProxyConfigSnapshot({
+      ...normalizedConfig,
+      upstreamClientSecret: resolvedSecret ?? undefined,
+    });
+
+    await upsertProxyProviderConfig(client.id, normalizedConfig, { keepExistingSecret });
     revalidatePath(clientPath(client.id));
     void emitConfigChange({
       tenantId: client.tenantId,
@@ -594,6 +688,10 @@ export const updateProxyClientConfigAction = async (
       resourceId: client.id,
       clientId: client.id,
       message: "Proxy configuration updated",
+      proxyConfigBefore,
+      proxyConfigAfter,
+      authMethodBefore: proxyConfigBefore?.upstreamTokenEndpointAuthMethod ?? undefined,
+      authMethodAfter: proxyConfigAfter.upstreamTokenEndpointAuthMethod ?? undefined,
     });
     return { success: "Upstream configuration updated" };
   } catch (error) {

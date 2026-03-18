@@ -45,6 +45,8 @@ type TokenAuditContext = {
   authMethod?: TokenAuthMethod;
   clientSecretInBody?: boolean;
   clientIdProvided?: boolean;
+  clientId?: string;
+  includeAuthHeader?: boolean;
 };
 
 export const assertClientSecret = async (client: ClientSecretContext, provided?: string | null) => {
@@ -54,6 +56,10 @@ export const assertClientSecret = async (client: ClientSecretContext, provided?:
         "Public clients must use auth method none",
         { status: 400, code: "invalid_client" },
         "auth_method_mismatch",
+        {
+          expectedAuthMethod: "none",
+          receivedAuthMethod: client.tokenEndpointAuthMethod,
+        },
       );
     }
     return;
@@ -64,6 +70,7 @@ export const assertClientSecret = async (client: ClientSecretContext, provided?:
       "Client authentication required",
       { status: 401, code: "invalid_client" },
       "client_auth_missing",
+      { clientSecret: null },
     );
   }
 
@@ -73,6 +80,7 @@ export const assertClientSecret = async (client: ClientSecretContext, provided?:
       "Invalid client credentials",
       { status: 401, code: "invalid_client" },
       "client_auth_invalid",
+      { clientSecret: provided },
     );
   }
 };
@@ -88,6 +96,10 @@ export const verifyPkce = (code: PkceContext, verifier: string) => {
       "Unsupported code challenge method",
       { status: 400, code: "invalid_grant" },
       "pkce_method_unsupported",
+      {
+        expectedCodeChallengeMethod: "S256",
+        receivedCodeChallengeMethod: code.codeChallengeMethod,
+      },
     );
   }
 
@@ -96,6 +108,10 @@ export const verifyPkce = (code: PkceContext, verifier: string) => {
       "Invalid code verifier",
       { status: 400, code: "invalid_grant" },
       "pkce_mismatch",
+      {
+        expectedCodeChallenge: code.codeChallenge,
+        receivedCodeVerifier: verifier,
+      },
     );
   }
 };
@@ -106,9 +122,10 @@ export const issueTokensFromCode = async (params: {
   redirectUri: string;
   clientSecret?: string | null;
   origin: string;
+  authorizationCode?: string | null;
   auditContext?: TokenAuditContext | null;
 }) => {
-  const { code, codeVerifier, redirectUri, clientSecret, origin, auditContext } = params;
+  const { code, codeVerifier, redirectUri, clientSecret, origin, authorizationCode, auditContext } = params;
   const traceId = code.traceId ?? null;
   const authMethod = auditContext?.authMethod ?? code.client.tokenEndpointAuthMethod;
   const violationContext = {
@@ -133,13 +150,23 @@ export const issueTokensFromCode = async (params: {
       authMethod,
       clientSecretInBody: auditContext?.clientSecretInBody,
       clientIdProvided: auditContext?.clientIdProvided,
+      clientId: auditContext?.clientId ?? null,
+      clientSecret: clientSecret ?? null,
+      grantType: "authorization_code",
+      redirectUri,
+      authorizationCode: authorizationCode ?? undefined,
+      includeAuthHeader: auditContext?.includeAuthHeader,
     }),
     requestContext: auditContext?.requestContext ?? null,
   });
 
   const normalized = resolveRedirectUri(redirectUri, code.client.redirectUris ?? []);
   if (normalized !== code.redirectUri) {
-    await reportViolation("redirect_uri_mismatch", "redirect_uri mismatch");
+    await reportViolation(
+      "redirect_uri_mismatch",
+      { expectedRedirectUri: code.redirectUri, receivedRedirectUri: redirectUri },
+      "redirect_uri mismatch",
+    );
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
   await withSecurityViolationAudit(() => assertClientSecret(code.client, clientSecret), violationContext);

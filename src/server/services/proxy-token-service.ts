@@ -40,6 +40,7 @@ type ProxyTokenAuditContext = {
   requestContext?: RequestContext | null;
   clientSecretInBody?: boolean;
   clientIdProvided?: boolean;
+  includeAuthHeader?: boolean;
 };
 
 export const isProxyCode = isProxyAuthorizationCode;
@@ -71,22 +72,37 @@ export const completeProxyAuthorizationCodeGrant = async (
       authMethod: params.authMethod,
       clientSecretInBody: params.auditContext?.clientSecretInBody,
       clientIdProvided: params.auditContext?.clientIdProvided,
+      clientId: params.clientIdFromRequest ?? null,
+      clientSecret: params.clientSecret ?? null,
+      grantType: "authorization_code",
+      redirectUri: params.redirectUri,
+      authorizationCode: params.code,
+      includeAuthHeader: params.auditContext?.includeAuthHeader,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
   if (record.apiResourceId !== params.apiResourceId) {
-    await reportViolation("issuer_mismatch");
+    await reportViolation("issuer_mismatch", {
+      expectedApiResourceId: record.apiResourceId,
+      receivedApiResourceId: params.apiResourceId,
+    });
     throw new DomainError("Authorization code does not match issuer", { status: 400, code: "invalid_grant" });
   }
 
   if (params.clientIdFromRequest && record.client.clientId !== params.clientIdFromRequest) {
-    await reportViolation("client_mismatch");
+    await reportViolation("client_mismatch", {
+      expectedClientId: record.client.clientId,
+      receivedClientId: params.clientIdFromRequest,
+    });
     throw new DomainError("Client mismatch", { status: 401, code: "invalid_client" });
   }
 
   if (record.client.tokenEndpointAuthMethod !== params.authMethod) {
-    await reportViolation("auth_method_mismatch");
+    await reportViolation("auth_method_mismatch", {
+      expectedAuthMethod: record.client.tokenEndpointAuthMethod,
+      receivedAuthMethod: params.authMethod,
+    });
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
@@ -94,7 +110,10 @@ export const completeProxyAuthorizationCodeGrant = async (
 
   const normalizedRedirect = resolveRedirectUri(params.redirectUri, record.client.redirectUris ?? []);
   if (normalizedRedirect !== record.redirectUri) {
-    await reportViolation("redirect_uri_mismatch");
+    await reportViolation("redirect_uri_mismatch", {
+      expectedRedirectUri: record.redirectUri,
+      receivedRedirectUri: params.redirectUri,
+    });
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
 
@@ -157,7 +176,10 @@ export const completeProxyRefreshGrant = async (
 
   const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
   if (clientResourceId !== resource.id) {
-    await reportViolation("issuer_mismatch");
+    await reportViolation("issuer_mismatch", {
+      expectedApiResourceId: clientResourceId,
+      receivedApiResourceId: resource.id,
+    });
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
@@ -171,7 +193,10 @@ export const completeProxyRefreshGrant = async (
   }
 
   if (client.tokenEndpointAuthMethod !== params.authMethod) {
-    await reportViolation("auth_method_mismatch");
+    await reportViolation("auth_method_mismatch", {
+      expectedAuthMethod: client.tokenEndpointAuthMethod,
+      receivedAuthMethod: params.authMethod,
+    });
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
@@ -187,6 +212,11 @@ export const completeProxyRefreshGrant = async (
       authMethod: params.authMethod,
       clientSecretInBody: params.auditContext?.clientSecretInBody,
       scope: params.scope,
+      clientId: params.clientId ?? null,
+      clientSecret: params.clientSecret ?? null,
+      grantType: "refresh_token",
+      refreshToken: params.refreshToken,
+      includeAuthHeader: params.auditContext?.includeAuthHeader,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });

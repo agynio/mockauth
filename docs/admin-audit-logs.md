@@ -43,4 +43,14 @@ CRON_SECRET=replace-with-cron-secret
 
 ## Redaction
 
-Tokens, authorization codes, and secrets are not stored in audit logs. Only non-sensitive summaries are retained.
+Tokens, authorization codes, and secrets are not stored in audit logs by default. Only non-sensitive summaries are
+retained.
+
+To disable redaction for QA/debugging, set:
+
+```
+AUDIT_LOG_REDACTION=off
+```
+
+When disabled, sensitive request parameters and configuration snapshots are logged in full. The admin UI shows a
+warning banner when redaction is turned off. Keep this disabled in production environments.

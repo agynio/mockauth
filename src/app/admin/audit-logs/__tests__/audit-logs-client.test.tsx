@@ -22,6 +22,7 @@ describe("AuditLogsClient", () => {
   const baseProps = {
     tenant: { id: "tenant_1", name: "Tenant One" },
     viewerRole: "OWNER",
+    redactionEnabled: true,
     clients: [
       { id: "client_1", name: "App One", clientId: "app-one" },
       { id: "client_2", name: "App Two", clientId: "app-two" },
@@ -87,6 +88,14 @@ describe("AuditLogsClient", () => {
     });
 
     expect(await screen.findByText("Token response issued")).toBeInTheDocument();
+  });
+
+  it("shows a warning when redaction is disabled", () => {
+    render(<AuditLogsClient {...baseProps} redactionEnabled={false} />);
+
+    expect(
+      screen.getByText("Sensitive values are logged in this environment for QA/Debug only."),
+    ).toBeInTheDocument();
   });
 
   it("drills into trace IDs", async () => {

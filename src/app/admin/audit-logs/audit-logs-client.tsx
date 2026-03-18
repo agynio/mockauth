@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { format } from "date-fns";
 
 import { fetchAuditLogsAction } from "@/app/admin/audit-logs/actions";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +54,7 @@ type AuditLogsClientProps = {
   initialLogs: AuditLogRecord[];
   initialCursor: string | null;
   initialFilters: FilterState;
+  redactionEnabled: boolean;
 };
 
 const formatEnumLabel = (value: string) =>
@@ -106,6 +108,7 @@ export const AuditLogsClient = ({
   initialLogs,
   initialCursor,
   initialFilters,
+  redactionEnabled,
 }: AuditLogsClientProps) => {
   const { toast } = useToast();
   const [filters, setFilters] = useState<FilterState>(initialFilters);
@@ -186,6 +189,13 @@ export const AuditLogsClient = ({
         <p className="text-sm text-muted-foreground">Review authentication and configuration activity.</p>
         <p className="mt-1 text-xs text-muted-foreground">Your role: {viewerRole.toLowerCase()}.</p>
       </header>
+
+      {!redactionEnabled ? (
+        <Alert variant="destructive">
+          <AlertTitle>Redaction disabled</AlertTitle>
+          <AlertDescription>Sensitive values are logged in this environment for QA/Debug only.</AlertDescription>
+        </Alert>
+      ) : null}
 
       <Card>
         <CardHeader>

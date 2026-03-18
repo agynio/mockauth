@@ -47,6 +47,8 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         tenantId: tenantContext.tenant.id,
         traceId: params.state,
         reason: "state_mismatch",
+        expectedState: params.transactionCookie ?? null,
+        receivedState: params.state,
         requestContext: params.requestContext ?? null,
       });
     }
@@ -61,6 +63,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         tenantId: tenantContext.tenant.id,
         traceId: params.state,
         reason: "state_not_found",
+        receivedState: params.state,
         requestContext: params.requestContext ?? null,
       });
     }
@@ -73,6 +76,8 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       clientId: transaction.clientId,
       traceId: transaction.id,
       reason: "state_resource_mismatch",
+      expectedApiResourceId: transaction.apiResourceId,
+      receivedApiResourceId: params.apiResourceId,
       requestContext: params.requestContext ?? null,
     });
     throw new DomainError("Proxy transaction does not match issuer", { status: 400, code: "invalid_request" });
@@ -90,6 +95,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       details: buildProxyCallbackErrorDetails({
         error: "transaction_expired",
         providerType: transaction.client.proxyConfig?.providerType,
+        code: params.code ?? undefined,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -127,6 +133,9 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         error,
         errorDescription: description,
         providerType: config.providerType,
+        code: params.code ?? undefined,
+        rawError: params.providerError ?? undefined,
+        rawErrorDescription: params.providerErrorDescription ?? undefined,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -146,6 +155,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       details: buildProxyCallbackErrorDetails({
         error: "missing_code",
         providerType: config.providerType,
+        code: params.code ?? undefined,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -168,10 +178,11 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
     const result = await requestProviderTokens(config, tokenRequest);
 
     if (!result.ok) {
-      const providerError = sanitizeProviderError(typeof result.json?.error === "string" ? result.json.error : undefined);
-      const description = sanitizeProviderErrorDescription(
-        typeof result.json?.error_description === "string" ? result.json.error_description : undefined,
-      );
+      const rawError = typeof result.json?.error === "string" ? result.json.error : undefined;
+      const rawDescription =
+        typeof result.json?.error_description === "string" ? result.json.error_description : undefined;
+      const providerError = sanitizeProviderError(rawError);
+      const description = sanitizeProviderErrorDescription(rawDescription);
       redirectUrl.searchParams.set("error", providerError);
       if (description) {
         redirectUrl.searchParams.set("error_description", description);
@@ -191,6 +202,9 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
           error: providerError,
           errorDescription: description,
           providerType: config.providerType,
+          code: params.code ?? undefined,
+          rawError,
+          rawErrorDescription: rawDescription,
         }),
         requestContext: params.requestContext ?? null,
       });
@@ -210,6 +224,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         details: buildProxyCallbackErrorDetails({
           error: "missing_token_response",
           providerType: config.providerType,
+          code: params.code ?? undefined,
         }),
         requestContext: params.requestContext ?? null,
       });
