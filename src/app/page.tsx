@@ -147,7 +147,7 @@ export default function Home() {
           </div>
         </section>
         <section>
-          <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-6xl px-6 py-16">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Core Features</h2>
               <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-3">
@@ -167,7 +167,7 @@ export default function Home() {
 </section>
 
         <section>
-          <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Designed for real development workflows</h2>
             <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {deployableHighlights.map((item) => (
@@ -184,7 +184,7 @@ export default function Home() {
         </section>
 
         <section>
-          <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
             <ol className="mt-10 space-y-6 sm:pl-4">
               {excellenceItems.map((item, index) => (
@@ -200,7 +200,7 @@ export default function Home() {
             </ol>
           </div>
         </section>        <section id="quick-start">
-          <div className="mx-auto max-w-6xl px-6 py-24">
+          <div className="mx-auto max-w-6xl px-6 py-20">
             <div
               className="relative overflow-hidden rounded-3xl border border-border p-12 text-center shadow-2xl"
               style={{
@@ -240,7 +240,7 @@ export default function Home() {
         </section>
 
         <section>
-          <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">FAQ</h2>
             <dl className="mt-10 space-y-6">
               {faqItems.map((item) => (
