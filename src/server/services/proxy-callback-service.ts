@@ -8,7 +8,6 @@ import {
   buildProxyCodeIssuedDetails,
   toTokenResponsePayload,
 } from "@/server/services/audit-event";
-import { auditRedactionState } from "@/server/services/audit-redaction";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import {
   getProxyAuthTransaction,
@@ -36,8 +35,6 @@ type ProxyCallbackResult = {
   redirectTo: string;
   clearTransactionCookie: boolean;
 };
-
-const includeSensitive = !auditRedactionState.redactionEnabled;
 
 const buildCallbackUrl = (origin: string, apiResourceId: string) =>
   new URL(`/r/${apiResourceId}/oidc/proxy/callback`, origin).toString();
@@ -99,7 +96,6 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         error: "transaction_expired",
         providerType: transaction.client.proxyConfig?.providerType,
         code: params.code ?? undefined,
-        includeSensitive,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -140,7 +136,6 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         code: params.code ?? undefined,
         rawError: params.providerError ?? undefined,
         rawErrorDescription: params.providerErrorDescription ?? undefined,
-        includeSensitive,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -161,7 +156,6 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         error: "missing_code",
         providerType: config.providerType,
         code: params.code ?? undefined,
-        includeSensitive,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -211,7 +205,6 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
           code: params.code ?? undefined,
           rawError,
           rawErrorDescription: rawDescription,
-          includeSensitive,
         }),
         requestContext: params.requestContext ?? null,
       });
@@ -232,7 +225,6 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
           error: "missing_token_response",
           providerType: config.providerType,
           code: params.code ?? undefined,
-          includeSensitive,
         }),
         requestContext: params.requestContext ?? null,
       });

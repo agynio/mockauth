@@ -113,11 +113,8 @@ updates). CI runs this script automatically before executing E2E specs.
 
 ### Audit logs
 
-- Audit log redaction is enabled by default. Set `AUDIT_LOG_REDACTION=off` only in QA/debug environments if you need to
-  capture full request and configuration payloads (tokens, codes, secrets, redirect parameters).
-- In Vercel production (`VERCEL_ENV=production`), redaction is forced on unless you explicitly set
-  `AUDIT_LOG_ALLOW_UNREDACTED_IN_PROD=true` (not recommended). The audit logs UI shows a banner when redaction is
-  disabled or when the production override is active.
+- Audit logs store full request and configuration payloads (tokens, codes, secrets, redirect parameters) to support
+  QA/debug workflows. Treat audit logs as sensitive data and restrict access accordingly.
 
 ### Redirect wildcard policy
 

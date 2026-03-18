@@ -15,11 +15,9 @@ import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   buildTokenAuthCodeReceivedDetails,
   buildTokenRefreshReceivedDetails,
-  summarizeTokenResponse,
   toTokenResponsePayload,
   type TokenAuthMethod,
 } from "@/server/services/audit-event";
-import { auditRedactionState } from "@/server/services/audit-redaction";
 import {
   createSecurityViolationReporter,
   withSecurityViolationAudit,
@@ -43,8 +41,6 @@ type ProxyTokenAuditContext = {
   clientIdProvided?: boolean;
   includeAuthHeader?: boolean;
 };
-
-const includeSensitive = !auditRedactionState.redactionEnabled;
 
 export const isProxyCode = isProxyAuthorizationCode;
 
@@ -81,7 +77,6 @@ export const completeProxyAuthorizationCodeGrant = async (
       redirectUri: params.redirectUri,
       authorizationCode: params.code,
       includeAuthHeader: params.auditContext?.includeAuthHeader,
-      includeSensitive,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
@@ -146,7 +141,7 @@ export const completeProxyAuthorizationCodeGrant = async (
     eventType: "TOKEN_AUTHCODE_COMPLETED",
     severity: "INFO",
     message: "Token response issued",
-    details: summarizeTokenResponse(toTokenResponsePayload(response)),
+    details: toTokenResponsePayload(response),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
@@ -221,7 +216,6 @@ export const completeProxyRefreshGrant = async (
       grantType: "refresh_token",
       refreshToken: params.refreshToken,
       includeAuthHeader: params.auditContext?.includeAuthHeader,
-      includeSensitive,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
@@ -267,7 +261,7 @@ export const completeProxyRefreshGrant = async (
     eventType: "TOKEN_REFRESH_COMPLETED",
     severity: "INFO",
     message: "Refresh token response issued",
-    details: summarizeTokenResponse(toTokenResponsePayload(refreshResponse)),
+    details: toTokenResponsePayload(refreshResponse),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 

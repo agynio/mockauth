@@ -17,11 +17,9 @@ import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   buildTokenAuthCodeReceivedDetails,
-  summarizeTokenResponse,
   type TokenAuthMethod,
   type TokenResponsePayload,
 } from "@/server/services/audit-event";
-import { auditRedactionState } from "@/server/services/audit-redaction";
 import {
   createSecurityViolationReporter,
   SecurityViolationError,
@@ -32,8 +30,6 @@ import type { RequestContext } from "@/server/utils/request-context";
 
 const ID_TOKEN_TTL_SECONDS = 600;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
-const includeSensitive = !auditRedactionState.redactionEnabled;
-
 type CodeContext = AuthorizationCodeWithRelations;
 
 type ClientSecretContext = {
@@ -158,7 +154,6 @@ export const issueTokensFromCode = async (params: {
       redirectUri,
       authorizationCode: authorizationCode ?? undefined,
       includeAuthHeader: auditContext?.includeAuthHeader,
-      includeSensitive,
     }),
     requestContext: auditContext?.requestContext ?? null,
   });
@@ -264,7 +259,7 @@ export const issueTokensFromCode = async (params: {
     eventType: "TOKEN_AUTHCODE_COMPLETED",
     severity: "INFO",
     message: "Token response issued",
-    details: summarizeTokenResponse(response),
+    details: response,
     requestContext: auditContext?.requestContext ?? null,
   });
 

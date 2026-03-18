@@ -13,7 +13,6 @@ import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-tok
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import { buildAuthorizeReceivedDetails, buildProxyRedirectOutDetails } from "@/server/services/audit-event";
-import { auditRedactionState } from "@/server/services/audit-redaction";
 import {
   PROXY_TRANSACTION_TTL_SECONDS,
   startProxyAuthTransaction,
@@ -24,8 +23,6 @@ import type { RequestContext } from "@/server/utils/request-context";
 
 type LoadedClient = Awaited<ReturnType<typeof getClientForTenant>>;
 type ProxyProviderConfigRecord = NonNullable<LoadedClient["proxyConfig"]>;
-
-const includeSensitive = !auditRedactionState.redactionEnabled;
 
 type AuthorizeParams = {
   apiResourceId: string;
@@ -125,7 +122,6 @@ export const handleAuthorize = async (
       codeChallengeMethod: params.codeChallengeMethod,
       loginHint: params.loginHint,
       freshLoginRequested: params.freshLoginRequested,
-      includeSensitive,
     }),
     requestContext: requestContext ?? null,
   });
@@ -281,7 +277,6 @@ const handleProxyAuthorize = async (args: {
       codeChallengeMethod: params.codeChallengeMethod,
       loginHint: params.loginHint,
       freshLoginRequested: params.freshLoginRequested,
-      includeSensitive,
     }),
     requestContext: requestContext ?? null,
   });
@@ -331,7 +326,6 @@ const handleProxyAuthorize = async (args: {
         codeChallenge: providerCodeChallenge,
         codeChallengeMethod: providerCodeChallenge ? "S256" : undefined,
         codeVerifier: providerCodeVerifier,
-        includeSensitive,
       }),
       requestContext: requestContext ?? null,
     });

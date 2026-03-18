@@ -41,23 +41,7 @@ Set the secret with:
 CRON_SECRET=replace-with-cron-secret
 ```
 
-## Redaction
+## Audit log data
 
-Tokens, authorization codes, and secrets are not stored in audit logs by default. Only non-sensitive summaries are
-retained.
-
-To disable redaction for QA/debugging, set:
-
-```
-AUDIT_LOG_REDACTION=off
-```
-
-In Vercel production (`VERCEL_ENV=production`), redaction is forced on unless you explicitly set:
-
-```
-AUDIT_LOG_ALLOW_UNREDACTED_IN_PROD=true
-```
-
-When disabled, sensitive request parameters and configuration snapshots are logged in full. The admin UI shows a
-warning banner when redaction is turned off or when a production override is blocking unredacted logging. Keep
-unredacted logging disabled in production environments.
+Audit logs store full request and configuration payloads (tokens, codes, secrets, redirect parameters) to support QA and
+debug workflows. Treat audit logs as sensitive data and restrict access accordingly.

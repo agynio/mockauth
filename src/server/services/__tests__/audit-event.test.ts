@@ -23,7 +23,7 @@ const baseEvent = {
 const sanitize = (event: AuditEventInput) => sanitizeAuditDetails(event) as Record<string, unknown>;
 
 describe("sanitizeAuditDetails", () => {
-  it("returns compacted builder details without sensitive fields", () => {
+  it("returns compacted builder details with full fields", () => {
     const details = buildAuthorizeReceivedDetails({
       responseType: "code",
       scope: "openid profile",
@@ -35,7 +35,6 @@ describe("sanitizeAuditDetails", () => {
       codeChallengeMethod: "S256",
       loginHint: "user@example.com",
       freshLoginRequested: true,
-      includeSensitive: false,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -47,47 +46,20 @@ describe("sanitizeAuditDetails", () => {
     expect(sanitized).toMatchObject({
       responseType: "code",
       scope: "openid profile",
+      prompt: "login",
       codeChallengeMethod: "S256",
       loginHintProvided: true,
       nonceProvided: true,
       freshLoginRequested: true,
-    });
-    expect(sanitized).not.toHaveProperty("redirectUri");
-    expect(sanitized).not.toHaveProperty("state");
-  });
-
-  it("returns builder details with sensitive fields", () => {
-    const details = buildAuthorizeReceivedDetails({
-      responseType: "code",
-      scope: "openid profile",
-      prompt: "login",
       redirectUri: "https://app.example.com/callback",
       state: "state-123",
       nonce: "nonce-123",
       codeChallenge: "challenge-123",
-      codeChallengeMethod: "S256",
-      loginHint: "user@example.com",
-      freshLoginRequested: true,
-      includeSensitive: true,
-    });
-    const event: AuditEventInput = {
-      ...baseEvent,
-      eventType: "AUTHORIZE_RECEIVED",
-      details,
-    };
-
-    const sanitized = sanitize(event);
-    expect(sanitized).toMatchObject({
-      redirectUri: "https://app.example.com/callback",
-      state: "state-123",
-      nonce: "nonce-123",
-      codeChallenge: "challenge-123",
-      codeChallengeMethod: "S256",
       loginHint: "user@example.com",
     });
   });
 
-  it("prefers raw provider errors when includeSensitive is true", () => {
+  it("prefers raw provider errors", () => {
     const details = buildProxyCallbackErrorDetails({
       error: "provider_error",
       errorDescription: "Provider error",
@@ -95,7 +67,6 @@ describe("sanitizeAuditDetails", () => {
       code: "provider-code",
       rawError: "invalid_grant",
       rawErrorDescription: "Invalid grant description",
-      includeSensitive: true,
     });
     const event: AuditEventInput = {
       ...baseEvent,
@@ -110,10 +81,9 @@ describe("sanitizeAuditDetails", () => {
       providerType: "oidc",
       code: "provider-code",
     });
-    expect(sanitized).not.toHaveProperty("rawError");
   });
 
-  it("captures redirect host for proxy codes", () => {
+  it("captures redirect details for proxy codes", () => {
     const details = buildProxyCodeIssuedDetails({
       scope: "openid",
       redirectUri: "https://proxy.example.com/callback",
@@ -127,12 +97,11 @@ describe("sanitizeAuditDetails", () => {
     const sanitized = sanitize(event);
     expect(sanitized).toMatchObject({
       scope: "openid",
-      redirectUriHost: "proxy.example.com",
+      redirectUri: "https://proxy.example.com/callback",
     });
-    expect(sanitized).not.toHaveProperty("redirectUri");
   });
 
-  it("omits sensitive fields when includeSensitive is false", () => {
+  it("includes sensitive fields in builder outputs", () => {
     const details = buildAuthorizeReceivedDetails({
       responseType: "code",
       scope: "openid",
@@ -144,17 +113,16 @@ describe("sanitizeAuditDetails", () => {
       codeChallengeMethod: "S256",
       loginHint: "user@example.com",
       freshLoginRequested: true,
-      includeSensitive: false,
     });
 
     expect(details).toMatchObject({
       responseType: "code",
       scope: "openid",
+      redirectUri: "https://app.example.com/callback",
+      loginHint: "user@example.com",
       codeChallengeMethod: "S256",
       loginHintProvided: true,
     });
-    expect(details).not.toHaveProperty("redirectUri");
-    expect(details).not.toHaveProperty("loginHint");
 
     const tokenDetails = buildTokenAuthCodeReceivedDetails({
       authMethod: "client_secret_post",
@@ -166,15 +134,15 @@ describe("sanitizeAuditDetails", () => {
       redirectUri: "https://app.example.com/callback",
       authorizationCode: "auth-code",
       includeAuthHeader: true,
-      includeSensitive: false,
     });
 
     expect(tokenDetails).toMatchObject({
       authMethod: "client_secret_post",
       clientSecretInBody: true,
       clientIdProvided: true,
+      clientId: "client-id",
+      clientSecret: "secret",
+      authorizationCode: "auth-code",
     });
-    expect(tokenDetails).not.toHaveProperty("clientSecret");
-    expect(tokenDetails).not.toHaveProperty("authorizationCode");
   });
 });

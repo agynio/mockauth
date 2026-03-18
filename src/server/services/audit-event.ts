@@ -34,16 +34,7 @@ export type TokenResponsePayload = {
   id_token?: string;
 };
 
-export type TokenSummaryDetails = {
-  tokenType?: string;
-  scope?: string;
-  expiresIn?: number;
-  hasAccessToken: boolean;
-  hasRefreshToken: boolean;
-  hasIdToken: boolean;
-};
-
-type AuthorizeReceivedDetailsBase = {
+export type AuthorizeReceivedDetails = {
   responseType: string;
   scope: string;
   prompt?: string;
@@ -51,9 +42,6 @@ type AuthorizeReceivedDetailsBase = {
   loginHintProvided: boolean;
   nonceProvided: boolean;
   freshLoginRequested?: boolean;
-};
-
-type AuthorizeReceivedSensitiveDetails = {
   redirectUri?: string;
   state?: string;
   nonce?: string;
@@ -61,18 +49,12 @@ type AuthorizeReceivedSensitiveDetails = {
   loginHint?: string;
 };
 
-export type AuthorizeReceivedDetails<IncludeSensitive extends boolean = boolean> = AuthorizeReceivedDetailsBase &
-  (IncludeSensitive extends true ? AuthorizeReceivedSensitiveDetails : Record<string, never>);
-
-type ProxyRedirectOutDetailsBase = {
+export type ProxyRedirectOutDetails = {
   providerType: string;
   providerScope?: string;
   providerPkceEnabled: boolean;
   prompt?: string;
   loginHintProvided: boolean;
-};
-
-type ProxyRedirectOutSensitiveDetails = {
   redirectUri?: string;
   state?: string;
   nonce?: string;
@@ -82,39 +64,27 @@ type ProxyRedirectOutSensitiveDetails = {
   loginHint?: string;
 };
 
-export type ProxyRedirectOutDetails<IncludeSensitive extends boolean = boolean> = ProxyRedirectOutDetailsBase &
-  (IncludeSensitive extends true ? ProxyRedirectOutSensitiveDetails : Record<string, never>);
-
 export type ProxyCallbackSuccessDetails = {
   providerType: string;
-  tokenSummary: TokenSummaryDetails;
+  tokenResponse: TokenResponsePayload;
 };
 
-type ProxyCallbackErrorDetailsBase = {
+export type ProxyCallbackErrorDetails = {
   error: string;
   errorDescription?: string;
   providerType?: string;
-};
-
-type ProxyCallbackErrorSensitiveDetails = {
   code?: string;
 };
 
-export type ProxyCallbackErrorDetails<IncludeSensitive extends boolean = boolean> = ProxyCallbackErrorDetailsBase &
-  (IncludeSensitive extends true ? ProxyCallbackErrorSensitiveDetails : Record<string, never>);
-
 export type ProxyCodeIssuedDetails = {
   scope: string;
-  redirectUriHost?: string;
+  redirectUri: string;
 };
 
-type TokenAuthCodeReceivedDetailsBase = {
+export type TokenAuthCodeReceivedDetails = {
   authMethod: TokenAuthMethod;
   clientSecretInBody?: boolean;
   clientIdProvided?: boolean;
-};
-
-type TokenAuthCodeReceivedSensitiveDetails = {
   clientId?: string | null;
   clientSecret?: string | null;
   grantType?: string;
@@ -123,25 +93,16 @@ type TokenAuthCodeReceivedSensitiveDetails = {
   includeAuthHeader?: boolean;
 };
 
-export type TokenAuthCodeReceivedDetails<IncludeSensitive extends boolean = boolean> = TokenAuthCodeReceivedDetailsBase &
-  (IncludeSensitive extends true ? TokenAuthCodeReceivedSensitiveDetails : Record<string, never>);
-
-type TokenRefreshReceivedDetailsBase = {
+export type TokenRefreshReceivedDetails = {
   authMethod: TokenAuthMethod;
   clientSecretInBody?: boolean;
   scope?: string;
-};
-
-type TokenRefreshReceivedSensitiveDetails = {
   clientId?: string | null;
   clientSecret?: string | null;
   grantType?: string;
   refreshToken?: string;
   includeAuthHeader?: boolean;
 };
-
-export type TokenRefreshReceivedDetails<IncludeSensitive extends boolean = boolean> = TokenRefreshReceivedDetailsBase &
-  (IncludeSensitive extends true ? TokenRefreshReceivedSensitiveDetails : Record<string, never>);
 
 export type ProxyProviderConfigSnapshot = {
   providerType: string;
@@ -161,30 +122,21 @@ export type ProxyProviderConfigSnapshot = {
   passthroughTokenResponse: boolean;
 };
 
-type ConfigChangedDetailsBase = {
+export type ConfigChangedDetails = {
   action: string;
   resource: string;
   resourceId?: string;
   resourceName?: string;
-};
-
-type ConfigChangedSensitiveDetails = {
   proxyConfigBefore?: ProxyProviderConfigSnapshot;
   proxyConfigAfter?: ProxyProviderConfigSnapshot;
   authMethodBefore?: TokenAuthMethod;
   authMethodAfter?: TokenAuthMethod;
 };
 
-export type ConfigChangedDetails<IncludeSensitive extends boolean = boolean> = ConfigChangedDetailsBase &
-  (IncludeSensitive extends true ? ConfigChangedSensitiveDetails : Record<string, never>);
-
-type SecurityViolationDetailsBase = {
+export type SecurityViolationDetails = {
   reason: SecurityViolationReason;
   authMethod?: TokenAuthMethod;
   clientSecretInBody?: boolean;
-};
-
-type SecurityViolationSensitiveDetails = {
   expectedAuthMethod?: TokenAuthMethod;
   receivedAuthMethod?: TokenAuthMethod;
   expectedClientId?: string;
@@ -202,9 +154,6 @@ type SecurityViolationSensitiveDetails = {
   clientSecret?: string | null;
 };
 
-export type SecurityViolationDetails<IncludeSensitive extends boolean = boolean> = SecurityViolationDetailsBase &
-  (IncludeSensitive extends true ? SecurityViolationSensitiveDetails : Record<string, never>);
-
 export type AuditEventDetailsMap = {
   AUTHORIZE_RECEIVED: AuthorizeReceivedDetails;
   PROXY_REDIRECT_OUT: ProxyRedirectOutDetails;
@@ -212,9 +161,9 @@ export type AuditEventDetailsMap = {
   PROXY_CALLBACK_ERROR: ProxyCallbackErrorDetails;
   PROXY_CODE_ISSUED: ProxyCodeIssuedDetails;
   TOKEN_AUTHCODE_RECEIVED: TokenAuthCodeReceivedDetails;
-  TOKEN_AUTHCODE_COMPLETED: TokenSummaryDetails;
+  TOKEN_AUTHCODE_COMPLETED: TokenResponsePayload;
   TOKEN_REFRESH_RECEIVED: TokenRefreshReceivedDetails;
-  TOKEN_REFRESH_COMPLETED: TokenSummaryDetails;
+  TOKEN_REFRESH_COMPLETED: TokenResponsePayload;
   CONFIG_CHANGED: ConfigChangedDetails;
   SECURITY_VIOLATION: SecurityViolationDetails;
 };
@@ -233,7 +182,7 @@ export type AuditEventInput = {
   [K in AuditLogEventType]: AuditEventBase & { eventType: K; details: AuditEventDetailsMap[K] };
 }[AuditLogEventType];
 
-type AuthorizeReceivedDetailsParams<IncludeSensitive extends boolean> = {
+type AuthorizeReceivedDetailsParams = {
   responseType: string;
   scope: string;
   prompt?: string | null;
@@ -244,22 +193,10 @@ type AuthorizeReceivedDetailsParams<IncludeSensitive extends boolean> = {
   codeChallengeMethod: string;
   loginHint?: string | null;
   freshLoginRequested?: boolean;
-  includeSensitive: IncludeSensitive;
 };
 
-export function buildAuthorizeReceivedDetails(
-  params: AuthorizeReceivedDetailsParams<true>,
-): AuthorizeReceivedDetails<true>;
-export function buildAuthorizeReceivedDetails(
-  params: AuthorizeReceivedDetailsParams<false>,
-): AuthorizeReceivedDetails<false>;
-export function buildAuthorizeReceivedDetails(
-  params: AuthorizeReceivedDetailsParams<boolean>,
-): AuthorizeReceivedDetails<boolean>;
-export function buildAuthorizeReceivedDetails(
-  params: AuthorizeReceivedDetailsParams<boolean>,
-): AuthorizeReceivedDetails<boolean> {
-  const base: AuthorizeReceivedDetailsBase = {
+export function buildAuthorizeReceivedDetails(params: AuthorizeReceivedDetailsParams): AuthorizeReceivedDetails {
+  return {
     responseType: params.responseType,
     scope: params.scope,
     prompt: params.prompt ?? undefined,
@@ -267,14 +204,6 @@ export function buildAuthorizeReceivedDetails(
     loginHintProvided: Boolean(params.loginHint),
     nonceProvided: Boolean(params.nonce),
     freshLoginRequested: Boolean(params.freshLoginRequested),
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
-  return {
-    ...base,
     redirectUri: params.redirectUri ?? undefined,
     state: params.state ?? undefined,
     nonce: params.nonce ?? undefined,
@@ -283,7 +212,7 @@ export function buildAuthorizeReceivedDetails(
   };
 }
 
-type ProxyRedirectOutDetailsParams<IncludeSensitive extends boolean> = {
+type ProxyRedirectOutDetailsParams = {
   providerType: string;
   providerScope?: string | null;
   providerPkceEnabled: boolean;
@@ -295,35 +224,15 @@ type ProxyRedirectOutDetailsParams<IncludeSensitive extends boolean> = {
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
   codeVerifier?: string | null;
-  includeSensitive: IncludeSensitive;
 };
 
-export function buildProxyRedirectOutDetails(
-  params: ProxyRedirectOutDetailsParams<true>,
-): ProxyRedirectOutDetails<true>;
-export function buildProxyRedirectOutDetails(
-  params: ProxyRedirectOutDetailsParams<false>,
-): ProxyRedirectOutDetails<false>;
-export function buildProxyRedirectOutDetails(
-  params: ProxyRedirectOutDetailsParams<boolean>,
-): ProxyRedirectOutDetails<boolean>;
-export function buildProxyRedirectOutDetails(
-  params: ProxyRedirectOutDetailsParams<boolean>,
-): ProxyRedirectOutDetails<boolean> {
-  const base: ProxyRedirectOutDetailsBase = {
+export function buildProxyRedirectOutDetails(params: ProxyRedirectOutDetailsParams): ProxyRedirectOutDetails {
+  return {
     providerType: params.providerType,
     providerScope: params.providerScope ?? undefined,
     providerPkceEnabled: params.providerPkceEnabled,
     prompt: params.prompt ?? undefined,
     loginHintProvided: Boolean(params.loginHint),
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
-  return {
-    ...base,
     redirectUri: params.redirectUri ?? undefined,
     state: params.state ?? undefined,
     nonce: params.nonce ?? undefined,
@@ -339,57 +248,33 @@ export const buildProxyCallbackSuccessDetails = (params: {
   providerResponse: TokenResponsePayload;
 }): ProxyCallbackSuccessDetails => ({
   providerType: params.providerType,
-  tokenSummary: summarizeTokenResponse(params.providerResponse),
+  tokenResponse: params.providerResponse,
 });
 
-type ProxyCallbackErrorDetailsParams<IncludeSensitive extends boolean> = {
+type ProxyCallbackErrorDetailsParams = {
   error: string;
   errorDescription?: string | null;
   providerType?: string | null;
   code?: string | null;
   rawError?: string | null;
   rawErrorDescription?: string | null;
-  includeSensitive: IncludeSensitive;
 };
 
-export function buildProxyCallbackErrorDetails(
-  params: ProxyCallbackErrorDetailsParams<true>,
-): ProxyCallbackErrorDetails<true>;
-export function buildProxyCallbackErrorDetails(
-  params: ProxyCallbackErrorDetailsParams<false>,
-): ProxyCallbackErrorDetails<false>;
-export function buildProxyCallbackErrorDetails(
-  params: ProxyCallbackErrorDetailsParams<boolean>,
-): ProxyCallbackErrorDetails<boolean>;
-export function buildProxyCallbackErrorDetails(
-  params: ProxyCallbackErrorDetailsParams<boolean>,
-): ProxyCallbackErrorDetails<boolean> {
-  const resolvedError = params.includeSensitive ? params.rawError ?? params.error : params.error;
-  const resolvedDescription = params.includeSensitive
-    ? params.rawErrorDescription ?? params.errorDescription ?? undefined
-    : params.errorDescription ?? undefined;
-  const base: ProxyCallbackErrorDetailsBase = {
-    error: resolvedError,
-    errorDescription: resolvedDescription,
-    providerType: params.providerType ?? undefined,
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
+export function buildProxyCallbackErrorDetails(params: ProxyCallbackErrorDetailsParams): ProxyCallbackErrorDetails {
   return {
-    ...base,
+    error: params.rawError ?? params.error,
+    errorDescription: params.rawErrorDescription ?? params.errorDescription ?? undefined,
+    providerType: params.providerType ?? undefined,
     code: params.code ?? undefined,
   };
 }
 
 export const buildProxyCodeIssuedDetails = (params: { scope: string; redirectUri: string }): ProxyCodeIssuedDetails => ({
   scope: params.scope,
-  redirectUriHost: parseUrlHost(params.redirectUri),
+  redirectUri: params.redirectUri,
 });
 
-type TokenAuthCodeReceivedParams<IncludeSensitive extends boolean> = {
+type TokenAuthCodeReceivedParams = {
   authMethod: TokenAuthMethod;
   clientSecretInBody?: boolean;
   clientIdProvided?: boolean;
@@ -399,33 +284,15 @@ type TokenAuthCodeReceivedParams<IncludeSensitive extends boolean> = {
   redirectUri?: string;
   authorizationCode?: string;
   includeAuthHeader?: boolean;
-  includeSensitive: IncludeSensitive;
 };
 
 export function buildTokenAuthCodeReceivedDetails(
-  params: TokenAuthCodeReceivedParams<true>,
-): TokenAuthCodeReceivedDetails<true>;
-export function buildTokenAuthCodeReceivedDetails(
-  params: TokenAuthCodeReceivedParams<false>,
-): TokenAuthCodeReceivedDetails<false>;
-export function buildTokenAuthCodeReceivedDetails(
-  params: TokenAuthCodeReceivedParams<boolean>,
-): TokenAuthCodeReceivedDetails<boolean>;
-export function buildTokenAuthCodeReceivedDetails(
-  params: TokenAuthCodeReceivedParams<boolean>,
-): TokenAuthCodeReceivedDetails<boolean> {
-  const base: TokenAuthCodeReceivedDetailsBase = {
+  params: TokenAuthCodeReceivedParams,
+): TokenAuthCodeReceivedDetails {
+  return {
     authMethod: params.authMethod,
     clientSecretInBody: params.clientSecretInBody ?? undefined,
     clientIdProvided: params.clientIdProvided ?? undefined,
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
-  return {
-    ...base,
     clientId: params.clientId ?? null,
     clientSecret: params.clientSecret ?? null,
     grantType: params.grantType ?? undefined,
@@ -435,7 +302,7 @@ export function buildTokenAuthCodeReceivedDetails(
   };
 }
 
-type TokenRefreshReceivedParams<IncludeSensitive extends boolean> = {
+type TokenRefreshReceivedParams = {
   authMethod: TokenAuthMethod;
   clientSecretInBody?: boolean;
   scope?: string;
@@ -444,33 +311,13 @@ type TokenRefreshReceivedParams<IncludeSensitive extends boolean> = {
   grantType?: string;
   refreshToken?: string;
   includeAuthHeader?: boolean;
-  includeSensitive: IncludeSensitive;
 };
 
-export function buildTokenRefreshReceivedDetails(
-  params: TokenRefreshReceivedParams<true>,
-): TokenRefreshReceivedDetails<true>;
-export function buildTokenRefreshReceivedDetails(
-  params: TokenRefreshReceivedParams<false>,
-): TokenRefreshReceivedDetails<false>;
-export function buildTokenRefreshReceivedDetails(
-  params: TokenRefreshReceivedParams<boolean>,
-): TokenRefreshReceivedDetails<boolean>;
-export function buildTokenRefreshReceivedDetails(
-  params: TokenRefreshReceivedParams<boolean>,
-): TokenRefreshReceivedDetails<boolean> {
-  const base: TokenRefreshReceivedDetailsBase = {
+export function buildTokenRefreshReceivedDetails(params: TokenRefreshReceivedParams): TokenRefreshReceivedDetails {
+  return {
     authMethod: params.authMethod,
     clientSecretInBody: params.clientSecretInBody ?? undefined,
     scope: params.scope ?? undefined,
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
-  return {
-    ...base,
     clientId: params.clientId ?? null,
     clientSecret: params.clientSecret ?? null,
     grantType: params.grantType ?? undefined,
@@ -479,7 +326,7 @@ export function buildTokenRefreshReceivedDetails(
   };
 }
 
-type ConfigChangedDetailsParams<IncludeSensitive extends boolean> = {
+type ConfigChangedDetailsParams = {
   action: string;
   resource: string;
   resourceId?: string | null;
@@ -488,28 +335,14 @@ type ConfigChangedDetailsParams<IncludeSensitive extends boolean> = {
   proxyConfigAfter?: ProxyProviderConfigSnapshot | null;
   authMethodBefore?: TokenAuthMethod | null;
   authMethodAfter?: TokenAuthMethod | null;
-  includeSensitive: IncludeSensitive;
 };
 
-export function buildConfigChangedDetails(params: ConfigChangedDetailsParams<true>): ConfigChangedDetails<true>;
-export function buildConfigChangedDetails(params: ConfigChangedDetailsParams<false>): ConfigChangedDetails<false>;
-export function buildConfigChangedDetails(
-  params: ConfigChangedDetailsParams<boolean>,
-): ConfigChangedDetails<boolean>;
-export function buildConfigChangedDetails(params: ConfigChangedDetailsParams<boolean>): ConfigChangedDetails<boolean> {
-  const base: ConfigChangedDetailsBase = {
+export function buildConfigChangedDetails(params: ConfigChangedDetailsParams): ConfigChangedDetails {
+  return {
     action: params.action,
     resource: params.resource,
     resourceId: params.resourceId ?? undefined,
     resourceName: params.resourceName ?? undefined,
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
-  return {
-    ...base,
     proxyConfigBefore: params.proxyConfigBefore ?? undefined,
     proxyConfigAfter: params.proxyConfigAfter ?? undefined,
     authMethodBefore: params.authMethodBefore ?? undefined,
@@ -517,7 +350,7 @@ export function buildConfigChangedDetails(params: ConfigChangedDetailsParams<boo
   };
 }
 
-type SecurityViolationDetailsParams<IncludeSensitive extends boolean> = {
+type SecurityViolationDetailsParams = {
   reason: SecurityViolationReason;
   authMethod?: TokenAuthMethod;
   clientSecretInBody?: boolean;
@@ -536,33 +369,13 @@ type SecurityViolationDetailsParams<IncludeSensitive extends boolean> = {
   expectedState?: string;
   receivedState?: string;
   clientSecret?: string | null;
-  includeSensitive: IncludeSensitive;
 };
 
-export function buildSecurityViolationDetails(
-  params: SecurityViolationDetailsParams<true>,
-): SecurityViolationDetails<true>;
-export function buildSecurityViolationDetails(
-  params: SecurityViolationDetailsParams<false>,
-): SecurityViolationDetails<false>;
-export function buildSecurityViolationDetails(
-  params: SecurityViolationDetailsParams<boolean>,
-): SecurityViolationDetails<boolean>;
-export function buildSecurityViolationDetails(
-  params: SecurityViolationDetailsParams<boolean>,
-): SecurityViolationDetails<boolean> {
-  const base: SecurityViolationDetailsBase = {
+export function buildSecurityViolationDetails(params: SecurityViolationDetailsParams): SecurityViolationDetails {
+  return {
     reason: params.reason,
     authMethod: params.authMethod ?? undefined,
     clientSecretInBody: params.clientSecretInBody ?? undefined,
-  };
-
-  if (!params.includeSensitive) {
-    return base;
-  }
-
-  return {
-    ...base,
     expectedAuthMethod: params.expectedAuthMethod ?? undefined,
     receivedAuthMethod: params.receivedAuthMethod ?? undefined,
     expectedClientId: params.expectedClientId ?? undefined,
@@ -581,30 +394,6 @@ export function buildSecurityViolationDetails(
   };
 }
 
-const parseExpiresIn = (value: TokenResponsePayload["expires_in"]) => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return undefined;
-    }
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-};
-
-export const summarizeTokenResponse = (response: TokenResponsePayload): TokenSummaryDetails => ({
-  tokenType: response.token_type?.trim() || undefined,
-  scope: response.scope?.trim() || undefined,
-  expiresIn: parseExpiresIn(response.expires_in),
-  hasAccessToken: typeof response.access_token === "string",
-  hasRefreshToken: typeof response.refresh_token === "string",
-  hasIdToken: typeof response.id_token === "string",
-});
-
 export const toTokenResponsePayload = (response: Record<string, unknown>): TokenResponsePayload => ({
   token_type: typeof response.token_type === "string" ? response.token_type : undefined,
   scope: typeof response.scope === "string" ? response.scope : undefined,
@@ -620,14 +409,6 @@ export const toTokenResponsePayload = (response: Record<string, unknown>): Token
 const compactDetails = (value: Record<string, unknown>): Prisma.InputJsonObject | null => {
   const entries = Object.entries(value).filter(([, entry]) => entry !== undefined);
   return entries.length > 0 ? (Object.fromEntries(entries) as Prisma.InputJsonObject) : null;
-};
-
-const parseUrlHost = (value: string) => {
-  try {
-    return new URL(value).host;
-  } catch {
-    return undefined;
-  }
 };
 
 export const sanitizeAuditDetails = (event: AuditEventInput): Prisma.InputJsonValue | null =>

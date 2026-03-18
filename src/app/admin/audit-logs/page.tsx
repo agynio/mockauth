@@ -6,7 +6,6 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { AUDIT_LOG_EVENT_TYPES, AUDIT_LOG_SEVERITIES } from "@/lib/audit-log";
 import { authOptions } from "@/server/auth/options";
 import { listAuditLogs, toAuditLogEntry } from "@/server/services/audit-log-service";
-import { auditRedactionState } from "@/server/services/audit-redaction";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { listClientSummaries } from "@/server/services/client-service";
 
@@ -89,7 +88,6 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Se
       clients={clients}
       initialLogs={initialLogs}
       initialCursor={auditLogs.nextCursor}
-      redactionState={auditRedactionState}
       initialFilters={{
         clientId,
         eventType,

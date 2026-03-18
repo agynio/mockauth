@@ -13,7 +13,7 @@ export type SecurityViolationContext = {
 };
 
 type SecurityViolationDetailOverrides = Omit<
-  SecurityViolationDetails<true>,
+  SecurityViolationDetails,
   "reason" | "authMethod" | "clientSecretInBody"
 >;
 
