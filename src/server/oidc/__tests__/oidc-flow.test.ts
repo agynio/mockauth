@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 
-import { $Enums } from "@/generated/prisma/client";
 import type { JwtSigningAlg, Prisma } from "@/generated/prisma/client";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 
@@ -60,7 +59,7 @@ describe("OIDC flow", () => {
     apiResourceId = tenant.defaultApiResourceId!;
     const user = tenant.mockUsers[0];
     sessionToken = await createSession(tenant.id, user.id, {
-      strategy: $Enums.LoginStrategy.USERNAME,
+      strategy: "USERNAME",
       subject: user.username,
     });
     codeVerifier = "verifier-1234567890123456789012345678901234567890";
@@ -130,23 +129,78 @@ describe("OIDC flow", () => {
     expect(code).toBeTruthy();
 
     const consumed = await consumeAuthorizationCode(code!);
+    expect(consumed.traceId).toBeTruthy();
     const tokenResponse = await issueTokensFromCode({
       code: consumed,
       codeVerifier,
       redirectUri: "https://client.example.test/callback",
       origin: "https://mockauth.test",
       clientSecret: CLIENT_SECRET,
+      auditContext: { authMethod: "client_secret_post", clientSecretInBody: true, clientIdProvided: true },
     });
 
     expect(tokenResponse.access_token).toBeTruthy();
     expect(tokenResponse.id_token).toBeTruthy();
 
-    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", apiResourceId);
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token!}`, "https://mockauth.test", apiResourceId);
     expect(userinfo.sub).toBe("demo");
-    const idToken = decodeJwt(tokenResponse.id_token);
+    const idToken = decodeJwt(tokenResponse.id_token!);
     expect(idToken.sub).toBe("demo");
     expect(idToken.preferred_username).toBe("demo");
     expect(idToken.email).toBeUndefined();
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where: { tenantId, traceId: consumed.traceId ?? undefined },
+      select: { eventType: true },
+    });
+    const auditEventTypes = auditLogs.map((log) => log.eventType).sort();
+    expect(auditEventTypes).toEqual(
+      expect.arrayContaining([
+        "AUTHORIZE_RECEIVED",
+        "TOKEN_AUTHCODE_RECEIVED",
+        "TOKEN_AUTHCODE_COMPLETED",
+      ]),
+    );
+  });
+
+  it("records security violations for PKCE mismatches", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: CLIENT_ID,
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        reauthCookie: buildReauthCookie(sessionToken),
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+    );
+
+    const redirected = new URL(authorize.redirectTo);
+    const code = redirected.searchParams.get("code");
+    expect(code).toBeTruthy();
+    const consumed = await consumeAuthorizationCode(code!);
+    await expect(
+      issueTokensFromCode({
+        code: consumed,
+        codeVerifier: "invalid-verifier",
+        redirectUri: "https://client.example.test/callback",
+        origin: "https://mockauth.test",
+        clientSecret: CLIENT_SECRET,
+        auditContext: { authMethod: "client_secret_post", clientSecretInBody: true, clientIdProvided: true },
+      }),
+    ).rejects.toThrowError("Invalid code verifier");
+
+    const violation = await prisma.auditLog.findFirst({
+      where: { tenantId, traceId: consumed.traceId ?? undefined, eventType: "SECURITY_VIOLATION" },
+      select: { details: true },
+    });
+    expect(violation?.details).toMatchObject({ reason: "pkce_mismatch" });
   });
 
   it("requires an explicit login step before issuing codes", async () => {
@@ -452,7 +506,7 @@ describe("OIDC flow", () => {
       },
     });
     const emailSessionToken = await createSession(tenantId, emailUser.id, {
-      strategy: $Enums.LoginStrategy.EMAIL,
+      strategy: "EMAIL",
       subject: "email-user@example.test",
     });
     const challenge = computeS256Challenge(codeVerifier);
@@ -485,13 +539,13 @@ describe("OIDC flow", () => {
       clientSecret: CLIENT_SECRET,
     });
 
-    const idToken = decodeJwt(tokenResponse.id_token);
+    const idToken = decodeJwt(tokenResponse.id_token!);
     expect(idToken.sub).toBe("email-user@example.test");
     expect(idToken.email).toBe("email-user@example.test");
     expect(idToken.email_verified).toBe(false);
     expect(idToken.preferred_username).toBeUndefined();
 
-    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", apiResourceId);
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token!}`, "https://mockauth.test", apiResourceId);
     expect(userinfo.email).toBe("email-user@example.test");
     await clearSession(tenantId, emailSessionToken);
   });
@@ -517,7 +571,7 @@ describe("OIDC flow", () => {
     const tenant = await prisma.tenant.findFirstOrThrow({ where: { id: tenantId }, include: { mockUsers: true } });
     const subject = randomUUID();
     const sessionTokenOverride = await createSession(tenant.id, tenant.mockUsers[0]!.id, {
-      strategy: $Enums.LoginStrategy.USERNAME,
+      strategy: "USERNAME",
       subject,
     });
     const challenge = computeS256Challenge(codeVerifier);
@@ -549,10 +603,10 @@ describe("OIDC flow", () => {
       clientSecret: CLIENT_SECRET,
     });
 
-    const idToken = decodeJwt(tokenResponse.id_token);
+    const idToken = decodeJwt(tokenResponse.id_token!);
     expect(idToken.sub).toBe(subject);
 
-    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token}`, "https://mockauth.test", apiResourceId);
+    const userinfo = await getUserInfo(`Bearer ${tokenResponse.access_token!}`, "https://mockauth.test", apiResourceId);
     expect(userinfo.sub).toBe(subject);
     await clearSession(tenantId, sessionTokenOverride);
   });
@@ -573,7 +627,7 @@ describe("OIDC flow", () => {
       create: { tenantId, username: "email-verified", email: "email-verified@example.test", displayName: "Email Verified" },
     });
     const verifiedSession = await createSession(tenantId, user.id, {
-      strategy: $Enums.LoginStrategy.EMAIL,
+      strategy: "EMAIL",
       subject: "email-verified@example.test",
     });
     const authorize = await handleAuthorize(
@@ -601,7 +655,7 @@ describe("OIDC flow", () => {
       origin: "https://mockauth.test",
       clientSecret: CLIENT_SECRET,
     });
-    const idToken = decodeJwt(tokens.id_token);
+    const idToken = decodeJwt(tokens.id_token!);
     expect(idToken.email_verified).toBe(true);
     await clearSession(tenantId, verifiedSession);
   });
@@ -624,7 +678,7 @@ describe("OIDC flow", () => {
 
     const authorizeFlow = async (override: boolean) => {
       const sessionTokenChoice = await createSession(tenantId, user.id, {
-        strategy: $Enums.LoginStrategy.EMAIL,
+        strategy: "EMAIL",
         subject: "email-choice@example.test",
         emailVerifiedOverride: override,
       });
@@ -654,7 +708,7 @@ describe("OIDC flow", () => {
         clientSecret: CLIENT_SECRET,
       });
       await clearSession(tenantId, sessionTokenChoice);
-      return decodeJwt(tokens.id_token).email_verified;
+      return decodeJwt(tokens.id_token!).email_verified;
     };
 
     await expect(authorizeFlow(true)).resolves.toBe(true);
@@ -699,8 +753,8 @@ describe("OIDC flow", () => {
       clientSecret: CLIENT_SECRET,
     });
 
-    const idHeader = decodeProtectedHeader(tokens.id_token);
-    const accessHeader = decodeProtectedHeader(tokens.access_token);
+    const idHeader = decodeProtectedHeader(tokens.id_token!);
+    const accessHeader = decodeProtectedHeader(tokens.access_token!);
 
     expect(idHeader.alg).toBe("ES384");
     expect(accessHeader.alg).toBe("PS256");
@@ -811,8 +865,8 @@ describe("OIDC flow", () => {
         }),
       ]);
 
-      const primaryHeader = decodeProtectedHeader(primaryTokens.id_token);
-      const alternateHeader = decodeProtectedHeader(alternateTokens.id_token);
+      const primaryHeader = decodeProtectedHeader(primaryTokens.id_token!);
+      const alternateHeader = decodeProtectedHeader(alternateTokens.id_token!);
 
       expect(primaryHeader.alg).toBe("PS256");
       expect(alternateHeader.alg).toBe("ES256");

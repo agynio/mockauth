@@ -29,6 +29,11 @@ const envSchema = z.object({
     .optional()
     .default("false")
     .transform((value) => value === "true"),
+  AUDIT_LOG_RETENTION_DAYS: z.preprocess(
+    (value) => (value === undefined ? undefined : Number(value)),
+    z.number().int().min(1).default(90),
+  ),
+  CRON_SECRET: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse({
@@ -44,6 +49,8 @@ export const env = envSchema.parse({
   ENABLE_TEST_ROUTES: process.env.ENABLE_TEST_ROUTES,
   ALLOW_EMAIL_LINKING: process.env.ALLOW_EMAIL_LINKING,
   MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE: process.env.MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE,
+  AUDIT_LOG_RETENTION_DAYS: process.env.AUDIT_LOG_RETENTION_DAYS,
+  CRON_SECRET: process.env.CRON_SECRET,
 });
 
 export const isProd = env.NODE_ENV === "production";

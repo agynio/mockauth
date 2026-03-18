@@ -111,6 +111,11 @@ updates). CI runs this script automatically before executing E2E specs.
   `/api/auth/signin/logto?callbackUrl=/admin` so they inherit the current host; reserve `NEXTAUTH_URL` for server-side
   NextAuth configuration only.
 
+### Audit logs
+
+- Audit logs store full request and configuration payloads (tokens, codes, secrets, redirect parameters) to support
+  QA/debug workflows. Treat audit logs as sensitive data and restrict access accordingly.
+
 ### Redirect wildcard policy
 
 - Redirect entries must be absolute URLs and use `https` unless they target `localhost`, `127.0.0.1`, or `::1` over

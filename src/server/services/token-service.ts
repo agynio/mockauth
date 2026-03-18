@@ -14,11 +14,22 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { ensureActiveKeyForAlg } from "@/server/services/key-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
+import { emitAuditEvent } from "@/server/services/audit-service";
+import {
+  buildTokenAuthCodeReceivedDetails,
+  type TokenAuthMethod,
+  type TokenResponsePayload,
+} from "@/server/services/audit-event";
+import {
+  createSecurityViolationReporter,
+  SecurityViolationError,
+  withSecurityViolationAudit,
+} from "@/server/services/security-violation";
 import type { JwtSigningAlg } from "@/generated/prisma/client";
+import type { RequestContext } from "@/server/utils/request-context";
 
 const ID_TOKEN_TTL_SECONDS = 600;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
-
 type CodeContext = AuthorizationCodeWithRelations;
 
 type ClientSecretContext = {
@@ -27,21 +38,48 @@ type ClientSecretContext = {
   clientSecretHash: AuthorizationCodeWithRelations["client"]["clientSecretHash"];
 };
 
+type TokenAuditContext = {
+  requestContext?: RequestContext | null;
+  authMethod?: TokenAuthMethod;
+  clientSecretInBody?: boolean;
+  clientIdProvided?: boolean;
+  clientId?: string;
+  includeAuthHeader?: boolean;
+};
+
 export const assertClientSecret = async (client: ClientSecretContext, provided?: string | null) => {
   if (client.clientType === "PUBLIC") {
     if (client.tokenEndpointAuthMethod !== "none") {
-      throw new DomainError("Public clients must use auth method none", { status: 400, code: "invalid_client" });
+      throw new SecurityViolationError(
+        "Public clients must use auth method none",
+        { status: 400, code: "invalid_client" },
+        "auth_method_mismatch",
+        {
+          expectedAuthMethod: "none",
+          receivedAuthMethod: client.tokenEndpointAuthMethod,
+        },
+      );
     }
     return;
   }
 
   if (!provided) {
-    throw new DomainError("Client authentication required", { status: 401, code: "invalid_client" });
+    throw new SecurityViolationError(
+      "Client authentication required",
+      { status: 401, code: "invalid_client" },
+      "client_auth_missing",
+      { clientSecret: null },
+    );
   }
 
   const valid = await verifySecret(provided, client.clientSecretHash);
   if (!valid) {
-    throw new DomainError("Invalid client credentials", { status: 401, code: "invalid_client" });
+    throw new SecurityViolationError(
+      "Invalid client credentials",
+      { status: 401, code: "invalid_client" },
+      "client_auth_invalid",
+      { clientSecret: provided },
+    );
   }
 };
 
@@ -52,11 +90,27 @@ type PkceContext = {
 
 export const verifyPkce = (code: PkceContext, verifier: string) => {
   if (code.codeChallengeMethod !== "S256") {
-    throw new DomainError("Unsupported code challenge method", { status: 400, code: "invalid_grant" });
+    throw new SecurityViolationError(
+      "Unsupported code challenge method",
+      { status: 400, code: "invalid_grant" },
+      "pkce_method_unsupported",
+      {
+        expectedCodeChallengeMethod: "S256",
+        receivedCodeChallengeMethod: code.codeChallengeMethod,
+      },
+    );
   }
 
   if (computeS256Challenge(verifier) !== code.codeChallenge) {
-    throw new DomainError("Invalid code verifier", { status: 400, code: "invalid_grant" });
+    throw new SecurityViolationError(
+      "Invalid code verifier",
+      { status: 400, code: "invalid_grant" },
+      "pkce_mismatch",
+      {
+        expectedCodeChallenge: code.codeChallenge,
+        receivedCodeVerifier: verifier,
+      },
+    );
   }
 };
 
@@ -66,15 +120,56 @@ export const issueTokensFromCode = async (params: {
   redirectUri: string;
   clientSecret?: string | null;
   origin: string;
+  authorizationCode?: string | null;
+  auditContext?: TokenAuditContext | null;
 }) => {
-  const { code, codeVerifier, redirectUri, clientSecret, origin } = params;
+  const { code, codeVerifier, redirectUri, clientSecret, origin, authorizationCode, auditContext } = params;
+  const traceId = code.traceId ?? null;
+  const authMethod = auditContext?.authMethod ?? code.client.tokenEndpointAuthMethod;
+  const violationContext = {
+    tenantId: code.tenantId,
+    clientId: code.clientId,
+    traceId,
+    severity: "ERROR" as const,
+    authMethod,
+    clientSecretInBody: auditContext?.clientSecretInBody,
+    requestContext: auditContext?.requestContext ?? null,
+  };
+  const reportViolation = createSecurityViolationReporter(violationContext);
+
+  void emitAuditEvent({
+    tenantId: code.tenantId,
+    clientId: code.clientId,
+    traceId,
+    actorId: null,
+    eventType: "TOKEN_AUTHCODE_RECEIVED",
+    severity: "INFO",
+    message: "Token request received",
+    details: buildTokenAuthCodeReceivedDetails({
+      authMethod,
+      clientSecretInBody: auditContext?.clientSecretInBody,
+      clientIdProvided: auditContext?.clientIdProvided,
+      clientId: auditContext?.clientId ?? null,
+      clientSecret: clientSecret ?? null,
+      grantType: "authorization_code",
+      redirectUri,
+      authorizationCode: authorizationCode ?? undefined,
+      includeAuthHeader: auditContext?.includeAuthHeader,
+    }),
+    requestContext: auditContext?.requestContext ?? null,
+  });
 
   const normalized = resolveRedirectUri(redirectUri, code.client.redirectUris ?? []);
   if (normalized !== code.redirectUri) {
+    await reportViolation(
+      "redirect_uri_mismatch",
+      { expectedRedirectUri: code.redirectUri, receivedRedirectUri: redirectUri },
+      "redirect_uri mismatch",
+    );
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
-  await assertClientSecret(code.client, clientSecret);
-  verifyPkce(code, codeVerifier);
+  await withSecurityViolationAudit(() => assertClientSecret(code.client, clientSecret), violationContext);
+  await withSecurityViolationAudit(async () => verifyPkce(code, codeVerifier), violationContext);
 
   const idTokenAlg: JwtSigningAlg = code.client.idTokenSignedResponseAlg ?? DEFAULT_JWT_SIGNING_ALG;
   const accessTokenAlg: JwtSigningAlg = code.client.accessTokenSigningAlg ?? idTokenAlg;
@@ -150,10 +245,24 @@ export const issueTokensFromCode = async (params: {
     },
   });
 
-  return {
+  const response: TokenResponsePayload = {
     id_token: idToken,
     access_token: accessToken,
     token_type: "Bearer",
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
   };
+
+  void emitAuditEvent({
+    tenantId: code.tenantId,
+    clientId: code.clientId,
+    traceId,
+    actorId: null,
+    eventType: "TOKEN_AUTHCODE_COMPLETED",
+    severity: "INFO",
+    message: "Token response issued",
+    details: response,
+    requestContext: auditContext?.requestContext ?? null,
+  });
+
+  return response;
 };

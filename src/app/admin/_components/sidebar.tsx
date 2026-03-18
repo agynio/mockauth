@@ -31,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/admin/clients", label: "Clients", description: "Manage OAuth clients" },
   { href: "/admin/api-resources", label: "API resources", description: "Manage issuers per tenant" },
   { href: "/admin/members", label: "Members", description: "Collaborate with your team" },
+  { href: "/admin/audit-logs", label: "Audit logs", description: "Review tenant activity" },
 ];
 
 export function AdminSidebar({ user, tenants, activeTenantId, onAddTenant }: Props) {

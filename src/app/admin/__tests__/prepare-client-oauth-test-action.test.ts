@@ -77,6 +77,9 @@ vi.mock("@/server/db/client", () => ({
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
   },
 }));
 

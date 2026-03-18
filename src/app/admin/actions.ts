@@ -49,17 +49,20 @@ import {
   getApiResourceForTenant,
 } from "@/server/services/api-resource-service";
 import { hasEnabledStrategy } from "@/server/oidc/auth-strategy";
+import { decrypt } from "@/server/crypto/key-vault";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { getRequestOrigin } from "@/server/utils/request-origin";
+import { getRequestContext } from "@/server/utils/request-context";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/server/services/oauth-test-service";
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
+import { emitAuditEvent } from "@/server/services/audit-service";
+import { buildConfigChangedDetails, type ProxyProviderConfigSnapshot, type TokenAuthMethod } from "@/server/services/audit-event";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
-
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
 });
@@ -121,6 +124,52 @@ const normalizeProxyConfigInput = (
   };
 
   return { normalized, keepExistingSecret };
+};
+
+const decryptProxySecret = (encrypted: string | null): string | undefined => {
+  if (!encrypted) {
+    return undefined;
+  }
+  try {
+    return decrypt(encrypted);
+  } catch (error) {
+    console.error("Unable to decrypt upstream client secret", error);
+    return undefined;
+  }
+};
+
+const buildProxyConfigSnapshot = (config: ProxyProviderConfigInput): ProxyProviderConfigSnapshot => {
+  const scopeMapping = config.scopeMapping
+    ? Object.fromEntries(
+        Object.entries(config.scopeMapping).map(([key, value]) => [
+          key,
+          Array.isArray(value)
+            ? value.map((scope) => scope.trim()).filter(Boolean)
+            : value
+                .split(/\s+/)
+                .map((scope) => scope.trim())
+                .filter(Boolean),
+        ]),
+      )
+    : undefined;
+
+  return {
+    providerType: config.providerType,
+    authorizationEndpoint: config.authorizationEndpoint,
+    tokenEndpoint: config.tokenEndpoint,
+    userinfoEndpoint: config.userinfoEndpoint ?? undefined,
+    jwksUri: config.jwksUri ?? undefined,
+    upstreamClientId: config.upstreamClientId,
+    upstreamClientSecret: config.upstreamClientSecret ?? undefined,
+    upstreamTokenEndpointAuthMethod: config.upstreamTokenEndpointAuthMethod ?? undefined,
+    defaultScopes: config.defaultScopes ?? undefined,
+    scopeMapping,
+    pkceSupported: Boolean(config.pkceSupported),
+    oidcEnabled: Boolean(config.oidcEnabled),
+    promptPassthroughEnabled: Boolean(config.promptPassthroughEnabled),
+    loginHintPassthroughEnabled: Boolean(config.loginHintPassthroughEnabled),
+    passthroughTokenResponse: Boolean(config.passthroughTokenResponse),
+  };
 };
 
 const validateProxyConfigInput = (config: z.infer<typeof proxyProviderConfigSchema> | undefined): string | null => {
@@ -257,6 +306,43 @@ const requireSession = async () => {
   return session.user.id;
 };
 
+const emitConfigChange = async (input: {
+  tenantId: string;
+  actorId: string;
+  action: string;
+  resource: string;
+  resourceId?: string | null;
+  resourceName?: string | null;
+  clientId?: string | null;
+  message: string;
+  proxyConfigBefore?: ProxyProviderConfigSnapshot | null;
+  proxyConfigAfter?: ProxyProviderConfigSnapshot | null;
+  authMethodBefore?: TokenAuthMethod | null;
+  authMethodAfter?: TokenAuthMethod | null;
+}) => {
+  const requestContext = await getRequestContext();
+  await emitAuditEvent({
+    tenantId: input.tenantId,
+    clientId: input.clientId ?? null,
+    traceId: null,
+    actorId: input.actorId,
+    eventType: "CONFIG_CHANGED",
+    severity: "INFO",
+    message: input.message,
+    details: buildConfigChangedDetails({
+      action: input.action,
+      resource: input.resource,
+      resourceId: input.resourceId,
+      resourceName: input.resourceName,
+      proxyConfigBefore: input.proxyConfigBefore ?? undefined,
+      proxyConfigAfter: input.proxyConfigAfter ?? undefined,
+      authMethodBefore: input.authMethodBefore ?? undefined,
+      authMethodAfter: input.authMethodAfter ?? undefined,
+    }),
+    requestContext,
+  });
+};
+
 const clientPath = (clientId: string) => `/admin/clients/${clientId}`;
 
 const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles?: MembershipRole[]) => {
@@ -289,6 +375,15 @@ export const createTenantAction = async (input: z.infer<typeof tenantSchema>): P
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath("/admin/members");
+    void emitConfigChange({
+      tenantId: tenant.id,
+      actorId: adminId,
+      action: "create",
+      resource: "tenant",
+      resourceId: tenant.id,
+      resourceName: tenant.name,
+      message: "Tenant created",
+    });
     return { success: "Tenant created" };
   } catch (error) {
     console.error(error);
@@ -363,6 +458,16 @@ export const createClientAction = async (
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
     revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "create",
+      resource: "client",
+      resourceId: client.id,
+      resourceName: client.name,
+      clientId: client.id,
+      message: "Client created",
+    });
     return {
       success: "Client created",
       data: { clientId: client.clientId, clientSecret: clientSecret ?? undefined, providerRedirectUri },
@@ -379,9 +484,18 @@ export const createApiResourceAction = async (input: z.infer<typeof apiResourceS
     const parsed = apiResourceSchema.parse(input);
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
-    await createApiResource(parsed.tenantId, { name: parsed.name, description: parsed.description });
+    const resource = await createApiResource(parsed.tenantId, { name: parsed.name, description: parsed.description });
     revalidatePath("/admin/api-resources");
     revalidatePath("/admin/clients");
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "create",
+      resource: "api_resource",
+      resourceId: resource.id,
+      resourceName: resource.name,
+      message: "API resource created",
+    });
     return { success: "API resource created" };
   } catch (error) {
     console.error(error);
@@ -395,12 +509,21 @@ export const updateApiResourceAction = async (input: z.infer<typeof updateApiRes
     const parsed = updateApiResourceSchema.parse(input);
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
-    await updateApiResourceRecord(parsed.tenantId, parsed.apiResourceId, {
+    const resource = await updateApiResourceRecord(parsed.tenantId, parsed.apiResourceId, {
       name: parsed.name,
       description: parsed.description,
     });
     revalidatePath("/admin/api-resources");
     revalidatePath("/admin/clients");
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "api_resource",
+      resourceId: resource.id,
+      resourceName: resource.name,
+      message: "API resource updated",
+    });
     return { success: "API resource updated" };
   } catch (error) {
     console.error(error);
@@ -420,6 +543,14 @@ export const setDefaultApiResourceAction = async (
     revalidatePath("/admin/api-resources");
     revalidatePath("/admin/clients");
     revalidatePath("/admin", "layout");
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "tenant_default_resource",
+      resourceId: parsed.apiResourceId,
+      message: "Default API resource updated",
+    });
     return { success: "Default issuer updated" };
   } catch (error) {
     console.error(error);
@@ -434,6 +565,14 @@ export const rotateKeyAction = async (input: z.infer<typeof keySchema>): Promise
     await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
     await rotateKeyForAlg(parsed.tenantId, parsed.alg);
     revalidatePath("/admin", "layout");
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "rotate",
+      resource: "tenant_key",
+      resourceName: parsed.alg,
+      message: `Signing key rotated (${parsed.alg})`,
+    });
     return { success: `Signing key rotated (${parsed.alg})` };
   } catch (error) {
     console.error(error);
@@ -456,6 +595,15 @@ export const rotateClientSecretAction = async (
     }
     const clientSecret = await rotateClientSecret(client.id);
     revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: client.tenantId,
+      actorId: adminId,
+      action: "rotate",
+      resource: "client_secret",
+      resourceId: client.id,
+      clientId: client.id,
+      message: "Client secret rotated",
+    });
     return { success: "Client secret rotated", data: { clientSecret } };
   } catch (error) {
     console.error(error);
@@ -490,8 +638,60 @@ export const updateProxyClientConfigAction = async (
       return { error: "Proxy configuration is required" };
     }
 
-    await upsertProxyProviderConfig(client.id, normalized, { keepExistingSecret });
+    const existingConfig = await prisma.proxyProviderConfig.findUnique({ where: { clientId: client.id } });
+    const resolvedAuthMethod =
+      rawConfig.upstreamTokenEndpointAuthMethod ??
+      existingConfig?.upstreamTokenEndpointAuthMethod ??
+      normalized.upstreamTokenEndpointAuthMethod;
+    const normalizedConfig = {
+      ...normalized,
+      upstreamTokenEndpointAuthMethod: resolvedAuthMethod,
+    };
+    const existingSecret = existingConfig
+      ? decryptProxySecret(existingConfig.upstreamClientSecretEncrypted)
+      : undefined;
+    const proxyConfigBefore = existingConfig
+      ? buildProxyConfigSnapshot({
+          providerType: existingConfig.providerType,
+          authorizationEndpoint: existingConfig.authorizationEndpoint,
+          tokenEndpoint: existingConfig.tokenEndpoint,
+          userinfoEndpoint: existingConfig.userinfoEndpoint ?? undefined,
+          jwksUri: existingConfig.jwksUri ?? undefined,
+          upstreamClientId: existingConfig.upstreamClientId,
+          upstreamClientSecret: existingSecret ?? undefined,
+          upstreamTokenEndpointAuthMethod: existingConfig.upstreamTokenEndpointAuthMethod ?? undefined,
+          defaultScopes: existingConfig.defaultScopes ?? [],
+          scopeMapping: existingConfig.scopeMapping
+            ? (existingConfig.scopeMapping as ProxyProviderConfigInput["scopeMapping"])
+            : undefined,
+          pkceSupported: existingConfig.pkceSupported,
+          oidcEnabled: existingConfig.oidcEnabled,
+          promptPassthroughEnabled: existingConfig.promptPassthroughEnabled,
+          loginHintPassthroughEnabled: existingConfig.loginHintPassthroughEnabled,
+          passthroughTokenResponse: existingConfig.passthroughTokenResponse,
+        })
+      : undefined;
+    const resolvedSecret = keepExistingSecret ? existingSecret : normalizedConfig.upstreamClientSecret;
+    const proxyConfigAfter = buildProxyConfigSnapshot({
+      ...normalizedConfig,
+      upstreamClientSecret: resolvedSecret ?? undefined,
+    });
+
+    await upsertProxyProviderConfig(client.id, normalizedConfig, { keepExistingSecret });
     revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: client.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "proxy_config",
+      resourceId: client.id,
+      clientId: client.id,
+      message: "Proxy configuration updated",
+      proxyConfigBefore,
+      proxyConfigAfter,
+      authMethodBefore: proxyConfigBefore?.upstreamTokenEndpointAuthMethod ?? undefined,
+      authMethodAfter: proxyConfigAfter.upstreamTokenEndpointAuthMethod ?? undefined,
+    });
     return { success: "Upstream configuration updated" };
   } catch (error) {
     console.error(error);
@@ -507,9 +707,19 @@ export const addRedirectUriAction = async (input: z.infer<typeof redirectSchema>
     if (!client) {
       return { error: "Client not found" };
     }
-    await addRedirectUri(client.id, parsed.uri);
+    const redirect = await addRedirectUri(client.id, parsed.uri);
     revalidatePath(clientPath(client.id));
     revalidatePath(`${clientPath(client.id)}/test`);
+    void emitConfigChange({
+      tenantId: client.tenantId,
+      actorId: adminId,
+      action: "create",
+      resource: "redirect_uri",
+      resourceId: redirect.id,
+      resourceName: redirect.uri,
+      clientId: client.id,
+      message: "Redirect URI added",
+    });
     return { success: "Redirect URI saved" };
   } catch (error) {
     console.error(error);
@@ -626,9 +836,19 @@ export const updateClientNameAction = async (input: z.infer<typeof updateClientS
     if (!client) {
       return { error: "Client not found" };
     }
-    await updateClientName(client.id, parsed.name);
+    const updated = await updateClientName(client.id, parsed.name);
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client",
+      resourceId: updated.id,
+      resourceName: updated.name,
+      clientId: updated.id,
+      message: "Client updated",
+    });
     return { success: "Client updated" };
   } catch (error) {
     console.error(error);
@@ -644,8 +864,17 @@ export const updateClientReauthTtlAction = async (input: z.infer<typeof updateCl
     if (!client) {
       return { error: "Client not found" };
     }
-    await updateClientReauthTtl(client.id, parsed.reauthTtlSeconds);
+    const updated = await updateClientReauthTtl(client.id, parsed.reauthTtlSeconds);
     revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_reauth_ttl",
+      resourceId: updated.id,
+      clientId: updated.id,
+      message: "Client reauth TTL updated",
+    });
     return { success: parsed.reauthTtlSeconds > 0 ? "Re-auth TTL updated" : "Re-auth disabled" };
   } catch (error) {
     console.error(error);
@@ -667,7 +896,7 @@ export const updateClientSigningAlgsAction = async (
     const idTokenAlg = parsed.idTokenAlg === "default" ? null : parsed.idTokenAlg;
     const accessTokenAlg = parsed.accessTokenAlg === "match_id" ? null : parsed.accessTokenAlg;
 
-    await updateClientSigningAlgorithms(client.id, {
+    const updated = await updateClientSigningAlgorithms(client.id, {
       idTokenAlg,
       accessTokenAlg,
     });
@@ -675,6 +904,15 @@ export const updateClientSigningAlgsAction = async (
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
     revalidatePath("/admin", "layout");
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_signing",
+      resourceId: updated.id,
+      clientId: updated.id,
+      message: "Client signing algorithms updated",
+    });
     return { success: "Signing algorithms updated" };
   } catch (error) {
     console.error(error);
@@ -699,9 +937,18 @@ export const updateClientIssuerAction = async (
       await getApiResourceForTenant(client.tenantId, apiResourceId);
     }
 
-    await updateClientApiResource(client.id, apiResourceId);
+    const updated = await updateClientApiResource(client.id, apiResourceId);
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_issuer",
+      resourceId: updated.id,
+      clientId: updated.id,
+      message: "Client issuer updated",
+    });
     return { success: "Client issuer updated" };
   } catch (error) {
     console.error(error);
@@ -729,8 +976,17 @@ export const updateClientScopesAction = async (
       return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
     const canonical = ["openid", ...normalized.filter((scope) => scope !== "openid")];
-    await updateClientAllowedScopes(client.id, canonical);
+    const updated = await updateClientAllowedScopes(client.id, canonical);
     revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_scopes",
+      resourceId: updated.id,
+      clientId: updated.id,
+      message: "Client scopes updated",
+    });
     return { success: "Scopes updated", data: { allowedScopes: canonical } };
   } catch (error) {
     console.error(error);
@@ -752,9 +1008,18 @@ export const updateClientAuthStrategiesAction = async (
     if (!hasEnabledStrategy(strategies)) {
       return { error: "Enable at least one strategy" };
     }
-    await updateClientAuthStrategies(client.id, strategies);
+    const updated = await updateClientAuthStrategies(client.id, strategies);
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_auth_strategies",
+      resourceId: updated.id,
+      clientId: updated.id,
+      message: "Client auth strategies updated",
+    });
     return { success: "Auth strategies updated" };
   } catch (error) {
     console.error(error);
@@ -768,7 +1033,7 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
     const parsed = deleteRedirectSchema.parse(input);
     const redirect = await prisma.redirectUri.findUnique({
       where: { id: parsed.redirectId },
-      select: { id: true, clientId: true, client: { select: { tenantId: true } } },
+      select: { id: true, uri: true, clientId: true, client: { select: { tenantId: true } } },
     });
     if (!redirect) {
       return { error: "Redirect not found" };
@@ -777,6 +1042,16 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
     await prisma.redirectUri.delete({ where: { id: redirect.id } });
     revalidatePath(clientPath(redirect.clientId));
+    void emitConfigChange({
+      tenantId: redirect.client.tenantId,
+      actorId: adminId,
+      action: "delete",
+      resource: "redirect_uri",
+      resourceId: redirect.id,
+      resourceName: redirect.uri,
+      clientId: redirect.clientId,
+      message: "Redirect URI removed",
+    });
     return { success: "Redirect removed" };
   } catch (error) {
     console.error(error);
@@ -789,8 +1064,16 @@ export const updateMemberRoleAction = async (input: z.infer<typeof updateMemberR
     const adminId = await requireSession();
     const parsed = updateMemberRoleSchema.parse(input);
     await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
-    await updateMemberRole(parsed.tenantId, parsed.membershipId, parsed.role);
+    const membership = await updateMemberRole(parsed.tenantId, parsed.membershipId, parsed.role);
     revalidatePath("/admin/members");
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "membership",
+      resourceId: membership.id,
+      message: "Member role updated",
+    });
     return { success: "Member updated" };
   } catch (error) {
     console.error(error);
@@ -805,6 +1088,14 @@ export const removeMemberAction = async (input: z.infer<typeof removeMemberSchem
     await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
     await removeMember(parsed.tenantId, parsed.membershipId);
     revalidatePath("/admin/members");
+    void emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "delete",
+      resource: "membership",
+      resourceId: parsed.membershipId,
+      message: "Member removed",
+    });
     return { success: "Member removed" };
   } catch (error) {
     console.error(error);
@@ -828,6 +1119,14 @@ export const createInviteAction = async (
       expiresAt,
     });
     revalidatePath("/admin/members");
+    void emitConfigChange({
+      tenantId: invite.tenantId,
+      actorId: adminId,
+      action: "create",
+      resource: "invite",
+      resourceId: invite.id,
+      message: "Invite created",
+    });
     return { success: "Invite created", data: { inviteId: invite.id, token } };
   } catch (error) {
     console.error(error);
@@ -840,8 +1139,16 @@ export const revokeInviteAction = async (input: z.infer<typeof revokeInviteSchem
     const adminId = await requireSession();
     const parsed = revokeInviteSchema.parse(input);
     await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
-    await revokeInvite(parsed.tenantId, parsed.inviteId);
+    const invite = await revokeInvite(parsed.tenantId, parsed.inviteId);
     revalidatePath("/admin/members");
+    void emitConfigChange({
+      tenantId: invite.tenantId,
+      actorId: adminId,
+      action: "revoke",
+      resource: "invite",
+      resourceId: invite.id,
+      message: "Invite revoked",
+    });
     return { success: "Invite revoked" };
   } catch (error) {
     console.error(error);
@@ -856,6 +1163,14 @@ export const deleteTenantAction = async (
     const adminId = await requireSession();
     const parsed = deleteTenantSchema.parse(input);
     await assertTenantRole(adminId, parsed.tenantId, ["OWNER"]);
+    await emitConfigChange({
+      tenantId: parsed.tenantId,
+      actorId: adminId,
+      action: "delete",
+      resource: "tenant",
+      resourceId: parsed.tenantId,
+      message: "Tenant deleted",
+    });
     await deleteTenant(parsed.tenantId);
 
     const store = await cookies();
