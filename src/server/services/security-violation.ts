@@ -24,8 +24,8 @@ export class SecurityViolationError extends DomainError {
 }
 
 export const createSecurityViolationReporter = (context: SecurityViolationContext) => {
-  return (reason: SecurityViolationReason, message?: string) => {
-    void recordSecurityViolation({
+  return async (reason: SecurityViolationReason, message?: string) => {
+    await recordSecurityViolation({
       ...context,
       reason,
       message,
@@ -41,7 +41,7 @@ export const withSecurityViolationAudit = async <T>(
     return await fn();
   } catch (error) {
     if (error instanceof SecurityViolationError) {
-      void recordSecurityViolation({
+      await recordSecurityViolation({
         ...context,
         reason: error.reason,
         message: error.message,

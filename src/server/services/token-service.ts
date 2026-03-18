@@ -139,7 +139,7 @@ export const issueTokensFromCode = async (params: {
 
   const normalized = resolveRedirectUri(redirectUri, code.client.redirectUris ?? []);
   if (normalized !== code.redirectUri) {
-    reportViolation("redirect_uri_mismatch", "redirect_uri mismatch");
+    await reportViolation("redirect_uri_mismatch", "redirect_uri mismatch");
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
   await withSecurityViolationAudit(() => assertClientSecret(code.client, clientSecret), violationContext);

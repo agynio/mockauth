@@ -76,17 +76,17 @@ export const completeProxyAuthorizationCodeGrant = async (
   });
 
   if (record.apiResourceId !== params.apiResourceId) {
-    reportViolation("issuer_mismatch");
+    await reportViolation("issuer_mismatch");
     throw new DomainError("Authorization code does not match issuer", { status: 400, code: "invalid_grant" });
   }
 
   if (params.clientIdFromRequest && record.client.clientId !== params.clientIdFromRequest) {
-    reportViolation("client_mismatch");
+    await reportViolation("client_mismatch");
     throw new DomainError("Client mismatch", { status: 401, code: "invalid_client" });
   }
 
   if (record.client.tokenEndpointAuthMethod !== params.authMethod) {
-    reportViolation("auth_method_mismatch");
+    await reportViolation("auth_method_mismatch");
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
@@ -94,7 +94,7 @@ export const completeProxyAuthorizationCodeGrant = async (
 
   const normalizedRedirect = resolveRedirectUri(params.redirectUri, record.client.redirectUris ?? []);
   if (normalizedRedirect !== record.redirectUri) {
-    reportViolation("redirect_uri_mismatch");
+    await reportViolation("redirect_uri_mismatch");
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
 
@@ -157,7 +157,7 @@ export const completeProxyRefreshGrant = async (
 
   const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
   if (clientResourceId !== resource.id) {
-    reportViolation("issuer_mismatch");
+    await reportViolation("issuer_mismatch");
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
@@ -171,7 +171,7 @@ export const completeProxyRefreshGrant = async (
   }
 
   if (client.tokenEndpointAuthMethod !== params.authMethod) {
-    reportViolation("auth_method_mismatch");
+    await reportViolation("auth_method_mismatch");
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
