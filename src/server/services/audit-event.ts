@@ -98,8 +98,6 @@ type ProxyCallbackErrorDetailsBase = {
 
 type ProxyCallbackErrorSensitiveDetails = {
   code?: string;
-  rawError?: string;
-  rawErrorDescription?: string;
 };
 
 export type ProxyCallbackErrorDetails<IncludeSensitive extends boolean = boolean> = ProxyCallbackErrorDetailsBase &
@@ -107,7 +105,7 @@ export type ProxyCallbackErrorDetails<IncludeSensitive extends boolean = boolean
 
 export type ProxyCodeIssuedDetails = {
   scope: string;
-  redirectUri: string;
+  redirectUriHost?: string;
 };
 
 type TokenAuthCodeReceivedDetailsBase = {
@@ -366,9 +364,13 @@ export function buildProxyCallbackErrorDetails(
 export function buildProxyCallbackErrorDetails(
   params: ProxyCallbackErrorDetailsParams<boolean>,
 ): ProxyCallbackErrorDetails<boolean> {
+  const resolvedError = params.includeSensitive ? params.rawError ?? params.error : params.error;
+  const resolvedDescription = params.includeSensitive
+    ? params.rawErrorDescription ?? params.errorDescription ?? undefined
+    : params.errorDescription ?? undefined;
   const base: ProxyCallbackErrorDetailsBase = {
-    error: params.error,
-    errorDescription: params.errorDescription ?? undefined,
+    error: resolvedError,
+    errorDescription: resolvedDescription,
     providerType: params.providerType ?? undefined,
   };
 
@@ -379,14 +381,12 @@ export function buildProxyCallbackErrorDetails(
   return {
     ...base,
     code: params.code ?? undefined,
-    rawError: params.rawError ?? undefined,
-    rawErrorDescription: params.rawErrorDescription ?? undefined,
   };
 }
 
 export const buildProxyCodeIssuedDetails = (params: { scope: string; redirectUri: string }): ProxyCodeIssuedDetails => ({
   scope: params.scope,
-  redirectUri: params.redirectUri,
+  redirectUriHost: parseUrlHost(params.redirectUri),
 });
 
 type TokenAuthCodeReceivedParams<IncludeSensitive extends boolean> = {
@@ -630,155 +630,5 @@ const parseUrlHost = (value: string) => {
   }
 };
 
-export const sanitizeAuditDetails = (
-  event: AuditEventInput,
-  options?: { redactionEnabled?: boolean },
-): Prisma.InputJsonValue | null => {
-  const redactionEnabled = options?.redactionEnabled !== false;
-  switch (event.eventType) {
-    case "AUTHORIZE_RECEIVED":
-      if (redactionEnabled) {
-        return compactDetails({
-          responseType: event.details.responseType,
-          scope: event.details.scope,
-          prompt: event.details.prompt,
-          codeChallengeMethod: event.details.codeChallengeMethod,
-          loginHintProvided: event.details.loginHintProvided,
-          nonceProvided: event.details.nonceProvided,
-          freshLoginRequested: event.details.freshLoginRequested,
-        });
-      }
-      return compactDetails({
-        responseType: event.details.responseType,
-        scope: event.details.scope,
-        prompt: event.details.prompt,
-        redirectUri: event.details.redirectUri,
-        state: event.details.state,
-        nonce: event.details.nonce,
-        codeChallenge: event.details.codeChallenge,
-        codeChallengeMethod: event.details.codeChallengeMethod,
-        loginHintProvided: event.details.loginHintProvided,
-        loginHint: event.details.loginHint,
-        nonceProvided: event.details.nonceProvided,
-        freshLoginRequested: event.details.freshLoginRequested,
-      });
-    case "PROXY_REDIRECT_OUT":
-      if (redactionEnabled) {
-        return compactDetails({
-          providerType: event.details.providerType,
-          providerScope: event.details.providerScope,
-          providerPkceEnabled: event.details.providerPkceEnabled,
-          prompt: event.details.prompt,
-          loginHintProvided: event.details.loginHintProvided,
-        });
-      }
-      return compactDetails({
-        providerType: event.details.providerType,
-        providerScope: event.details.providerScope,
-        providerPkceEnabled: event.details.providerPkceEnabled,
-        prompt: event.details.prompt,
-        loginHintProvided: event.details.loginHintProvided,
-        redirectUri: event.details.redirectUri,
-        state: event.details.state,
-        nonce: event.details.nonce,
-        codeChallenge: event.details.codeChallenge,
-        codeChallengeMethod: event.details.codeChallengeMethod,
-        codeVerifier: event.details.codeVerifier,
-        loginHint: event.details.loginHint,
-      });
-    case "PROXY_CALLBACK_SUCCESS":
-      return compactDetails({
-        providerType: event.details.providerType,
-        ...event.details.tokenSummary,
-      });
-    case "PROXY_CALLBACK_ERROR":
-      return compactDetails({
-        error: redactionEnabled ? event.details.error : event.details.rawError ?? event.details.error,
-        errorDescription: redactionEnabled
-          ? event.details.errorDescription
-          : event.details.rawErrorDescription ?? event.details.errorDescription,
-        providerType: event.details.providerType,
-        code: redactionEnabled ? undefined : event.details.code,
-      });
-    case "PROXY_CODE_ISSUED":
-      return compactDetails({
-        scope: event.details.scope,
-        redirectUriHost: parseUrlHost(event.details.redirectUri),
-      });
-    case "TOKEN_AUTHCODE_RECEIVED":
-      if (redactionEnabled) {
-        return compactDetails({
-          authMethod: event.details.authMethod,
-          clientSecretInBody: event.details.clientSecretInBody,
-          clientIdProvided: event.details.clientIdProvided,
-        });
-      }
-      return compactDetails({
-        authMethod: event.details.authMethod,
-        clientSecretInBody: event.details.clientSecretInBody,
-        clientIdProvided: event.details.clientIdProvided,
-        clientId: event.details.clientId,
-        clientSecret: event.details.clientSecret,
-        grantType: event.details.grantType,
-        redirectUri: event.details.redirectUri,
-        authorizationCode: event.details.authorizationCode,
-        includeAuthHeader: event.details.includeAuthHeader,
-      });
-    case "TOKEN_AUTHCODE_COMPLETED":
-      return compactDetails(event.details);
-    case "TOKEN_REFRESH_RECEIVED":
-      if (redactionEnabled) {
-        return compactDetails({
-          authMethod: event.details.authMethod,
-          clientSecretInBody: event.details.clientSecretInBody,
-          scope: event.details.scope,
-        });
-      }
-      return compactDetails({
-        authMethod: event.details.authMethod,
-        clientSecretInBody: event.details.clientSecretInBody,
-        scope: event.details.scope,
-        clientId: event.details.clientId,
-        clientSecret: event.details.clientSecret,
-        grantType: event.details.grantType,
-        refreshToken: event.details.refreshToken,
-        includeAuthHeader: event.details.includeAuthHeader,
-      });
-    case "TOKEN_REFRESH_COMPLETED":
-      return compactDetails(event.details);
-    case "CONFIG_CHANGED":
-      if (redactionEnabled) {
-        return compactDetails({
-          action: event.details.action,
-          resource: event.details.resource,
-          resourceId: event.details.resourceId,
-          resourceName: event.details.resourceName,
-        });
-      }
-      return compactDetails({
-        action: event.details.action,
-        resource: event.details.resource,
-        resourceId: event.details.resourceId,
-        resourceName: event.details.resourceName,
-        proxyConfigBefore: event.details.proxyConfigBefore,
-        proxyConfigAfter: event.details.proxyConfigAfter,
-        authMethodBefore: event.details.authMethodBefore,
-        authMethodAfter: event.details.authMethodAfter,
-      });
-    case "SECURITY_VIOLATION":
-      if (redactionEnabled) {
-        return compactDetails({
-          reason: event.details.reason,
-          authMethod: event.details.authMethod ?? undefined,
-          clientSecretInBody: event.details.clientSecretInBody ?? undefined,
-        });
-      }
-      return compactDetails({
-        ...event.details,
-      });
-    default: {
-      const _exhaustive: never = event;
-      throw new Error(`Unhandled audit event type: ${_exhaustive}`);
-    }
-  }
-};
+export const sanitizeAuditDetails = (event: AuditEventInput): Prisma.InputJsonValue | null =>
+  compactDetails(event.details as Record<string, unknown>);

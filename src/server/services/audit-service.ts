@@ -40,7 +40,7 @@ type SecurityViolationInput = {
 const redactionEnabled = auditRedactionState.redactionEnabled;
 
 export const emitAuditEvent = async (input: AuditEventInput) => {
-  const sanitizedDetails = sanitizeAuditDetails(input, { redactionEnabled });
+  const sanitizedDetails = sanitizeAuditDetails(input);
 
   try {
     await prisma.auditLog.create({
