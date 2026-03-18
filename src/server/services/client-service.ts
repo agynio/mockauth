@@ -231,6 +231,14 @@ export const listClients = async (
   return { clients, total, page, pageSize };
 };
 
+export const listClientSummaries = async (tenantId: string) => {
+  return prisma.client.findMany({
+    where: { tenantId },
+    select: { id: true, name: true, clientId: true },
+    orderBy: { name: "asc" },
+  });
+};
+
 export const getClientByIdForTenant = async (tenantId: string, clientInternalId: string) => {
   const client = await prisma.client.findFirst({
     where: { id: clientInternalId, tenantId },

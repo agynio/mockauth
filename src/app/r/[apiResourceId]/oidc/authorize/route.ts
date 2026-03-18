@@ -7,6 +7,7 @@ import { MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { buildReauthCookiePath, MOCK_FRESH_LOGIN_COOKIE, MOCK_REAUTH_COOKIE } from "@/server/oidc/reauth-cookie";
+import { getRequestContextFromRequest } from "@/server/utils/request-context";
 
 const authorizeSchema = z.object({
   client_id: z.string().min(1),
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
       },
       origin,
       normalizedUrl.toString(),
+      getRequestContextFromRequest(request),
     );
 
     if (result.type === "login") {

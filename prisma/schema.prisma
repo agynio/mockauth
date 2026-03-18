@@ -64,6 +64,26 @@ enum LoginStrategy {
   EMAIL
 }
 
+enum AuditLogEventType {
+  AUTHORIZE_RECEIVED
+  PROXY_REDIRECT_OUT
+  PROXY_CALLBACK_SUCCESS
+  PROXY_CALLBACK_ERROR
+  PROXY_CODE_ISSUED
+  TOKEN_AUTHCODE_RECEIVED
+  TOKEN_AUTHCODE_COMPLETED
+  TOKEN_REFRESH_RECEIVED
+  TOKEN_REFRESH_COMPLETED
+  CONFIG_CHANGED
+  SECURITY_VIOLATION
+}
+
+enum AuditLogSeverity {
+  INFO
+  WARN
+  ERROR
+}
+
 model Tenant {
   id                String              @id @default(uuid())
   name              String
@@ -85,6 +105,7 @@ model Tenant {
   proxyAuthTransactions ProxyAuthTransaction[]
   proxyTokenExchanges   ProxyTokenExchange[]
   proxyAuthorizationCodes ProxyAuthorizationCode[]
+  auditLogs        AuditLog[]
 }
 
 model ApiResource {
@@ -181,6 +202,7 @@ model Client {
   proxyAuthTransactions    ProxyAuthTransaction[]
   proxyTokenExchanges      ProxyTokenExchange[]
   proxyAuthorizationCodes  ProxyAuthorizationCode[]
+  auditLogs                AuditLog[]
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   @@unique([tenantId, clientId])
@@ -296,6 +318,7 @@ model AuthorizationCode {
   state              String?
   codeChallenge      String
   codeChallengeMethod String     @default("S256")
+  traceId            String?
   expiresAt          DateTime
   consumedAt         DateTime?
   createdAt          DateTime    @default(now())
@@ -411,6 +434,28 @@ model AccessToken {
   scope      String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id        String             @id @default(uuid())
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  client    Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId  String?
+  traceId   String?
+  eventType AuditLogEventType
+  severity  AuditLogSeverity
+  message   String
+  details   Json?
+  actorId   String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime           @default(now())
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, clientId, createdAt(sort: Desc)])
+  @@index([tenantId, traceId])
+  @@index([tenantId, eventType, createdAt(sort: Desc)])
 }
 
 model Account {

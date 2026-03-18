@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { DomainError } from "@/server/errors";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createAuthorizationCode } from "@/server/services/authorization-code-service";
@@ -9,12 +11,14 @@ import { normalizeScopes } from "@/server/oidc/scopes";
 import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-token";
 import { computeS256Challenge } from "@/server/crypto/pkce";
+import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   PROXY_TRANSACTION_TTL_SECONDS,
   startProxyAuthTransaction,
   deleteProxyAuthTransaction,
 } from "@/server/services/proxy-service";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
+import type { RequestContext } from "@/server/utils/request-context";
 
 type LoadedClient = Awaited<ReturnType<typeof getClientForTenant>>;
 type ProxyProviderConfigRecord = NonNullable<LoadedClient["proxyConfig"]>;
@@ -70,7 +74,12 @@ const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
   }
 };
 
-export const handleAuthorize = async (params: AuthorizeParams, origin: string, returnTo: string): Promise<AuthorizeResult> => {
+export const handleAuthorize = async (
+  params: AuthorizeParams,
+  origin: string,
+  returnTo: string,
+  requestContext?: RequestContext,
+): Promise<AuthorizeResult> => {
   if (params.responseType !== "code") {
     throw new DomainError("Only response_type=code is supported", { status: 400, code: "unsupported_response_type" });
   }
@@ -87,11 +96,31 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
   }
 
   if (client.oauthClientMode === "proxy") {
-    return handleProxyAuthorize({ params, origin, tenantId: tenant.id, resourceId: resource.id, client });
+    return handleProxyAuthorize({ params, origin, tenantId: tenant.id, resourceId: resource.id, client, requestContext });
   }
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
 
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
+  const traceId = randomUUID();
+  void emitAuditEvent({
+    tenantId: tenant.id,
+    clientId: client.id,
+    traceId,
+    actorId: null,
+    eventType: "AUTHORIZE_RECEIVED",
+    severity: "INFO",
+    message: "Authorization request received",
+    details: {
+      responseType: params.responseType,
+      scope: params.scope,
+      prompt: params.prompt ?? null,
+      codeChallengeMethod: params.codeChallengeMethod,
+      loginHintProvided: Boolean(params.loginHint),
+      nonceProvided: Boolean(params.nonce),
+      freshLoginRequested: Boolean(params.freshLoginRequested),
+    },
+    requestContext: requestContext ?? null,
+  });
   const strategies = parseClientAuthStrategies(client.authStrategies);
   const session = params.sessionToken ? await getSessionUser(tenant.id, params.sessionToken) : null;
   const strategyAllowed = session
@@ -166,6 +195,7 @@ export const handleAuthorize = async (params: AuthorizeParams, origin: string, r
     state: params.state,
     codeChallenge: params.codeChallenge,
     codeChallengeMethod: params.codeChallengeMethod,
+    traceId,
   });
 
   const redirectUrl = new URL(redirect);
@@ -183,8 +213,9 @@ const handleProxyAuthorize = async (args: {
   tenantId: string;
   resourceId: string;
   client: Awaited<ReturnType<typeof getClientForTenant>>;
+  requestContext?: RequestContext;
 }): Promise<AuthorizeResult> => {
-  const { params, origin, tenantId, resourceId, client } = args;
+  const { params, origin, tenantId, resourceId, client, requestContext } = args;
 
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
@@ -223,6 +254,25 @@ const handleProxyAuthorize = async (args: {
     loginHint: providerLoginHint,
   });
 
+  void emitAuditEvent({
+    tenantId,
+    clientId: client.id,
+    traceId: transaction.id,
+    actorId: null,
+    eventType: "AUTHORIZE_RECEIVED",
+    severity: "INFO",
+    message: "Proxy authorization request received",
+    details: {
+      responseType: params.responseType,
+      scope: params.scope,
+      prompt: params.prompt ?? null,
+      codeChallengeMethod: params.codeChallengeMethod,
+      loginHintProvided: Boolean(params.loginHint),
+      nonceProvided: Boolean(params.nonce),
+    },
+    requestContext: requestContext ?? null,
+  });
+
   try {
     const authorizeUrl = new URL(proxyConfig.authorizationEndpoint);
     authorizeUrl.searchParams.set("client_id", proxyConfig.upstreamClientId);
@@ -247,6 +297,24 @@ const handleProxyAuthorize = async (args: {
     if (providerLoginHint) {
       authorizeUrl.searchParams.set("login_hint", providerLoginHint);
     }
+
+    void emitAuditEvent({
+      tenantId,
+      clientId: client.id,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_REDIRECT_OUT",
+      severity: "INFO",
+      message: "Redirected to proxy provider",
+      details: {
+        providerType: proxyConfig.providerType,
+        providerScope: providerScopes,
+        providerPkceEnabled: proxyConfig.pkceSupported,
+        prompt: providerPrompt ?? undefined,
+        loginHintProvided: Boolean(providerLoginHint),
+      },
+      requestContext: requestContext ?? null,
+    });
 
     const cookies: CookieInstruction[] = [
       {

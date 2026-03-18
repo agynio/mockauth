@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { vi, describe, it, beforeAll, afterAll, expect } from "vitest";
 
-import { $Enums } from "@/generated/prisma/client";
+import { $Enums, AuditLogEventType } from "@/generated/prisma/client";
 
 import { prisma } from "@/server/db/client";
 import { encrypt } from "@/server/crypto/key-vault";
@@ -197,6 +197,26 @@ describe("Proxy client OAuth flow", () => {
       token_type: "Bearer",
       expires_in: 1800,
     });
+
+    const traceLogs = await prisma.auditLog.findMany({
+      where: { tenantId, traceId: transactionId ?? undefined },
+      select: { eventType: true },
+    });
+    const traceEventTypes = traceLogs.map((log) => log.eventType);
+    expect(traceEventTypes).toEqual(
+      expect.arrayContaining([
+        AuditLogEventType.AUTHORIZE_RECEIVED,
+        AuditLogEventType.PROXY_REDIRECT_OUT,
+        AuditLogEventType.PROXY_CALLBACK_SUCCESS,
+        AuditLogEventType.PROXY_CODE_ISSUED,
+        AuditLogEventType.TOKEN_AUTHCODE_RECEIVED,
+        AuditLogEventType.TOKEN_AUTHCODE_COMPLETED,
+      ]),
+    );
+    const refreshLogs = await prisma.auditLog.findMany({
+      where: { tenantId, clientId: proxyClientId, eventType: AuditLogEventType.TOKEN_REFRESH_COMPLETED },
+    });
+    expect(refreshLogs.length).toBeGreaterThan(0);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [, firstInit] = fetchMock.mock.calls[0];

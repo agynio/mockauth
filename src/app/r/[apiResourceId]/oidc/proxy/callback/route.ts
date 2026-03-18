@@ -6,6 +6,7 @@ import { handleProxyCallback } from "@/server/services/proxy-callback-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
+import { getRequestContextFromRequest } from "@/server/utils/request-context";
 
 const callbackSchema = z.object({
   state: z.string().min(1),
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
       providerErrorDescription: query.data.error_description,
       transactionCookie,
       origin: normalizedUrl.origin,
+      requestContext: getRequestContextFromRequest(request),
     });
 
     const response = NextResponse.redirect(result.redirectTo, { status: 302 });

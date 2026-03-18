@@ -14,7 +14,9 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { ensureActiveKeyForAlg } from "@/server/services/key-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
+import { emitAuditEvent, recordSecurityViolation } from "@/server/services/audit-service";
 import type { JwtSigningAlg } from "@/generated/prisma/client";
+import type { RequestContext } from "@/server/utils/request-context";
 
 const ID_TOKEN_TTL_SECONDS = 600;
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -25,6 +27,13 @@ type ClientSecretContext = {
   clientType: AuthorizationCodeWithRelations["client"]["clientType"];
   tokenEndpointAuthMethod: AuthorizationCodeWithRelations["client"]["tokenEndpointAuthMethod"];
   clientSecretHash: AuthorizationCodeWithRelations["client"]["clientSecretHash"];
+};
+
+type TokenAuditContext = {
+  requestContext?: RequestContext | null;
+  authMethod?: "client_secret_basic" | "client_secret_post" | "none";
+  clientSecretInBody?: boolean;
+  clientIdProvided?: boolean;
 };
 
 export const assertClientSecret = async (client: ClientSecretContext, provided?: string | null) => {
@@ -66,15 +75,81 @@ export const issueTokensFromCode = async (params: {
   redirectUri: string;
   clientSecret?: string | null;
   origin: string;
+  auditContext?: TokenAuditContext | null;
 }) => {
-  const { code, codeVerifier, redirectUri, clientSecret, origin } = params;
+  const { code, codeVerifier, redirectUri, clientSecret, origin, auditContext } = params;
+  const traceId = code.traceId ?? null;
+  const authMethod = auditContext?.authMethod ?? code.client.tokenEndpointAuthMethod;
+
+  void emitAuditEvent({
+    tenantId: code.tenantId,
+    clientId: code.clientId,
+    traceId,
+    actorId: null,
+    eventType: "TOKEN_AUTHCODE_RECEIVED",
+    severity: "INFO",
+    message: "Token request received",
+    details: {
+      authMethod,
+      clientSecretInBody: auditContext?.clientSecretInBody,
+      clientIdProvided: auditContext?.clientIdProvided,
+    },
+    requestContext: auditContext?.requestContext ?? null,
+  });
 
   const normalized = resolveRedirectUri(redirectUri, code.client.redirectUris ?? []);
   if (normalized !== code.redirectUri) {
+    void recordSecurityViolation({
+      tenantId: code.tenantId,
+      clientId: code.clientId,
+      traceId,
+      reason: "redirect_uri_mismatch",
+      authMethod,
+      clientSecretInBody: auditContext?.clientSecretInBody,
+      requestContext: auditContext?.requestContext ?? null,
+      message: "redirect_uri mismatch",
+    });
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
-  await assertClientSecret(code.client, clientSecret);
-  verifyPkce(code, codeVerifier);
+  try {
+    await assertClientSecret(code.client, clientSecret);
+  } catch (error) {
+    if (error instanceof DomainError) {
+      const reason = error.message.includes("Client authentication required")
+        ? "client_auth_missing"
+        : error.message.includes("Invalid client credentials")
+          ? "client_auth_invalid"
+          : "auth_method_mismatch";
+      void recordSecurityViolation({
+        tenantId: code.tenantId,
+        clientId: code.clientId,
+        traceId,
+        reason,
+        authMethod,
+        clientSecretInBody: auditContext?.clientSecretInBody,
+        requestContext: auditContext?.requestContext ?? null,
+      });
+    }
+    throw error;
+  }
+
+  try {
+    verifyPkce(code, codeVerifier);
+  } catch (error) {
+    if (error instanceof DomainError) {
+      const reason = error.message.includes("Invalid code verifier") ? "pkce_mismatch" : "pkce_method_unsupported";
+      void recordSecurityViolation({
+        tenantId: code.tenantId,
+        clientId: code.clientId,
+        traceId,
+        reason,
+        authMethod,
+        clientSecretInBody: auditContext?.clientSecretInBody,
+        requestContext: auditContext?.requestContext ?? null,
+      });
+    }
+    throw error;
+  }
 
   const idTokenAlg: JwtSigningAlg = code.client.idTokenSignedResponseAlg ?? DEFAULT_JWT_SIGNING_ALG;
   const accessTokenAlg: JwtSigningAlg = code.client.accessTokenSigningAlg ?? idTokenAlg;
@@ -150,10 +225,24 @@ export const issueTokensFromCode = async (params: {
     },
   });
 
-  return {
+  const response = {
     id_token: idToken,
     access_token: accessToken,
     token_type: "Bearer",
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
   };
+
+  void emitAuditEvent({
+    tenantId: code.tenantId,
+    clientId: code.clientId,
+    traceId,
+    actorId: null,
+    eventType: "TOKEN_AUTHCODE_COMPLETED",
+    severity: "INFO",
+    message: "Token response issued",
+    details: response,
+    requestContext: auditContext?.requestContext ?? null,
+  });
+
+  return response;
 };

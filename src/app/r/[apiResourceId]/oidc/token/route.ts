@@ -11,6 +11,8 @@ import {
   completeProxyAuthorizationCodeGrant,
   completeProxyRefreshGrant,
 } from "@/server/services/proxy-token-service";
+import { recordSecurityViolation } from "@/server/services/audit-service";
+import { getRequestContextFromRequest } from "@/server/utils/request-context";
 
 const authorizationCodeSchema = z.object({
   grant_type: z.literal("authorization_code"),
@@ -58,6 +60,9 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     const basic = parseBasicAuth(request.headers.get("authorization"));
     const clientId = basic?.clientId ?? validation.data.client_id ?? null;
     const clientSecret = basic?.clientSecret ?? validation.data.client_secret ?? null;
+    const requestContext = getRequestContextFromRequest(request);
+    const clientSecretInBody = Boolean(validation.data.client_secret);
+    const clientIdProvided = Boolean(clientId);
 
     const { apiResourceId } = await context.params;
     const authMethod = basic ? "client_secret_basic" : clientSecret ? "client_secret_post" : "none";
@@ -73,6 +78,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
           authMethod,
           clientIdFromRequest: clientId,
           clientSecret,
+          auditContext: { requestContext, clientSecretInBody, clientIdProvided },
         });
 
         return Response.json(tokens);
@@ -80,14 +86,41 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
 
       const codeRecord = await consumeAuthorizationCode(validation.data.code);
       if (codeRecord.apiResourceId !== apiResourceId) {
+        void recordSecurityViolation({
+          tenantId: codeRecord.tenantId,
+          clientId: codeRecord.clientId,
+          traceId: codeRecord.traceId ?? null,
+          reason: "issuer_mismatch",
+          authMethod,
+          clientSecretInBody,
+          requestContext,
+        });
         return Response.json({ error: "invalid_grant" }, { status: 400 });
       }
 
       if (clientId && codeRecord.client.clientId !== clientId) {
+        void recordSecurityViolation({
+          tenantId: codeRecord.tenantId,
+          clientId: codeRecord.clientId,
+          traceId: codeRecord.traceId ?? null,
+          reason: "client_mismatch",
+          authMethod,
+          clientSecretInBody,
+          requestContext,
+        });
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 
       if (codeRecord.client.tokenEndpointAuthMethod !== authMethod) {
+        void recordSecurityViolation({
+          tenantId: codeRecord.tenantId,
+          clientId: codeRecord.clientId,
+          traceId: codeRecord.traceId ?? null,
+          reason: "auth_method_mismatch",
+          authMethod,
+          clientSecretInBody,
+          requestContext,
+        });
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 
@@ -97,6 +130,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         redirectUri: validation.data.redirect_uri,
         clientSecret,
         origin: resolveOrigin(request),
+        auditContext: { requestContext, authMethod, clientSecretInBody, clientIdProvided },
       });
 
       return Response.json(tokens);
@@ -113,6 +147,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       scope: validation.data.scope,
       authMethod,
       clientSecret,
+      auditContext: { requestContext, clientSecretInBody, clientIdProvided },
     });
 
     return Response.json(tokens);

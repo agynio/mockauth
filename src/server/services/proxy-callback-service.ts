@@ -1,6 +1,8 @@
 import { URLSearchParams } from "node:url";
 
 import { DomainError } from "@/server/errors";
+import { emitAuditEvent, recordSecurityViolation } from "@/server/services/audit-service";
+import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import {
   getProxyAuthTransaction,
   markProxyTransactionCompleted,
@@ -10,6 +12,7 @@ import {
   requestProviderTokens,
 } from "@/server/services/proxy-service";
 import { sanitizeProviderError, sanitizeProviderErrorDescription } from "@/server/services/proxy-utils";
+import type { RequestContext } from "@/server/utils/request-context";
 
 type ProxyCallbackParams = {
   apiResourceId: string;
@@ -19,6 +22,7 @@ type ProxyCallbackParams = {
   providerErrorDescription?: string;
   transactionCookie?: string;
   origin: string;
+  requestContext?: RequestContext;
 };
 
 type ProxyCallbackResult = {
@@ -31,19 +35,55 @@ const buildCallbackUrl = (origin: string, apiResourceId: string) =>
 
 export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<ProxyCallbackResult> => {
   if (!params.transactionCookie || params.transactionCookie !== params.state) {
+    const tenantContext = await getApiResourceWithTenant(params.apiResourceId).catch(() => null);
+    if (tenantContext) {
+      void recordSecurityViolation({
+        tenantId: tenantContext.tenant.id,
+        traceId: params.state,
+        reason: "state_mismatch",
+        requestContext: params.requestContext ?? null,
+      });
+    }
     throw new DomainError("Invalid or missing proxy transaction", { status: 400, code: "invalid_request" });
   }
 
   const transaction = await getProxyAuthTransaction(params.state);
   if (!transaction) {
+    const tenantContext = await getApiResourceWithTenant(params.apiResourceId).catch(() => null);
+    if (tenantContext) {
+      void recordSecurityViolation({
+        tenantId: tenantContext.tenant.id,
+        traceId: params.state,
+        reason: "state_not_found",
+        requestContext: params.requestContext ?? null,
+      });
+    }
     throw new DomainError("Proxy transaction not found", { status: 400, code: "invalid_request" });
   }
 
   if (transaction.apiResourceId !== params.apiResourceId) {
+    void recordSecurityViolation({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      reason: "state_resource_mismatch",
+      requestContext: params.requestContext ?? null,
+    });
     throw new DomainError("Proxy transaction does not match issuer", { status: 400, code: "invalid_request" });
   }
 
   if (transaction.expiresAt < new Date()) {
+    void emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_CALLBACK_ERROR",
+      severity: "WARN",
+      message: "Proxy transaction expired",
+      details: { error: "transaction_expired" },
+      requestContext: params.requestContext ?? null,
+    });
     await markProxyTransactionCompleted(transaction.id);
     throw new DomainError("Proxy transaction has expired", { status: 400, code: "invalid_request" });
   }
@@ -66,11 +106,33 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
     if (transaction.appState) {
       redirectUrl.searchParams.set("state", transaction.appState);
     }
+    void emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_CALLBACK_ERROR",
+      severity: "WARN",
+      message: "Proxy provider returned error",
+      details: { error, errorDescription: description ?? undefined, providerType: config.providerType },
+      requestContext: params.requestContext ?? null,
+    });
     await markProxyTransactionCompleted(transaction.id);
     return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
   }
 
   if (!params.code) {
+    void emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_CALLBACK_ERROR",
+      severity: "WARN",
+      message: "Proxy provider did not return a code",
+      details: { error: "missing_code", providerType: config.providerType },
+      requestContext: params.requestContext ?? null,
+    });
     await markProxyTransactionCompleted(transaction.id);
     throw new DomainError("Authorization code not provided by provider", { status: 400, code: "invalid_request" });
   }
@@ -101,11 +163,33 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       if (transaction.appState) {
         redirectUrl.searchParams.set("state", transaction.appState);
       }
+      void emitAuditEvent({
+        tenantId: transaction.tenantId,
+        clientId: transaction.clientId,
+        traceId: transaction.id,
+        actorId: null,
+        eventType: "PROXY_CALLBACK_ERROR",
+        severity: "WARN",
+        message: "Proxy provider token exchange failed",
+        details: { error: providerError, errorDescription: description ?? undefined, providerType: config.providerType },
+        requestContext: params.requestContext ?? null,
+      });
       await markProxyTransactionCompleted(transaction.id);
       return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
     }
 
     if (!result.json || typeof result.json !== "object") {
+      void emitAuditEvent({
+        tenantId: transaction.tenantId,
+        clientId: transaction.clientId,
+        traceId: transaction.id,
+        actorId: null,
+        eventType: "PROXY_CALLBACK_ERROR",
+        severity: "WARN",
+        message: "Proxy provider token response missing",
+        details: { error: "missing_token_response", providerType: config.providerType },
+        requestContext: params.requestContext ?? null,
+      });
       throw new DomainError("Provider token response missing", { status: 502 });
     }
 
@@ -115,6 +199,18 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       clientId: transaction.clientId,
       transactionId: transaction.id,
       providerResponse: result.json,
+    });
+
+    void emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_CALLBACK_SUCCESS",
+      severity: "INFO",
+      message: "Proxy provider callback succeeded",
+      details: { providerType: config.providerType, providerResponse: result.json },
+      requestContext: params.requestContext ?? null,
     });
 
     const proxyCode = await createProxyAuthorizationCode({
@@ -128,6 +224,18 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       codeChallenge: transaction.appCodeChallenge,
       codeChallengeMethod: transaction.appCodeChallengeMethod,
       tokenExchangeId: exchange.id,
+    });
+
+    void emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_CODE_ISSUED",
+      severity: "INFO",
+      message: "Proxy authorization code issued",
+      details: { scope: transaction.appScope, redirectUri: transaction.redirectUri },
+      requestContext: params.requestContext ?? null,
     });
 
     await markProxyTransactionCompleted(transaction.id);

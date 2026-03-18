@@ -22,6 +22,7 @@ export const createAuthorizationCode = async (params: {
   state?: string;
   codeChallenge: string;
   codeChallengeMethod: string;
+  traceId?: string | null;
 }) => {
   const code = generateOpaqueToken();
   await prisma.authorizationCode.create({
@@ -39,6 +40,7 @@ export const createAuthorizationCode = async (params: {
       state: params.state,
       codeChallenge: params.codeChallenge,
       codeChallengeMethod: params.codeChallengeMethod,
+      traceId: params.traceId ?? null,
       expiresAt: addMinutes(new Date(), CODE_TTL_MINUTES),
       codeHash: hashOpaqueToken(code),
     },
