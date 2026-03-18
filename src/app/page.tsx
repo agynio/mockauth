@@ -156,7 +156,7 @@ export default function Home() {
     const Icon = feature.icon;
     return (
       <div key={feature.title} className="group flex flex-col text-left transition-transform hover:-translate-y-0.5">
-        <Icon aria-hidden className="h-7 w-7 text-brand-300" />
+        <Icon aria-hidden className="h-7 w-7 text-brand-400" />
         <h3 className="mt-3 text-lg font-semibold tracking-tight text-foreground">{feature.title}</h3>
         <p className="mt-2 text-base text-muted-foreground">{feature.description}</p>
       </div>
