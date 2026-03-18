@@ -188,8 +188,8 @@ export default function Home() {
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
             <ol className="mt-10 space-y-8 sm:pl-4">
               {excellenceItems.map((item, index) => (
-                <li key={item.title} className="flex gap-4">
-                  <span className="mt-[6px] inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-semibold text-brand-400 ring-1 ring-brand-400/30 shadow-[0_0_24px_rgba(56,189,248,0.25)]">
+                <li key={item.title} className="flex items-center gap-4">
+                  <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-semibold text-brand-400 ring-1 ring-brand-400/30 shadow-[0_0_24px_rgba(56,189,248,0.25)]">
                     {index + 1}
                   </span>
                   <p className="leading-relaxed text-base text-muted-foreground">
