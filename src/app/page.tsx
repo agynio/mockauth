@@ -150,7 +150,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-6 py-20">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Core Features</h2>
-              <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3">
+              <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-3">
   {coreFeatures.map((feature) => {
     const Icon = feature.icon;
     return (
@@ -169,7 +169,7 @@ export default function Home() {
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Designed for real development workflows</h2>
-            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {deployableHighlights.map((item) => (
                 <div
                   key={item.title}
@@ -186,7 +186,7 @@ export default function Home() {
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
-            <ol className="mt-12 space-y-6 sm:pl-4">
+            <ol className="mt-10 space-y-6 sm:pl-4">
               {excellenceItems.map((item, index) => (
                 <li key={item.title} className="flex gap-4">
                   <span className="mt-[6px] inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-base font-semibold text-brand-400">
@@ -242,7 +242,7 @@ export default function Home() {
         <section>
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">FAQ</h2>
-            <dl className="mt-12 space-y-6">
+            <dl className="mt-10 space-y-6">
               {faqItems.map((item) => (
                 <div key={item.q}>
                   <dt className="text-base font-semibold text-foreground">{item.q}</dt>
