@@ -43,9 +43,27 @@ export const proxyProviderConfigSchema = z.object({
   tokenEndpoint: z.string().url(),
   userinfoEndpoint: z.string().url().optional(),
   jwksUri: z.string().url().optional(),
-  upstreamClientId: z.string().min(1),
-  upstreamClientSecret: z.string().optional(),
+<<<<<<< HEAD
+  upstreamClientId: z.string().trim().min(1),
+  upstreamClientSecret: z
+    .string()
+    .transform((value) => {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    })
+    .optional(),
   upstreamTokenEndpointAuthMethod: z.enum(TOKEN_AUTH_METHODS).optional(),
+=======
+  upstreamClientId: z.string().trim().min(1),
+  upstreamClientSecret: z
+    .string()
+    .transform((value) => {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    })
+    .optional(),
+  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"] as const).optional(),
+>>>>>>> 3dd56b5 (fix(proxy): trim upstream credentials)
   defaultScopes: z.array(z.string().min(1)).optional(),
   scopeMapping: z
     .record(z.string(), z.union([z.string(), z.array(z.string().min(1))]))
@@ -168,6 +186,8 @@ export const createClient = async (
     }
 
     if (mode === "proxy" && validatedProxyConfig) {
+      const trimmedUpstreamClientId = validatedProxyConfig.upstreamClientId.trim();
+      const normalizedSecret = validatedProxyConfig.upstreamClientSecret?.trim();
       await tx.proxyProviderConfig.create({
         data: {
           clientId: created.id,
@@ -176,9 +196,9 @@ export const createClient = async (
           tokenEndpoint: validatedProxyConfig.tokenEndpoint,
           userinfoEndpoint: validatedProxyConfig.userinfoEndpoint ?? null,
           jwksUri: validatedProxyConfig.jwksUri ?? null,
-          upstreamClientId: validatedProxyConfig.upstreamClientId,
-          upstreamClientSecretEncrypted: validatedProxyConfig.upstreamClientSecret
-            ? encrypt(validatedProxyConfig.upstreamClientSecret)
+          upstreamClientId: trimmedUpstreamClientId,
+          upstreamClientSecretEncrypted: normalizedSecret
+            ? encrypt(normalizedSecret)
             : null,
           upstreamTokenEndpointAuthMethod: validatedProxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
           defaultScopes: normalizeProviderScopes(validatedProxyConfig.defaultScopes),
@@ -364,7 +384,9 @@ export const upsertProxyProviderConfig = async (
   const parsed = proxyProviderConfigSchema.parse(config);
   const normalizedScopes = normalizeProviderScopes(parsed.defaultScopes);
   const normalizedMapping = normalizeScopeMapping(parsed.scopeMapping);
-  const encryptedSecret = parsed.upstreamClientSecret ? encrypt(parsed.upstreamClientSecret) : null;
+  const trimmedUpstreamClientId = parsed.upstreamClientId.trim();
+  const normalizedSecret = parsed.upstreamClientSecret?.trim();
+  const encryptedSecret = normalizedSecret ? encrypt(normalizedSecret) : null;
   const shouldUpdateSecret = !options?.keepExistingSecret && parsed.upstreamClientSecret !== undefined;
 
   const baseUpdate = {
@@ -373,7 +395,7 @@ export const upsertProxyProviderConfig = async (
     tokenEndpoint: parsed.tokenEndpoint,
     userinfoEndpoint: parsed.userinfoEndpoint ?? null,
     jwksUri: parsed.jwksUri ?? null,
-    upstreamClientId: parsed.upstreamClientId,
+    upstreamClientId: trimmedUpstreamClientId,
     upstreamTokenEndpointAuthMethod: parsed.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
     defaultScopes: normalizedScopes,
     scopeMapping: normalizedMapping,

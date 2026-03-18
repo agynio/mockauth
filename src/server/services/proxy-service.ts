@@ -230,7 +230,8 @@ export const requestProviderTokens = async (
   };
 
   const params = new URLSearchParams(body);
-  params.set("client_id", config.upstreamClientId);
+  const trimmedClientId = config.upstreamClientId.trim();
+  params.set("client_id", trimmedClientId);
 
   const configuredAuthMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
   const authMethod = configuredAuthMethod;
@@ -240,14 +241,19 @@ export const requestProviderTokens = async (
     if (!config.upstreamClientSecretEncrypted) {
       throw new DomainError(`Provider client secret is required for ${method}`, { status: 500 });
     }
-    return decrypt(config.upstreamClientSecretEncrypted);
+    const decrypted = decrypt(config.upstreamClientSecretEncrypted);
+    const trimmed = decrypted.trim();
+    if (!trimmed) {
+      throw new DomainError(`Provider client secret is required for ${method}`, { status: 500 });
+    }
+    return trimmed;
   };
 
   params.delete("client_secret");
 
   if (authMethod === "client_secret_basic") {
     const secret = readUpstreamSecret("client_secret_basic");
-    authorization = `Basic ${Buffer.from(`${config.upstreamClientId}:${secret}`).toString("base64")}`;
+    authorization = `Basic ${Buffer.from(`${trimmedClientId}:${secret}`).toString("base64")}`;
   } else if (authMethod === "client_secret_post") {
     const secret = readUpstreamSecret("client_secret_post");
     params.set("client_secret", secret);
@@ -266,6 +272,7 @@ export const requestProviderTokens = async (
     authMethod,
     includeAuthHeader,
     includeClientSecretInBody,
+    clientId: trimmedClientId,
     hasClientId,
     grantType,
     includesRedirectUri,

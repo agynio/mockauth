@@ -1587,15 +1587,18 @@ export function UpdateProxyProviderConfigForm({
           )}
         />
 
-        {storedSecret ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">Stored provider secret</p>
-            <StoredProxySecretField value={storedSecret} />
-            <p className="text-xs text-muted-foreground" data-testid="proxy-secret-caution">
-              Revealed secrets render only in your browser. Share cautiously.
-            </p>
-          </div>
-        ) : null}
+        <div className="space-y-4">
+          <CopyField label="Stored provider client ID" value={initialConfig.upstreamClientId} testId="proxy-client-id-field" />
+          {storedSecret ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Stored provider secret</p>
+              <StoredProxySecretField value={storedSecret} />
+              <p className="text-xs text-muted-foreground" data-testid="proxy-secret-caution">
+                Revealed secrets render only in your browser. Share cautiously.
+              </p>
+            </div>
+          ) : null}
+        </div>
 
         <RHFSelectField
           control={form.control}

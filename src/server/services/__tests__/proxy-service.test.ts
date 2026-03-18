@@ -137,6 +137,7 @@ describe("requestProviderTokens", () => {
           authMethod: method,
           includeAuthHeader: usesAuthorization,
           includeClientSecretInBody: params.has("client_secret"),
+          clientId: config.upstreamClientId.trim(),
           hasClientId: params.has("client_id"),
           grantType: params.get("grant_type"),
           includesRedirectUri: params.has("redirect_uri"),
@@ -161,5 +162,56 @@ describe("requestProviderTokens", () => {
     });
 
     await expect(requestProviderTokens(postConfig, grantBodies.refresh_token)).rejects.toThrow("client_secret_post");
+  });
+
+  it("trims upstream credentials for client_secret_basic", async () => {
+    const fetchSpy = mockFetch();
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const config = buildConfig({
+      upstreamClientId: "  up-client  \n",
+      upstreamClientSecretEncrypted: encrypt("  secret  \n"),
+      upstreamTokenEndpointAuthMethod: "client_secret_basic",
+    });
+
+    await requestProviderTokens(config, grantBodies.authorization_code);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0];
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const encoded = headers.authorization?.replace(/^Basic\s+/u, "") ?? "";
+    const decoded = Buffer.from(encoded, "base64").toString("utf8");
+    expect(decoded).toBe("up-client:secret");
+
+    const params = toParams(init?.body);
+    expect(params.get("client_id")).toBe("up-client");
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      "proxy_provider_token_request",
+      expect.objectContaining({ clientId: "up-client" }),
+    );
+  });
+
+  it("trims upstream credentials for client_secret_post", async () => {
+    const fetchSpy = mockFetch();
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const config = buildConfig({
+      upstreamClientId: " \tup-client  \n",
+      upstreamClientSecretEncrypted: encrypt(" \nsecret\t"),
+      upstreamTokenEndpointAuthMethod: "client_secret_post",
+    });
+
+    await requestProviderTokens(config, grantBodies.refresh_token);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0];
+    const params = toParams(init?.body);
+
+    expect(params.get("client_id")).toBe("up-client");
+    expect(params.get("client_secret")).toBe("secret");
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      "proxy_provider_token_request",
+      expect.objectContaining({ clientId: "up-client" }),
+    );
   });
 });
