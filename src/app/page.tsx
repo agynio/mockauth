@@ -110,7 +110,7 @@ export default function Home() {
       </header>      <main className="relative z-10 flex-1">
         <section className="relative text-primary-foreground">
           <div className="relative mx-auto max-w-[1200px] px-6 py-24 sm:py-32 min-h-screen">
-            <div aria-hidden className="pointer-events-none absolute right-6 top-24 h-[420px] w-[420px] rounded-full bg-brand-400/15 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute right-[12%] top-24 h-[420px] w-[420px] rounded-full bg-brand-400/15 blur-3xl" />
             <div >
               {/* Left column */}
               <div className="w-full max-w-[1000px]">
@@ -119,7 +119,7 @@ export default function Home() {
                     MockAuth
                   </span>
                 </h1>
-                <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-3xl">
   A mock OpenID Connect provider for QA and automated tests.
 </h2>
                 <h3 className="mt-5 text-xl leading-[1.7] text-foreground/90">
@@ -139,7 +139,7 @@ export default function Home() {
                     View on GitHub
                   </a>
                 </div>
-                <div className="mt-9 w-full max-w-[600px]">
+                <div className="mt-8 w-full max-w-[640px]">
                   <TerminalEndpoints />
                 </div>
               </div>
@@ -155,8 +155,8 @@ export default function Home() {
   {coreFeatures.map((feature) => {
     const Icon = feature.icon;
     return (
-      <div key={feature.title} className="flex flex-col text-left">
-        <Icon aria-hidden className="h-6 w-6 text-brand-400" />
+      <div key={feature.title} className="group flex flex-col text-left transition-transform hover:-translate-y-0.5">
+        <Icon aria-hidden className="h-7 w-7 text-brand-300" />
         <h3 className="mt-3 text-lg font-semibold tracking-tight text-foreground">{feature.title}</h3>
         <p className="mt-2 text-base text-muted-foreground">{feature.description}</p>
       </div>
@@ -174,10 +174,10 @@ export default function Home() {
               {deployableHighlights.map((item) => (
                 <div
                   key={item.title}
-                  className="rounded-2xl border border-border/60 bg-surface-2/90 p-8 shadow-lg ring-1 ring-brand-500/10"
+                  className="rounded-2xl border border-border/50 bg-surface-2/95 p-8 shadow-lg ring-1 ring-brand-500/15 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-500/10"
                 >
                   <h3 className="text-xl font-semibold text-foreground">{item.title}</h3>
-                  <p className="mt-4 text-base text-foreground/75">{item.description}</p>
+                  <p className="mt-4 text-base text-foreground/70">{item.description}</p>
                 </div>
               ))}
             </div>
@@ -187,10 +187,12 @@ export default function Home() {
         <section>
           <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Common Use Cases</h2>
-            <ol className="mt-10 space-y-8 sm:pl-4">
+            <div className="relative">
+              <span aria-hidden className="pointer-events-none absolute left-6 top-0 bottom-0 w-px bg-border/35" />
+              <ol className="mt-10 space-y-7 sm:pl-4">
               {excellenceItems.map((item, index) => (
                 <li key={item.title} className="flex items-center gap-4">
-                  <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-semibold text-brand-400 ring-1 ring-brand-400/30 shadow-[0_0_24px_rgba(56,189,248,0.25)]">
+                  <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-semibold text-brand-400 ring-1 ring-brand-400/30 shadow-[0_0_24px_rgba(56,189,248,0.25)]">
                     {index + 1}
                   </span>
                   <p className="leading-relaxed text-base text-muted-foreground">
@@ -199,11 +201,12 @@ export default function Home() {
                 </li>
               ))}
             </ol>
-          </div>
+              </div>
+            </div>
         </section>        <section id="quick-start">
           <div className="mx-auto max-w-6xl px-6 py-20">
             <div
-              className="relative overflow-hidden rounded-3xl border border-border px-12 py-10 text-center shadow-2xl"
+              className="relative overflow-hidden rounded-3xl border border-border px-12 py-9 text-center shadow-2xl"
               style={{
                 backgroundImage:
                   "linear-gradient(var(--gradient-cta-angle), var(--gradient-cta-start) 0%, var(--gradient-cta-mid) 55%, var(--gradient-cta-end) 100%)",
@@ -247,7 +250,7 @@ export default function Home() {
               {faqItems.map((item) => (
                 <div key={item.q}>
                   <dt className="text-base font-semibold text-foreground">{item.q}</dt>
-                  <dd className="mt-2 text-base leading-relaxed text-foreground/75">{item.a}</dd>
+                  <dd className="mt-2 text-base leading-relaxed text-foreground/70">{item.a}</dd>
                 </div>
               ))}
             </dl>

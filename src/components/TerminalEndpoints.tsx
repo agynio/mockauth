@@ -52,7 +52,7 @@ export default function TerminalEndpoints() {
           {endpoints.map((e) => (
             <li key={e.label} className="group relative">
               <div className="text-[13px] font-semibold uppercase tracking-wider text-foreground/70">{e.label}</div>
-              <div className="mt-1 rounded-md bg-[#1e293b] px-3 py-3">
+              <div className="mt-1 rounded-md bg-[#1e293b] px-3 py-3 transition-colors hover:bg-[#223148]">
                 <code className="block overflow-x-auto whitespace-pre font-mono text-sm text-foreground/90">
                 {e.url}
               </code>
