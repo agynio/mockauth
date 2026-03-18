@@ -158,7 +158,7 @@ export default function Home() {
       <div key={feature.title} className="flex flex-col text-left">
         <Icon aria-hidden className="h-6 w-6 text-brand-400" />
         <h3 className="mt-3 text-lg font-semibold tracking-tight text-foreground">{feature.title}</h3>
-        <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
+        <p className="mt-2 text-base text-muted-foreground">{feature.description}</p>
       </div>
     );
   })}
