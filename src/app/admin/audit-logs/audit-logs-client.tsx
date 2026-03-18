@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { format } from "date-fns";
 
 import { fetchAuditLogsAction } from "@/app/admin/audit-logs/actions";
@@ -63,11 +63,7 @@ const formatEnumLabel = (value: string) =>
     .join(" ");
 
 const formatTimestamp = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return format(date, "yyyy-MM-dd HH:mm:ss");
+  return format(new Date(value), "yyyy-MM-dd HH:mm:ss");
 };
 
 const formatDetails = (details: Record<string, unknown> | null) => {
@@ -96,9 +92,11 @@ const severityBadgeVariant = (severity: AuditLogSeverity) => {
       return "destructive";
     case "WARN":
       return "secondary";
-    default:
+    case "INFO":
       return "default";
   }
+  const _exhaustive: never = severity;
+  throw new Error(`Unhandled audit severity: ${_exhaustive}`);
 };
 
 export const AuditLogsClient = ({
@@ -115,8 +113,8 @@ export const AuditLogsClient = ({
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [pending, startTransition] = useTransition();
 
-  const eventTypeOptions = useMemo(() => AUDIT_LOG_EVENT_TYPES, []);
-  const severityOptions = useMemo(() => AUDIT_LOG_SEVERITIES, []);
+  const eventTypeOptions = AUDIT_LOG_EVENT_TYPES;
+  const severityOptions = AUDIT_LOG_SEVERITIES;
 
   const fetchLogs = (options?: { nextFilters?: FilterState; cursor?: string | null; append?: boolean }) => {
     const nextFilters = options?.nextFilters ?? filters;

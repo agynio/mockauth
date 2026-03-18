@@ -11,7 +11,7 @@ import {
   completeProxyAuthorizationCodeGrant,
   completeProxyRefreshGrant,
 } from "@/server/services/proxy-token-service";
-import { recordSecurityViolation } from "@/server/services/audit-service";
+import { createSecurityViolationReporter } from "@/server/services/security-violation";
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
 
 const authorizationCodeSchema = z.object({
@@ -85,42 +85,26 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       }
 
       const codeRecord = await consumeAuthorizationCode(validation.data.code);
+      const reportViolation = createSecurityViolationReporter({
+        tenantId: codeRecord.tenantId,
+        clientId: codeRecord.clientId,
+        traceId: codeRecord.traceId ?? null,
+        authMethod,
+        clientSecretInBody,
+        requestContext,
+      });
       if (codeRecord.apiResourceId !== apiResourceId) {
-        void recordSecurityViolation({
-          tenantId: codeRecord.tenantId,
-          clientId: codeRecord.clientId,
-          traceId: codeRecord.traceId ?? null,
-          reason: "issuer_mismatch",
-          authMethod,
-          clientSecretInBody,
-          requestContext,
-        });
+        reportViolation("issuer_mismatch");
         return Response.json({ error: "invalid_grant" }, { status: 400 });
       }
 
       if (clientId && codeRecord.client.clientId !== clientId) {
-        void recordSecurityViolation({
-          tenantId: codeRecord.tenantId,
-          clientId: codeRecord.clientId,
-          traceId: codeRecord.traceId ?? null,
-          reason: "client_mismatch",
-          authMethod,
-          clientSecretInBody,
-          requestContext,
-        });
+        reportViolation("client_mismatch");
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 
       if (codeRecord.client.tokenEndpointAuthMethod !== authMethod) {
-        void recordSecurityViolation({
-          tenantId: codeRecord.tenantId,
-          clientId: codeRecord.clientId,
-          traceId: codeRecord.traceId ?? null,
-          reason: "auth_method_mismatch",
-          authMethod,
-          clientSecretInBody,
-          requestContext,
-        });
+        reportViolation("auth_method_mismatch");
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 

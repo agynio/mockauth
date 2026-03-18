@@ -3,16 +3,16 @@
 import { z } from "zod";
 import { getServerSession } from "next-auth";
 
-import { AuditLogEventType, AuditLogSeverity } from "@/generated/prisma/client";
+import { AUDIT_LOG_EVENT_TYPES, AUDIT_LOG_SEVERITIES } from "@/lib/audit-log";
 import { authOptions } from "@/server/auth/options";
-import { listAuditLogs } from "@/server/services/audit-log-service";
+import { listAuditLogs, toAuditLogEntry, type AuditLogEntry } from "@/server/services/audit-log-service";
 import { assertTenantMembership } from "@/server/services/tenant-service";
 
 const listAuditLogsSchema = z.object({
   tenantId: z.string().min(1),
   clientId: z.string().min(1).optional().nullable(),
-  eventType: z.nativeEnum(AuditLogEventType).optional().nullable(),
-  severity: z.nativeEnum(AuditLogSeverity).optional().nullable(),
+  eventType: z.enum(AUDIT_LOG_EVENT_TYPES).optional().nullable(),
+  severity: z.enum(AUDIT_LOG_SEVERITIES).optional().nullable(),
   traceId: z.string().min(1).optional().nullable(),
   startDate: z.string().min(1).optional().nullable(),
   endDate: z.string().min(1).optional().nullable(),
@@ -55,20 +55,6 @@ const parseEndDate = (value: string | null | undefined) => {
   return date;
 };
 
-type AuditLogEntry = {
-  id: string;
-  createdAt: string;
-  eventType: AuditLogEventType;
-  severity: AuditLogSeverity;
-  message: string;
-  traceId: string | null;
-  client: { id: string; name: string; clientId: string } | null;
-  details: Record<string, unknown> | null;
-  actorId: string | null;
-  ipAddress: string | null;
-  userAgent: string | null;
-};
-
 export const fetchAuditLogsAction = async (
   input: z.infer<typeof listAuditLogsSchema>,
 ): Promise<ActionState<{ logs: AuditLogEntry[]; nextCursor: string | null }>> => {
@@ -93,19 +79,7 @@ export const fetchAuditLogsAction = async (
     return {
       success: "Audit logs loaded",
       data: {
-        logs: logs.map((log) => ({
-          id: log.id,
-          createdAt: log.createdAt.toISOString(),
-          eventType: log.eventType,
-          severity: log.severity,
-          message: log.message,
-          traceId: log.traceId,
-          client: log.client ? { id: log.client.id, name: log.client.name, clientId: log.client.clientId } : null,
-          details: (log.details as Record<string, unknown>) ?? null,
-          actorId: log.actorId,
-          ipAddress: log.ipAddress,
-          userAgent: log.userAgent,
-        })),
+        logs: logs.map((log) => toAuditLogEntry(log)),
         nextCursor,
       },
     };

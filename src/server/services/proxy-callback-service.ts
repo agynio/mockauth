@@ -2,6 +2,12 @@ import { URLSearchParams } from "node:url";
 
 import { DomainError } from "@/server/errors";
 import { emitAuditEvent, recordSecurityViolation } from "@/server/services/audit-service";
+import {
+  buildProxyCallbackErrorDetails,
+  buildProxyCallbackSuccessDetails,
+  buildProxyCodeIssuedDetails,
+  toTokenResponsePayload,
+} from "@/server/services/audit-event";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import {
   getProxyAuthTransaction,
@@ -81,7 +87,10 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       eventType: "PROXY_CALLBACK_ERROR",
       severity: "WARN",
       message: "Proxy transaction expired",
-      details: { error: "transaction_expired" },
+      details: buildProxyCallbackErrorDetails({
+        error: "transaction_expired",
+        providerType: transaction.client.proxyConfig?.providerType,
+      }),
       requestContext: params.requestContext ?? null,
     });
     await markProxyTransactionCompleted(transaction.id);
@@ -114,7 +123,11 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       eventType: "PROXY_CALLBACK_ERROR",
       severity: "WARN",
       message: "Proxy provider returned error",
-      details: { error, errorDescription: description ?? undefined, providerType: config.providerType },
+      details: buildProxyCallbackErrorDetails({
+        error,
+        errorDescription: description,
+        providerType: config.providerType,
+      }),
       requestContext: params.requestContext ?? null,
     });
     await markProxyTransactionCompleted(transaction.id);
@@ -130,7 +143,10 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       eventType: "PROXY_CALLBACK_ERROR",
       severity: "WARN",
       message: "Proxy provider did not return a code",
-      details: { error: "missing_code", providerType: config.providerType },
+      details: buildProxyCallbackErrorDetails({
+        error: "missing_code",
+        providerType: config.providerType,
+      }),
       requestContext: params.requestContext ?? null,
     });
     await markProxyTransactionCompleted(transaction.id);
@@ -171,14 +187,18 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         eventType: "PROXY_CALLBACK_ERROR",
         severity: "WARN",
         message: "Proxy provider token exchange failed",
-        details: { error: providerError, errorDescription: description ?? undefined, providerType: config.providerType },
+        details: buildProxyCallbackErrorDetails({
+          error: providerError,
+          errorDescription: description,
+          providerType: config.providerType,
+        }),
         requestContext: params.requestContext ?? null,
       });
       await markProxyTransactionCompleted(transaction.id);
       return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
     }
 
-    if (!result.json || typeof result.json !== "object") {
+    if (!result.json || typeof result.json !== "object" || Array.isArray(result.json)) {
       void emitAuditEvent({
         tenantId: transaction.tenantId,
         clientId: transaction.clientId,
@@ -187,11 +207,16 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         eventType: "PROXY_CALLBACK_ERROR",
         severity: "WARN",
         message: "Proxy provider token response missing",
-        details: { error: "missing_token_response", providerType: config.providerType },
+        details: buildProxyCallbackErrorDetails({
+          error: "missing_token_response",
+          providerType: config.providerType,
+        }),
         requestContext: params.requestContext ?? null,
       });
       throw new DomainError("Provider token response missing", { status: 502 });
     }
+
+    const providerPayload = toTokenResponsePayload(result.json);
 
     const exchange = await storeProxyTokenExchange({
       tenantId: transaction.tenantId,
@@ -209,7 +234,10 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       eventType: "PROXY_CALLBACK_SUCCESS",
       severity: "INFO",
       message: "Proxy provider callback succeeded",
-      details: { providerType: config.providerType, providerResponse: result.json },
+      details: buildProxyCallbackSuccessDetails({
+        providerType: config.providerType,
+        providerResponse: providerPayload,
+      }),
       requestContext: params.requestContext ?? null,
     });
 
@@ -234,7 +262,10 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       eventType: "PROXY_CODE_ISSUED",
       severity: "INFO",
       message: "Proxy authorization code issued",
-      details: { scope: transaction.appScope, redirectUri: transaction.redirectUri },
+      details: buildProxyCodeIssuedDetails({
+        scope: transaction.appScope,
+        redirectUri: transaction.redirectUri,
+      }),
       requestContext: params.requestContext ?? null,
     });
 

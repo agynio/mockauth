@@ -49,8 +49,13 @@ export const getRequestContext = async (): Promise<RequestContext> => {
   try {
     const headerList = await headers();
     return buildContext(headerList);
-  } catch {
-    return { ipAddress: null, userAgent: null };
+  } catch (error) {
+    const errorPayload =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { error: String(error) };
+    console.error("Failed to read request context", errorPayload);
+    throw error;
   }
 };
 

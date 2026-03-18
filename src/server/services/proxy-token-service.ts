@@ -11,7 +11,18 @@ import { buildProxyTokenResponse, sanitizeProviderError, sanitizeProviderErrorDe
 import { assertClientSecret, verifyPkce } from "@/server/services/token-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { getClientForTenant } from "@/server/services/client-service";
-import { emitAuditEvent, recordSecurityViolation } from "@/server/services/audit-service";
+import { emitAuditEvent } from "@/server/services/audit-service";
+import {
+  buildTokenAuthCodeReceivedDetails,
+  buildTokenRefreshReceivedDetails,
+  summarizeTokenResponse,
+  toTokenResponsePayload,
+  type TokenAuthMethod,
+} from "@/server/services/audit-event";
+import {
+  createSecurityViolationReporter,
+  withSecurityViolationAudit,
+} from "@/server/services/security-violation";
 import type { RequestContext } from "@/server/utils/request-context";
 
 type AuthorizationCodeGrantParams = {
@@ -19,7 +30,7 @@ type AuthorizationCodeGrantParams = {
   code: string;
   redirectUri: string;
   codeVerifier: string;
-  authMethod: "client_secret_basic" | "client_secret_post" | "none";
+  authMethod: TokenAuthMethod;
   clientIdFromRequest?: string | null;
   clientSecret?: string | null;
   auditContext?: ProxyTokenAuditContext | null;
@@ -38,6 +49,15 @@ export const completeProxyAuthorizationCodeGrant = async (
 ): Promise<Record<string, unknown>> => {
   const { record, providerResponse } = await consumeProxyAuthorizationCode(params.code);
   const traceId = record.tokenExchange.transactionId ?? record.tokenExchange.transaction?.id ?? null;
+  const violationContext = {
+    tenantId: record.tenantId,
+    clientId: record.clientId,
+    traceId,
+    authMethod: params.authMethod,
+    clientSecretInBody: params.auditContext?.clientSecretInBody,
+    requestContext: params.auditContext?.requestContext ?? null,
+  };
+  const reportViolation = createSecurityViolationReporter(violationContext);
 
   void emitAuditEvent({
     tenantId: record.tenantId,
@@ -47,106 +67,38 @@ export const completeProxyAuthorizationCodeGrant = async (
     eventType: "TOKEN_AUTHCODE_RECEIVED",
     severity: "INFO",
     message: "Token request received",
-    details: {
+    details: buildTokenAuthCodeReceivedDetails({
       authMethod: params.authMethod,
       clientSecretInBody: params.auditContext?.clientSecretInBody,
       clientIdProvided: params.auditContext?.clientIdProvided,
-    },
+    }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
   if (record.apiResourceId !== params.apiResourceId) {
-    void recordSecurityViolation({
-      tenantId: record.tenantId,
-      clientId: record.clientId,
-      traceId,
-      reason: "issuer_mismatch",
-      authMethod: params.authMethod,
-      clientSecretInBody: params.auditContext?.clientSecretInBody,
-      requestContext: params.auditContext?.requestContext ?? null,
-    });
+    reportViolation("issuer_mismatch");
     throw new DomainError("Authorization code does not match issuer", { status: 400, code: "invalid_grant" });
   }
 
   if (params.clientIdFromRequest && record.client.clientId !== params.clientIdFromRequest) {
-    void recordSecurityViolation({
-      tenantId: record.tenantId,
-      clientId: record.clientId,
-      traceId,
-      reason: "client_mismatch",
-      authMethod: params.authMethod,
-      clientSecretInBody: params.auditContext?.clientSecretInBody,
-      requestContext: params.auditContext?.requestContext ?? null,
-    });
+    reportViolation("client_mismatch");
     throw new DomainError("Client mismatch", { status: 401, code: "invalid_client" });
   }
 
   if (record.client.tokenEndpointAuthMethod !== params.authMethod) {
-    void recordSecurityViolation({
-      tenantId: record.tenantId,
-      clientId: record.clientId,
-      traceId,
-      reason: "auth_method_mismatch",
-      authMethod: params.authMethod,
-      clientSecretInBody: params.auditContext?.clientSecretInBody,
-      requestContext: params.auditContext?.requestContext ?? null,
-    });
+    reportViolation("auth_method_mismatch");
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
-  try {
-    await assertClientSecret(record.client, params.clientSecret);
-  } catch (error) {
-    if (error instanceof DomainError) {
-      const reason = error.message.includes("Client authentication required")
-        ? "client_auth_missing"
-        : error.message.includes("Invalid client credentials")
-          ? "client_auth_invalid"
-          : "auth_method_mismatch";
-      void recordSecurityViolation({
-        tenantId: record.tenantId,
-        clientId: record.clientId,
-        traceId,
-        reason,
-        authMethod: params.authMethod,
-        clientSecretInBody: params.auditContext?.clientSecretInBody,
-        requestContext: params.auditContext?.requestContext ?? null,
-      });
-    }
-    throw error;
-  }
+  await withSecurityViolationAudit(() => assertClientSecret(record.client, params.clientSecret), violationContext);
 
   const normalizedRedirect = resolveRedirectUri(params.redirectUri, record.client.redirectUris ?? []);
   if (normalizedRedirect !== record.redirectUri) {
-    void recordSecurityViolation({
-      tenantId: record.tenantId,
-      clientId: record.clientId,
-      traceId,
-      reason: "redirect_uri_mismatch",
-      authMethod: params.authMethod,
-      clientSecretInBody: params.auditContext?.clientSecretInBody,
-      requestContext: params.auditContext?.requestContext ?? null,
-    });
+    reportViolation("redirect_uri_mismatch");
     throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
   }
 
-  try {
-    verifyPkce(record, params.codeVerifier);
-  } catch (error) {
-    if (error instanceof DomainError) {
-      const reason = error.message.includes("Invalid code verifier") ? "pkce_mismatch" : "pkce_method_unsupported";
-      void recordSecurityViolation({
-        tenantId: record.tenantId,
-        clientId: record.clientId,
-        traceId,
-        reason,
-        authMethod: params.authMethod,
-        clientSecretInBody: params.auditContext?.clientSecretInBody,
-        requestContext: params.auditContext?.requestContext ?? null,
-      });
-    }
-    throw error;
-  }
+  await withSecurityViolationAudit(async () => verifyPkce(record, params.codeVerifier), violationContext);
 
   const proxyConfig = record.client.proxyConfig;
   if (!proxyConfig) {
@@ -171,7 +123,7 @@ export const completeProxyAuthorizationCodeGrant = async (
     eventType: "TOKEN_AUTHCODE_COMPLETED",
     severity: "INFO",
     message: "Token response issued",
-    details: response,
+    details: summarizeTokenResponse(toTokenResponsePayload(response)),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
@@ -183,7 +135,7 @@ type RefreshTokenGrantParams = {
   clientId: string;
   refreshToken: string;
   scope?: string;
-  authMethod: "client_secret_basic" | "client_secret_post" | "none";
+  authMethod: TokenAuthMethod;
   clientSecret?: string | null;
   auditContext?: ProxyTokenAuditContext | null;
 };
@@ -193,17 +145,19 @@ export const completeProxyRefreshGrant = async (
 ): Promise<Record<string, unknown>> => {
   const { tenant, resource } = await getApiResourceWithTenant(params.apiResourceId);
   const client = await getClientForTenant(tenant.id, params.clientId);
+  const violationContext = {
+    tenantId: tenant.id,
+    clientId: client.id,
+    traceId: null,
+    authMethod: params.authMethod,
+    clientSecretInBody: params.auditContext?.clientSecretInBody,
+    requestContext: params.auditContext?.requestContext ?? null,
+  };
+  const reportViolation = createSecurityViolationReporter(violationContext);
 
   const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
   if (clientResourceId !== resource.id) {
-    void recordSecurityViolation({
-      tenantId: tenant.id,
-      clientId: client.id,
-      reason: "issuer_mismatch",
-      authMethod: params.authMethod,
-      clientSecretInBody: params.auditContext?.clientSecretInBody,
-      requestContext: params.auditContext?.requestContext ?? null,
-    });
+    reportViolation("issuer_mismatch");
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
@@ -217,14 +171,7 @@ export const completeProxyRefreshGrant = async (
   }
 
   if (client.tokenEndpointAuthMethod !== params.authMethod) {
-    void recordSecurityViolation({
-      tenantId: tenant.id,
-      clientId: client.id,
-      reason: "auth_method_mismatch",
-      authMethod: params.authMethod,
-      clientSecretInBody: params.auditContext?.clientSecretInBody,
-      requestContext: params.auditContext?.requestContext ?? null,
-    });
+    reportViolation("auth_method_mismatch");
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
@@ -236,34 +183,15 @@ export const completeProxyRefreshGrant = async (
     eventType: "TOKEN_REFRESH_RECEIVED",
     severity: "INFO",
     message: "Refresh token request received",
-    details: {
+    details: buildTokenRefreshReceivedDetails({
       authMethod: params.authMethod,
       clientSecretInBody: params.auditContext?.clientSecretInBody,
       scope: params.scope,
-    },
+    }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
-  try {
-    await assertClientSecret(client, params.clientSecret);
-  } catch (error) {
-    if (error instanceof DomainError) {
-      const reason = error.message.includes("Client authentication required")
-        ? "client_auth_missing"
-        : error.message.includes("Invalid client credentials")
-          ? "client_auth_invalid"
-          : "auth_method_mismatch";
-      void recordSecurityViolation({
-        tenantId: tenant.id,
-        clientId: client.id,
-        reason,
-        authMethod: params.authMethod,
-        clientSecretInBody: params.auditContext?.clientSecretInBody,
-        requestContext: params.auditContext?.requestContext ?? null,
-      });
-    }
-    throw error;
-  }
+  await withSecurityViolationAudit(() => assertClientSecret(client, params.clientSecret), violationContext);
 
   const body = new URLSearchParams();
   body.set("grant_type", "refresh_token");
@@ -304,7 +232,7 @@ export const completeProxyRefreshGrant = async (
     eventType: "TOKEN_REFRESH_COMPLETED",
     severity: "INFO",
     message: "Refresh token response issued",
-    details: refreshResponse,
+    details: summarizeTokenResponse(toTokenResponsePayload(refreshResponse)),
     requestContext: params.auditContext?.requestContext ?? null,
   });
 

@@ -16,7 +16,7 @@ export const POST = async (request: Request) => {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const retentionDays = env.AUDIT_LOG_RETENTION_DAYS ?? 90;
+  const retentionDays = env.AUDIT_LOG_RETENTION_DAYS;
   const cutoff = subDays(new Date(), retentionDays);
   let deletedTotal = 0;
 

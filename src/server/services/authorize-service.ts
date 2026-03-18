@@ -12,6 +12,7 @@ import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/o
 import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-token";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { emitAuditEvent } from "@/server/services/audit-service";
+import { buildAuthorizeReceivedDetails, buildProxyRedirectOutDetails } from "@/server/services/audit-event";
 import {
   PROXY_TRANSACTION_TTL_SECONDS,
   startProxyAuthTransaction,
@@ -110,15 +111,15 @@ export const handleAuthorize = async (
     eventType: "AUTHORIZE_RECEIVED",
     severity: "INFO",
     message: "Authorization request received",
-    details: {
+    details: buildAuthorizeReceivedDetails({
       responseType: params.responseType,
       scope: params.scope,
-      prompt: params.prompt ?? null,
+      prompt: params.prompt,
       codeChallengeMethod: params.codeChallengeMethod,
-      loginHintProvided: Boolean(params.loginHint),
-      nonceProvided: Boolean(params.nonce),
-      freshLoginRequested: Boolean(params.freshLoginRequested),
-    },
+      loginHint: params.loginHint,
+      nonce: params.nonce,
+      freshLoginRequested: params.freshLoginRequested,
+    }),
     requestContext: requestContext ?? null,
   });
   const strategies = parseClientAuthStrategies(client.authStrategies);
@@ -262,14 +263,14 @@ const handleProxyAuthorize = async (args: {
     eventType: "AUTHORIZE_RECEIVED",
     severity: "INFO",
     message: "Proxy authorization request received",
-    details: {
+    details: buildAuthorizeReceivedDetails({
       responseType: params.responseType,
       scope: params.scope,
-      prompt: params.prompt ?? null,
+      prompt: params.prompt,
       codeChallengeMethod: params.codeChallengeMethod,
-      loginHintProvided: Boolean(params.loginHint),
-      nonceProvided: Boolean(params.nonce),
-    },
+      loginHint: params.loginHint,
+      nonce: params.nonce,
+    }),
     requestContext: requestContext ?? null,
   });
 
@@ -306,13 +307,13 @@ const handleProxyAuthorize = async (args: {
       eventType: "PROXY_REDIRECT_OUT",
       severity: "INFO",
       message: "Redirected to proxy provider",
-      details: {
+      details: buildProxyRedirectOutDetails({
         providerType: proxyConfig.providerType,
         providerScope: providerScopes,
         providerPkceEnabled: proxyConfig.pkceSupported,
-        prompt: providerPrompt ?? undefined,
-        loginHintProvided: Boolean(providerLoginHint),
-      },
+        prompt: providerPrompt,
+        loginHint: providerLoginHint,
+      }),
       requestContext: requestContext ?? null,
     });
 

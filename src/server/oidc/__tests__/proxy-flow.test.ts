@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { vi, describe, it, beforeAll, afterAll, expect } from "vitest";
 
-import { $Enums, AuditLogEventType } from "@/generated/prisma/client";
 
 import { prisma } from "@/server/db/client";
 import { encrypt } from "@/server/crypto/key-vault";
@@ -35,7 +34,7 @@ describe("Proxy client OAuth flow", () => {
     apiResourceId = tenant.defaultApiResourceId!;
     const user = tenant.mockUsers[0];
     sessionToken = await createSession(tenant.id, user.id, {
-      strategy: $Enums.LoginStrategy.USERNAME,
+      strategy: "USERNAME",
       subject: user.username,
     });
 
@@ -205,16 +204,16 @@ describe("Proxy client OAuth flow", () => {
     const traceEventTypes = traceLogs.map((log) => log.eventType);
     expect(traceEventTypes).toEqual(
       expect.arrayContaining([
-        AuditLogEventType.AUTHORIZE_RECEIVED,
-        AuditLogEventType.PROXY_REDIRECT_OUT,
-        AuditLogEventType.PROXY_CALLBACK_SUCCESS,
-        AuditLogEventType.PROXY_CODE_ISSUED,
-        AuditLogEventType.TOKEN_AUTHCODE_RECEIVED,
-        AuditLogEventType.TOKEN_AUTHCODE_COMPLETED,
+        "AUTHORIZE_RECEIVED",
+        "PROXY_REDIRECT_OUT",
+        "PROXY_CALLBACK_SUCCESS",
+        "PROXY_CODE_ISSUED",
+        "TOKEN_AUTHCODE_RECEIVED",
+        "TOKEN_AUTHCODE_COMPLETED",
       ]),
     );
     const refreshLogs = await prisma.auditLog.findMany({
-      where: { tenantId, clientId: proxyClientId, eventType: AuditLogEventType.TOKEN_REFRESH_COMPLETED },
+      where: { tenantId, clientId: proxyClientId, eventType: "TOKEN_REFRESH_COMPLETED" },
     });
     expect(refreshLogs.length).toBeGreaterThan(0);
 

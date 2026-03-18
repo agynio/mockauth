@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AuditLogEventType } from "@/generated/prisma/client";
+import { summarizeTokenResponse } from "@/server/services/audit-event";
 
 const mockCreate = vi.hoisted(() => vi.fn());
 
@@ -14,7 +14,7 @@ vi.mock("@/server/db/client", () => ({
   },
 }));
 
-import { emitAuditEvent, sanitizeAuditDetails } from "@/server/services/audit-service";
+import { emitAuditEvent } from "@/server/services/audit-service";
 
 describe("audit-service", () => {
   beforeEach(() => {
@@ -22,7 +22,7 @@ describe("audit-service", () => {
   });
 
   it("summarizes token responses for audit logs", () => {
-    const details = sanitizeAuditDetails(AuditLogEventType.TOKEN_AUTHCODE_COMPLETED, {
+    const details = summarizeTokenResponse({
       access_token: "secret",
       refresh_token: "refresh",
       id_token: "id",
@@ -43,20 +43,22 @@ describe("audit-service", () => {
   });
 
   it("redacts sensitive token data when emitting", async () => {
+    const summary = summarizeTokenResponse({
+      access_token: "secret",
+      refresh_token: "refresh",
+      id_token: "id",
+      token_type: "Bearer",
+      expires_in: 900,
+      scope: "openid",
+    });
+
     await emitAuditEvent({
       tenantId: "tenant-1",
       clientId: "client-1",
-      eventType: AuditLogEventType.TOKEN_AUTHCODE_COMPLETED,
+      eventType: "TOKEN_AUTHCODE_COMPLETED",
       severity: "INFO",
       message: "Token response issued",
-      details: {
-        access_token: "secret",
-        refresh_token: "refresh",
-        id_token: "id",
-        token_type: "Bearer",
-        expires_in: 900,
-        scope: "openid",
-      },
+      details: summary,
     });
 
     expect(mockCreate).toHaveBeenCalledWith(
@@ -76,5 +78,37 @@ describe("audit-service", () => {
     expect(call?.details).not.toHaveProperty("access_token");
     expect(call?.details).not.toHaveProperty("refresh_token");
     expect(call?.details).not.toHaveProperty("id_token");
+  });
+
+  it("logs audit failures with metadata", async () => {
+    const error = new Error("boom");
+    mockCreate.mockRejectedValueOnce(error);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await emitAuditEvent({
+      tenantId: "tenant-1",
+      clientId: "client-1",
+      eventType: "TOKEN_AUTHCODE_COMPLETED",
+      severity: "INFO",
+      message: "Token response issued",
+      details: summarizeTokenResponse({
+        access_token: "secret",
+        token_type: "Bearer",
+        expires_in: 900,
+      }),
+    });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Failed to emit audit event",
+      expect.objectContaining({
+        message: "boom",
+        tenantId: "tenant-1",
+        clientId: "client-1",
+        eventType: "TOKEN_AUTHCODE_COMPLETED",
+        severity: "INFO",
+      }),
+    );
+
+    errorSpy.mockRestore();
   });
 });

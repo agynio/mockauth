@@ -53,6 +53,9 @@ vi.mock("@/server/db/client", () => ({
     tenant: {
       findUnique: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
   },
 }));
 

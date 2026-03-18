@@ -59,6 +59,7 @@ import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/o
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
+import { buildConfigChangedDetails } from "@/server/services/audit-event";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 
@@ -278,12 +279,12 @@ const emitConfigChange = async (input: {
     eventType: "CONFIG_CHANGED",
     severity: "INFO",
     message: input.message,
-    details: {
+    details: buildConfigChangedDetails({
       action: input.action,
       resource: input.resource,
-      resourceId: input.resourceId ?? undefined,
-      resourceName: input.resourceName ?? undefined,
-    },
+      resourceId: input.resourceId,
+      resourceName: input.resourceName,
+    }),
     requestContext,
   });
 };

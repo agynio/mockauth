@@ -1,5 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
-import type { AuditLogEventType, AuditLogSeverity } from "@/generated/prisma/client";
+import type { AuditLogEventType, AuditLogSeverity } from "@/lib/audit-log";
 
 import { prisma } from "@/server/db/client";
 
@@ -18,8 +18,26 @@ export type AuditLogCursor = {
   createdAt: Date;
 };
 
+type AuditLogWithClient = Prisma.AuditLogGetPayload<{
+  include: { client: { select: { id: true; name: true; clientId: true } } };
+}>;
+
+export type AuditLogEntry = {
+  id: string;
+  createdAt: string;
+  eventType: AuditLogEventType;
+  severity: AuditLogSeverity;
+  message: string;
+  traceId: string | null;
+  client: { id: string; name: string; clientId: string } | null;
+  details: Record<string, unknown> | null;
+  actorId: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+};
+
 export type AuditLogPage = {
-  logs: Array<Prisma.AuditLogGetPayload<{ include: { client: { select: { id: true; name: true; clientId: true } } } }>>;
+  logs: AuditLogWithClient[];
   nextCursor: string | null;
 };
 
@@ -44,9 +62,24 @@ const decodeCursor = (cursor: string): AuditLogCursor | null => {
     }
     return { id: parsed.id, createdAt };
   } catch {
+    // Invalid cursor payloads are treated as empty cursors.
     return null;
   }
 };
+
+export const toAuditLogEntry = (log: AuditLogWithClient): AuditLogEntry => ({
+  id: log.id,
+  createdAt: log.createdAt.toISOString(),
+  eventType: log.eventType,
+  severity: log.severity,
+  message: log.message,
+  traceId: log.traceId,
+  client: log.client ? { id: log.client.id, name: log.client.name, clientId: log.client.clientId } : null,
+  details: (log.details as Record<string, unknown>) ?? null,
+  actorId: log.actorId,
+  ipAddress: log.ipAddress,
+  userAgent: log.userAgent,
+});
 
 const buildBaseWhere = (filters: AuditLogFilters): Prisma.AuditLogWhereInput => {
   const createdAt: Prisma.DateTimeFilter<"AuditLog"> = {};
@@ -100,13 +133,9 @@ export const listAuditLogs = async (
     take: pageSize + 1,
   });
 
-  let nextCursor: string | null = null;
-  if (logs.length > pageSize) {
-    const next = logs.pop();
-    if (next) {
-      nextCursor = encodeCursor({ id: next.id, createdAt: next.createdAt });
-    }
-  }
+  const hasMore = logs.length > pageSize;
+  const page = hasMore ? logs.slice(0, pageSize) : logs;
+  const nextCursor = hasMore ? encodeCursor({ id: logs[pageSize].id, createdAt: logs[pageSize].createdAt }) : null;
 
-  return { logs, nextCursor };
+  return { logs: page, nextCursor };
 };
