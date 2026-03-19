@@ -292,7 +292,11 @@ describe("Proxy client OAuth flow", () => {
     });
     const callbackDetails = auditLog?.details as Record<string, unknown>;
     expect(callbackDetails).toMatchObject({
+      tokenEndpointUrl: "https://upstream.example.com/oauth2/token",
       tokenEndpointHost: "upstream.example.com",
+      tokenEndpointPath: "/oauth2/token",
+      contentType: "application/x-www-form-urlencoded",
+      bodyKeys: ["grant_type", "code", "redirect_uri", "client_id", "code_verifier"],
       authMethod: "none",
       includeAuthHeader: false,
       includeClientSecretInBody: false,
@@ -393,7 +397,11 @@ describe("Proxy client OAuth flow", () => {
     });
     const tokenErrorDetails = auditLog?.details as Record<string, unknown>;
     expect(tokenErrorDetails).toMatchObject({
+      tokenEndpointUrl: "https://upstream.example.com/oauth2/token",
       tokenEndpointHost: "upstream.example.com",
+      tokenEndpointPath: "/oauth2/token",
+      contentType: "application/x-www-form-urlencoded",
+      bodyKeys: ["grant_type", "code", "redirect_uri", "client_id", "code_verifier"],
       authMethod: "none",
       includeAuthHeader: false,
       includeClientSecretInBody: false,
@@ -444,7 +452,11 @@ describe("Proxy client OAuth flow", () => {
     });
     const refreshDetails = auditLog?.details as Record<string, unknown>;
     expect(refreshDetails).toMatchObject({
+      tokenEndpointUrl: "https://upstream.example.com/oauth2/token",
       tokenEndpointHost: "upstream.example.com",
+      tokenEndpointPath: "/oauth2/token",
+      contentType: "application/x-www-form-urlencoded",
+      bodyKeys: ["grant_type", "refresh_token", "client_id", "scope"],
       authMethod: "none",
       includeAuthHeader: false,
       includeClientSecretInBody: false,

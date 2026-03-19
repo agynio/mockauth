@@ -17,6 +17,8 @@ import {
   storeProxyTokenExchange,
   createProxyAuthorizationCode,
   deleteProxyAuthTransaction,
+  getProviderTokenRequestKeys,
+  PROXY_TOKEN_REQUEST_CONTENT_TYPE,
   requestProviderTokens,
 } from "@/server/services/proxy-service";
 import { sanitizeProviderError, sanitizeProviderErrorDescription } from "@/server/services/proxy-utils";
@@ -169,11 +171,15 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
     tokenRequest.set("code_verifier", transaction.providerCodeVerifier);
   }
 
+  const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
+  const bodyKeys = getProviderTokenRequestKeys(config, tokenRequest);
   exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
     tokenEndpoint: config.tokenEndpoint,
-    authMethod: config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+    authMethod,
     clientId: config.upstreamClientId,
     grantType: "authorization_code",
+    contentType: PROXY_TOKEN_REQUEST_CONTENT_TYPE,
+    bodyKeys,
     redirectUri: callbackUrl,
     codeVerifierPresent: transaction.providerPkceEnabled ? tokenRequest.has("code_verifier") : undefined,
   });

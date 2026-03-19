@@ -9,6 +9,7 @@ import { encrypt, decrypt } from "@/server/crypto/key-vault";
 const PROXY_TRANSACTION_TTL_MINUTES = 5;
 const PROXY_TOKEN_EXCHANGE_TTL_MINUTES = 5;
 const PROXY_AUTH_CODE_TTL_MINUTES = 10;
+export const PROXY_TOKEN_REQUEST_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
 export const PROXY_TRANSACTION_TTL_SECONDS = PROXY_TRANSACTION_TTL_MINUTES * 60;
 export const PROXY_AUTH_CODE_TTL_SECONDS = PROXY_AUTH_CODE_TTL_MINUTES * 60;
@@ -220,12 +221,26 @@ type ProviderTokenResponse = {
   json: Record<string, unknown>;
 };
 
+export const getProviderTokenRequestKeys = (config: ProxyProviderConfig, body: URLSearchParams): string[] => {
+  const params = new URLSearchParams(body);
+  params.set("client_id", config.upstreamClientId);
+
+  const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
+  params.delete("client_secret");
+
+  if (authMethod === "client_secret_post") {
+    params.set("client_secret", "redacted");
+  }
+
+  return Array.from(params.keys());
+};
+
 export const requestProviderTokens = async (
   config: ProxyProviderConfig,
   body: URLSearchParams,
 ): Promise<ProviderTokenResponse> => {
   const headers: Record<string, string> = {
-    "content-type": "application/x-www-form-urlencoded",
+    "content-type": PROXY_TOKEN_REQUEST_CONTENT_TYPE,
     accept: "application/json",
   };
 

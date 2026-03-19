@@ -70,7 +70,11 @@ export type ProxyCallbackSuccessDetails = {
 };
 
 export type ProviderTokenExchangeDiagnostics = {
+  tokenEndpointUrl: string;
   tokenEndpointHost: string;
+  tokenEndpointPath: string;
+  contentType: string;
+  bodyKeys: string[];
   authMethod: TokenAuthMethod;
   includeAuthHeader: boolean;
   includeClientSecretInBody: boolean;
@@ -294,6 +298,8 @@ type ProviderTokenExchangeDiagnosticsParams = {
   authMethod: TokenAuthMethod;
   clientId: string;
   grantType: string;
+  contentType: string;
+  bodyKeys: string[];
   redirectUri?: string | null;
   codeVerifierPresent?: boolean | null;
 };
@@ -301,8 +307,13 @@ type ProviderTokenExchangeDiagnosticsParams = {
 export function buildProviderTokenExchangeDiagnostics(
   params: ProviderTokenExchangeDiagnosticsParams,
 ): ProviderTokenExchangeDiagnostics {
+  const tokenEndpointUrl = new URL(params.tokenEndpoint);
   return {
-    tokenEndpointHost: new URL(params.tokenEndpoint).host,
+    tokenEndpointUrl: tokenEndpointUrl.toString(),
+    tokenEndpointHost: tokenEndpointUrl.host,
+    tokenEndpointPath: tokenEndpointUrl.pathname,
+    contentType: params.contentType,
+    bodyKeys: params.bodyKeys,
     authMethod: params.authMethod,
     includeAuthHeader: params.authMethod === "client_secret_basic",
     includeClientSecretInBody: params.authMethod === "client_secret_post",
