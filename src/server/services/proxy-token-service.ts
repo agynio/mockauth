@@ -6,6 +6,8 @@ import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import {
   isProxyAuthorizationCode,
   consumeProxyAuthorizationCode,
+  getProviderTokenRequestKeys,
+  PROXY_TOKEN_REQUEST_CONTENT_TYPE,
   requestProviderTokens,
 } from "@/server/services/proxy-service";
 import { buildProxyTokenResponse, sanitizeProviderError, sanitizeProviderErrorDescription } from "@/server/services/proxy-utils";
@@ -68,18 +70,31 @@ export const completeProxyAuthorizationCodeGrant = async (
   const callbackUrl = params.auditContext?.origin
     ? buildProxyCallbackUrl(params.auditContext.origin, record.apiResourceId)
     : undefined;
-  const exchangeDiagnostics = proxyConfig
-    ? buildProviderTokenExchangeDiagnostics({
-        tokenEndpoint: proxyConfig.tokenEndpoint,
-        authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
-        clientId: proxyConfig.upstreamClientId,
-        grantType: "authorization_code",
-        redirectUri: callbackUrl,
-        codeVerifierPresent: record.tokenExchange.transaction?.providerPkceEnabled
-          ? Boolean(record.tokenExchange.transaction?.providerCodeVerifier)
-          : undefined,
-      })
-    : null;
+  let exchangeDiagnostics: ReturnType<typeof buildProviderTokenExchangeDiagnostics> | null = null;
+  if (proxyConfig) {
+    const authMethod = proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
+    const tokenRequest = new URLSearchParams();
+    tokenRequest.set("grant_type", "authorization_code");
+    tokenRequest.set("code", "provider_code");
+    tokenRequest.set("redirect_uri", callbackUrl ?? "unknown");
+    tokenRequest.set("client_id", proxyConfig.upstreamClientId);
+    if (record.tokenExchange.transaction?.providerPkceEnabled && record.tokenExchange.transaction?.providerCodeVerifier) {
+      tokenRequest.set("code_verifier", "redacted");
+    }
+
+    exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
+      tokenEndpoint: proxyConfig.tokenEndpoint,
+      authMethod,
+      clientId: proxyConfig.upstreamClientId,
+      grantType: "authorization_code",
+      contentType: PROXY_TOKEN_REQUEST_CONTENT_TYPE,
+      bodyKeys: getProviderTokenRequestKeys(proxyConfig, tokenRequest),
+      redirectUri: callbackUrl,
+      codeVerifierPresent: record.tokenExchange.transaction?.providerPkceEnabled
+        ? Boolean(record.tokenExchange.transaction?.providerCodeVerifier)
+        : undefined,
+    });
+  }
 
   void emitAuditEvent({
     tenantId: record.tenantId,
@@ -268,13 +283,6 @@ export const completeProxyRefreshGrant = async (
 
   await withSecurityViolationAudit(() => assertClientSecret(client, params.clientSecret), violationContext);
 
-  const refreshDiagnostics = buildProviderTokenExchangeDiagnostics({
-    tokenEndpoint: proxyConfig.tokenEndpoint,
-    authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
-    clientId: proxyConfig.upstreamClientId,
-    grantType: "refresh_token",
-  });
-
   const body = new URLSearchParams();
   body.set("grant_type", "refresh_token");
   body.set("refresh_token", params.refreshToken);
@@ -282,6 +290,15 @@ export const completeProxyRefreshGrant = async (
   if (params.scope) {
     body.set("scope", params.scope);
   }
+
+  const refreshDiagnostics = buildProviderTokenExchangeDiagnostics({
+    tokenEndpoint: proxyConfig.tokenEndpoint,
+    authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+    clientId: proxyConfig.upstreamClientId,
+    grantType: "refresh_token",
+    contentType: PROXY_TOKEN_REQUEST_CONTENT_TYPE,
+    bodyKeys: getProviderTokenRequestKeys(proxyConfig, body),
+  });
 
   let response;
   try {
