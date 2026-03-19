@@ -2,6 +2,7 @@ import { URLSearchParams } from "node:url";
 
 import { DomainError } from "@/server/errors";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
+import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import {
   isProxyAuthorizationCode,
   consumeProxyAuthorizationCode,
@@ -14,6 +15,8 @@ import { getClientForTenant } from "@/server/services/client-service";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   buildProxyCallbackErrorDetails,
+  buildProviderTokenExchangeDiagnostics,
+  buildTokenAuthCodeErrorDetails,
   buildTokenAuthCodeReceivedDetails,
   buildTokenRefreshReceivedDetails,
   toTokenResponsePayload,
@@ -38,6 +41,7 @@ type AuthorizationCodeGrantParams = {
 
 type ProxyTokenAuditContext = {
   requestContext?: RequestContext | null;
+  origin?: string | null;
   clientSecretInBody?: boolean;
   clientIdProvided?: boolean;
   includeAuthHeader?: boolean;
@@ -60,6 +64,22 @@ export const completeProxyAuthorizationCodeGrant = async (
     requestContext: params.auditContext?.requestContext ?? null,
   };
   const reportViolation = createSecurityViolationReporter(violationContext);
+  const proxyConfig = record.client.proxyConfig;
+  const callbackUrl = params.auditContext?.origin
+    ? buildProxyCallbackUrl(params.auditContext.origin, record.apiResourceId)
+    : undefined;
+  const exchangeDiagnostics = proxyConfig
+    ? buildProviderTokenExchangeDiagnostics({
+        tokenEndpoint: proxyConfig.tokenEndpoint,
+        authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+        clientId: proxyConfig.upstreamClientId,
+        grantType: "authorization_code",
+        redirectUri: callbackUrl,
+        codeVerifierPresent: record.tokenExchange.transaction?.providerPkceEnabled
+          ? Boolean(record.tokenExchange.transaction?.providerCodeVerifier)
+          : undefined,
+      })
+    : null;
 
   void emitAuditEvent({
     tenantId: record.tenantId,
@@ -83,71 +103,94 @@ export const completeProxyAuthorizationCodeGrant = async (
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
-  if (record.apiResourceId !== params.apiResourceId) {
-    await reportViolation("issuer_mismatch", {
-      expectedApiResourceId: record.apiResourceId,
-      receivedApiResourceId: params.apiResourceId,
+  try {
+    if (record.apiResourceId !== params.apiResourceId) {
+      await reportViolation("issuer_mismatch", {
+        expectedApiResourceId: record.apiResourceId,
+        receivedApiResourceId: params.apiResourceId,
+      });
+      throw new DomainError("Authorization code does not match issuer", { status: 400, code: "invalid_grant" });
+    }
+
+    if (params.clientIdFromRequest && record.client.clientId !== params.clientIdFromRequest) {
+      await reportViolation("client_mismatch", {
+        expectedClientId: record.client.clientId,
+        receivedClientId: params.clientIdFromRequest,
+      });
+      throw new DomainError("Client mismatch", { status: 401, code: "invalid_client" });
+    }
+
+    if (record.client.tokenEndpointAuthMethod !== params.authMethod) {
+      await reportViolation("auth_method_mismatch", {
+        expectedAuthMethod: record.client.tokenEndpointAuthMethod,
+        receivedAuthMethod: params.authMethod,
+      });
+      throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
+    }
+
+    await withSecurityViolationAudit(() => assertClientSecret(record.client, params.clientSecret), violationContext);
+
+    const normalizedRedirect = resolveRedirectUri(params.redirectUri, record.client.redirectUris ?? []);
+    if (normalizedRedirect !== record.redirectUri) {
+      await reportViolation("redirect_uri_mismatch", {
+        expectedRedirectUri: record.redirectUri,
+        receivedRedirectUri: params.redirectUri,
+      });
+      throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
+    }
+
+    await withSecurityViolationAudit(async () => verifyPkce(record, params.codeVerifier), violationContext);
+
+    if (!proxyConfig) {
+      throw new DomainError("Proxy configuration missing", { status: 500 });
+    }
+
+    const providerScope = record.tokenExchange.transaction?.providerScope;
+    if (typeof providerScope !== "string" || providerScope.trim().length === 0) {
+      throw new DomainError("Proxy transaction is missing provider scope", { status: 500 });
+    }
+
+    const response = buildProxyTokenResponse(providerResponse, {
+      passthrough: proxyConfig.passthroughTokenResponse,
+      fallbackScope: providerScope,
     });
-    throw new DomainError("Authorization code does not match issuer", { status: 400, code: "invalid_grant" });
-  }
 
-  if (params.clientIdFromRequest && record.client.clientId !== params.clientIdFromRequest) {
-    await reportViolation("client_mismatch", {
-      expectedClientId: record.client.clientId,
-      receivedClientId: params.clientIdFromRequest,
+    void emitAuditEvent({
+      tenantId: record.tenantId,
+      clientId: record.clientId,
+      traceId,
+      actorId: null,
+      eventType: "TOKEN_AUTHCODE_COMPLETED",
+      severity: "INFO",
+      message: "Token response issued",
+      details: toTokenResponsePayload(response),
+      requestContext: params.auditContext?.requestContext ?? null,
     });
-    throw new DomainError("Client mismatch", { status: 401, code: "invalid_client" });
+
+    return response;
+  } catch (error) {
+    if (exchangeDiagnostics) {
+      const errorCode = error instanceof DomainError && error.options.code ? error.options.code : "server_error";
+      const description =
+        error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
+      await emitAuditEvent({
+        tenantId: record.tenantId,
+        clientId: record.clientId,
+        traceId,
+        actorId: null,
+        eventType: "TOKEN_AUTHCODE_COMPLETED",
+        severity: "ERROR",
+        message: "Token exchange failed",
+        details: buildTokenAuthCodeErrorDetails({
+          error: errorCode,
+          errorDescription: description,
+          diagnostics: exchangeDiagnostics,
+        }),
+        requestContext: params.auditContext?.requestContext ?? null,
+      });
+    }
+    throw error;
   }
-
-  if (record.client.tokenEndpointAuthMethod !== params.authMethod) {
-    await reportViolation("auth_method_mismatch", {
-      expectedAuthMethod: record.client.tokenEndpointAuthMethod,
-      receivedAuthMethod: params.authMethod,
-    });
-    throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
-  }
-
-  await withSecurityViolationAudit(() => assertClientSecret(record.client, params.clientSecret), violationContext);
-
-  const normalizedRedirect = resolveRedirectUri(params.redirectUri, record.client.redirectUris ?? []);
-  if (normalizedRedirect !== record.redirectUri) {
-    await reportViolation("redirect_uri_mismatch", {
-      expectedRedirectUri: record.redirectUri,
-      receivedRedirectUri: params.redirectUri,
-    });
-    throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
-  }
-
-  await withSecurityViolationAudit(async () => verifyPkce(record, params.codeVerifier), violationContext);
-
-  const proxyConfig = record.client.proxyConfig;
-  if (!proxyConfig) {
-    throw new DomainError("Proxy configuration missing", { status: 500 });
-  }
-
-  const providerScope = record.tokenExchange.transaction?.providerScope;
-  if (typeof providerScope !== "string" || providerScope.trim().length === 0) {
-    throw new DomainError("Proxy transaction is missing provider scope", { status: 500 });
-  }
-
-  const response = buildProxyTokenResponse(providerResponse, {
-    passthrough: proxyConfig.passthroughTokenResponse,
-    fallbackScope: providerScope,
-  });
-
-  void emitAuditEvent({
-    tenantId: record.tenantId,
-    clientId: record.clientId,
-    traceId,
-    actorId: null,
-    eventType: "TOKEN_AUTHCODE_COMPLETED",
-    severity: "INFO",
-    message: "Token response issued",
-    details: toTokenResponsePayload(response),
-    requestContext: params.auditContext?.requestContext ?? null,
-  });
-
-  return response;
 };
 
 type RefreshTokenGrantParams = {
@@ -225,6 +268,13 @@ export const completeProxyRefreshGrant = async (
 
   await withSecurityViolationAudit(() => assertClientSecret(client, params.clientSecret), violationContext);
 
+  const refreshDiagnostics = buildProviderTokenExchangeDiagnostics({
+    tokenEndpoint: proxyConfig.tokenEndpoint,
+    authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+    clientId: proxyConfig.upstreamClientId,
+    grantType: "refresh_token",
+  });
+
   const body = new URLSearchParams();
   body.set("grant_type", "refresh_token");
   body.set("refresh_token", params.refreshToken);
@@ -253,6 +303,7 @@ export const completeProxyRefreshGrant = async (
         error: sanitizeProviderError(errorCode),
         errorDescription: description,
         providerType: proxyConfig.providerType,
+        ...refreshDiagnostics,
       }),
       requestContext: params.auditContext?.requestContext ?? null,
     });
@@ -282,6 +333,7 @@ export const completeProxyRefreshGrant = async (
         rawError: typeof response.json?.error === "string" ? response.json.error : undefined,
         rawErrorDescription:
           typeof response.json?.error_description === "string" ? response.json.error_description : undefined,
+        ...refreshDiagnostics,
       }),
       requestContext: params.auditContext?.requestContext ?? null,
     });

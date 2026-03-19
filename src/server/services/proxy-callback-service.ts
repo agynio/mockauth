@@ -6,8 +6,10 @@ import {
   buildProxyCallbackErrorDetails,
   buildProxyCallbackSuccessDetails,
   buildProxyCodeIssuedDetails,
+  buildProviderTokenExchangeDiagnostics,
   toTokenResponsePayload,
 } from "@/server/services/audit-event";
+import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import {
   getProxyAuthTransaction,
@@ -35,9 +37,6 @@ type ProxyCallbackResult = {
   redirectTo: string;
   clearTransactionCookie: boolean;
 };
-
-const buildCallbackUrl = (origin: string, apiResourceId: string) =>
-  new URL(`/r/${apiResourceId}/oidc/proxy/callback`, origin).toString();
 
 export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<ProxyCallbackResult> => {
   if (!params.transactionCookie || params.transactionCookie !== params.state) {
@@ -88,6 +87,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
 
   type ProxyCallbackErrorParams = Parameters<typeof buildProxyCallbackErrorDetails>[0];
   let errorLogged = false;
+  let exchangeDiagnostics: ReturnType<typeof buildProviderTokenExchangeDiagnostics> | null = null;
   const recordCallbackError = async (message: string, details: ProxyCallbackErrorParams) => {
     errorLogged = true;
     await emitAuditEvent({
@@ -158,7 +158,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
     throw new DomainError("Authorization code not provided by provider", { status: 400, code: "invalid_request" });
   }
 
-  const callbackUrl = buildCallbackUrl(params.origin, params.apiResourceId);
+  const callbackUrl = buildProxyCallbackUrl(params.origin, params.apiResourceId);
   const tokenRequest = new URLSearchParams();
   tokenRequest.set("grant_type", "authorization_code");
   tokenRequest.set("code", params.code);
@@ -168,6 +168,16 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
   if (transaction.providerPkceEnabled && transaction.providerCodeVerifier) {
     tokenRequest.set("code_verifier", transaction.providerCodeVerifier);
   }
+
+  exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
+    tokenEndpoint: config.tokenEndpoint,
+    authMethod: config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+    clientId: config.upstreamClientId,
+    grantType: "authorization_code",
+    redirectUri: callbackUrl,
+    codeVerifierPresent: transaction.providerPkceEnabled ? tokenRequest.has("code_verifier") : undefined,
+  });
+  const exchangeDetails = exchangeDiagnostics ?? {};
 
   try {
     const result = await requestProviderTokens(config, tokenRequest).catch(async (error) => {
@@ -180,6 +190,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         errorDescription: description,
         providerType: config.providerType,
         code: params.code ?? undefined,
+        ...exchangeDetails,
       });
       throw error;
     });
@@ -204,6 +215,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         code: params.code ?? undefined,
         rawError,
         rawErrorDescription: rawDescription,
+        ...exchangeDetails,
       });
       await markProxyTransactionCompleted(transaction.id);
       return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
@@ -214,6 +226,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         error: "missing_token_response",
         providerType: config.providerType,
         code: params.code ?? undefined,
+        ...exchangeDetails,
       });
       throw new DomainError("Provider token response missing", { status: 502 });
     }
@@ -292,6 +305,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         errorDescription: description,
         providerType: config.providerType,
         code: params.code ?? undefined,
+        ...(exchangeDiagnostics ?? {}),
       });
     }
     if (error instanceof DomainError) {

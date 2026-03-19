@@ -69,12 +69,30 @@ export type ProxyCallbackSuccessDetails = {
   tokenResponse: TokenResponsePayload;
 };
 
+export type ProviderTokenExchangeDiagnostics = {
+  tokenEndpointHost: string;
+  authMethod: TokenAuthMethod;
+  includeAuthHeader: boolean;
+  includeClientSecretInBody: boolean;
+  client_id: string;
+  redirect_uri?: string;
+  grant_type: string;
+  code_verifier_present?: boolean;
+};
+
 export type ProxyCallbackErrorDetails = {
   error: string;
   errorDescription?: string;
   providerType?: string;
   code?: string;
+} & Partial<ProviderTokenExchangeDiagnostics>;
+
+export type TokenAuthCodeErrorDetails = ProviderTokenExchangeDiagnostics & {
+  error: string;
+  errorDescription?: string;
 };
+
+export type TokenAuthCodeCompletedDetails = TokenResponsePayload | TokenAuthCodeErrorDetails;
 
 export type ProxyCodeIssuedDetails = {
   scope: string;
@@ -161,7 +179,7 @@ export type AuditEventDetailsMap = {
   PROXY_CALLBACK_ERROR: ProxyCallbackErrorDetails;
   PROXY_CODE_ISSUED: ProxyCodeIssuedDetails;
   TOKEN_AUTHCODE_RECEIVED: TokenAuthCodeReceivedDetails;
-  TOKEN_AUTHCODE_COMPLETED: TokenResponsePayload;
+  TOKEN_AUTHCODE_COMPLETED: TokenAuthCodeCompletedDetails;
   TOKEN_REFRESH_RECEIVED: TokenRefreshReceivedDetails;
   TOKEN_REFRESH_COMPLETED: TokenResponsePayload;
   CONFIG_CHANGED: ConfigChangedDetails;
@@ -258,14 +276,54 @@ type ProxyCallbackErrorDetailsParams = {
   code?: string | null;
   rawError?: string | null;
   rawErrorDescription?: string | null;
-};
+} & Partial<ProviderTokenExchangeDiagnostics>;
 
 export function buildProxyCallbackErrorDetails(params: ProxyCallbackErrorDetailsParams): ProxyCallbackErrorDetails {
+  const { rawError, rawErrorDescription, error, errorDescription, providerType, code, ...exchangeDetails } = params;
   return {
-    error: params.rawError ?? params.error,
-    errorDescription: params.rawErrorDescription ?? params.errorDescription ?? undefined,
-    providerType: params.providerType ?? undefined,
-    code: params.code ?? undefined,
+    error: rawError ?? error,
+    errorDescription: rawErrorDescription ?? errorDescription ?? undefined,
+    providerType: providerType ?? undefined,
+    code: code ?? undefined,
+    ...exchangeDetails,
+  };
+}
+
+type ProviderTokenExchangeDiagnosticsParams = {
+  tokenEndpoint: string;
+  authMethod: TokenAuthMethod;
+  clientId: string;
+  grantType: string;
+  redirectUri?: string | null;
+  codeVerifierPresent?: boolean | null;
+};
+
+export function buildProviderTokenExchangeDiagnostics(
+  params: ProviderTokenExchangeDiagnosticsParams,
+): ProviderTokenExchangeDiagnostics {
+  return {
+    tokenEndpointHost: new URL(params.tokenEndpoint).host,
+    authMethod: params.authMethod,
+    includeAuthHeader: params.authMethod === "client_secret_basic",
+    includeClientSecretInBody: params.authMethod === "client_secret_post",
+    client_id: params.clientId,
+    redirect_uri: params.redirectUri ?? undefined,
+    grant_type: params.grantType,
+    code_verifier_present: params.codeVerifierPresent ?? undefined,
+  };
+}
+
+type TokenAuthCodeErrorDetailsParams = {
+  error: string;
+  errorDescription?: string | null;
+  diagnostics: ProviderTokenExchangeDiagnostics;
+};
+
+export function buildTokenAuthCodeErrorDetails(params: TokenAuthCodeErrorDetailsParams): TokenAuthCodeErrorDetails {
+  return {
+    error: params.error,
+    errorDescription: params.errorDescription ?? undefined,
+    ...params.diagnostics,
   };
 }
 
