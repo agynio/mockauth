@@ -13,7 +13,7 @@ import {
   completeProxyRefreshGrant,
 } from "@/server/services/proxy-token-service";
 import { createSession, clearSession } from "@/server/services/mock-session-service";
-import { PROXY_TRANSACTION_COOKIE } from "@/server/oidc/proxy/constants";
+import { PROXY_TRANSACTION_COOKIE, buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
@@ -290,6 +290,118 @@ describe("Proxy client OAuth flow", () => {
       traceId: transactionId,
       eventType: "PROXY_CALLBACK_ERROR",
     });
+    const callbackDetails = auditLog?.details as Record<string, unknown>;
+    expect(callbackDetails).toMatchObject({
+      tokenEndpointHost: "upstream.example.com",
+      authMethod: "none",
+      includeAuthHeader: false,
+      includeClientSecretInBody: false,
+      client_id: "up-client",
+      redirect_uri: buildProxyCallbackUrl("https://mockauth.test", apiResourceId),
+      grant_type: "authorization_code",
+      code_verifier_present: true,
+    });
+
+    fetchMock.mockRestore();
+  });
+
+  it("records TOKEN_AUTHCODE_COMPLETED error details for proxy token failures", async () => {
+    const codeVerifier = "verifier-error-token-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const codeChallenge = computeS256Challenge(codeVerifier);
+
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: proxyClientClientId,
+        redirectUri: "https://proxy-client.test/callback",
+        responseType: "code",
+        scope: "openid profile",
+        state: "app-state-token-error",
+        codeChallenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${proxyClientClientId}`,
+    );
+
+    const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
+    const providerAuthorizeUrl = new URL(authorize.redirectTo);
+    const transactionId = providerAuthorizeUrl.searchParams.get("state");
+    expect(proxyCookie?.value).toBeDefined();
+    expect(transactionId).toBe(proxyCookie?.value);
+
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "up-access-error",
+          token_type: "Bearer",
+          expires_in: 3600,
+          refresh_token: "up-refresh-error",
+          scope: "openid profile",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const callback = await handleProxyCallback({
+      apiResourceId,
+      state: transactionId!,
+      code: "provider-good-code",
+      transactionCookie: proxyCookie?.value,
+      origin: "https://mockauth.test",
+    });
+
+    const appRedirect = new URL(callback.redirectTo);
+    const appCode = appRedirect.searchParams.get("code");
+    expect(appCode).toBeTruthy();
+
+    await expect(
+      completeProxyAuthorizationCodeGrant({
+        apiResourceId,
+        code: appCode!,
+        redirectUri: "https://proxy-client.test/wrong-callback",
+        codeVerifier,
+        authMethod: "none",
+        clientIdFromRequest: null,
+        clientSecret: null,
+        auditContext: {
+          origin: "https://mockauth.test",
+        },
+      }),
+    ).rejects.toMatchObject({ options: { code: "invalid_redirect_uri" } });
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        traceId: transactionId ?? undefined,
+        eventType: "TOKEN_AUTHCODE_COMPLETED",
+        severity: "ERROR",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(auditLog).not.toBeNull();
+    expect(auditLog).toMatchObject({
+      severity: "ERROR",
+      clientId: proxyClientId,
+      traceId: transactionId,
+      eventType: "TOKEN_AUTHCODE_COMPLETED",
+    });
+    const tokenErrorDetails = auditLog?.details as Record<string, unknown>;
+    expect(tokenErrorDetails).toMatchObject({
+      tokenEndpointHost: "upstream.example.com",
+      authMethod: "none",
+      includeAuthHeader: false,
+      includeClientSecretInBody: false,
+      client_id: "up-client",
+      redirect_uri: buildProxyCallbackUrl("https://mockauth.test", apiResourceId),
+      grant_type: "authorization_code",
+      code_verifier_present: true,
+    });
 
     fetchMock.mockRestore();
   });
@@ -329,6 +441,15 @@ describe("Proxy client OAuth flow", () => {
       clientId: proxyClientId,
       traceId: null,
       eventType: "PROXY_CALLBACK_ERROR",
+    });
+    const refreshDetails = auditLog?.details as Record<string, unknown>;
+    expect(refreshDetails).toMatchObject({
+      tokenEndpointHost: "upstream.example.com",
+      authMethod: "none",
+      includeAuthHeader: false,
+      includeClientSecretInBody: false,
+      client_id: "up-client",
+      grant_type: "refresh_token",
     });
 
     fetchMock.mockRestore();

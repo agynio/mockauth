@@ -61,6 +61,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     const clientId = basic?.clientId ?? validation.data.client_id ?? null;
     const clientSecret = basic?.clientSecret ?? validation.data.client_secret ?? null;
     const requestContext = getRequestContextFromRequest(request);
+    const origin = resolveOrigin(request);
     const clientSecretInBody = Boolean(validation.data.client_secret);
     const clientIdProvided = Boolean(clientId);
     const includeAuthHeader = Boolean(basic);
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
           clientSecret,
           auditContext: {
             requestContext,
+            origin,
             clientSecretInBody,
             clientIdProvided,
             includeAuthHeader,
@@ -129,7 +131,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         codeVerifier: validation.data.code_verifier,
         redirectUri: validation.data.redirect_uri,
         clientSecret,
-        origin: resolveOrigin(request),
+        origin,
         authorizationCode: validation.data.code,
         auditContext: {
           requestContext,
