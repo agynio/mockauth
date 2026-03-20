@@ -52,26 +52,6 @@ enum LoginStrategy {
   USERNAME
   EMAIL
 }
-enum AuditLogEventType {
-  AUTHORIZE_RECEIVED
-  PROXY_REDIRECT_OUT
-  PROXY_CALLBACK_SUCCESS
-  PROXY_CALLBACK_ERROR
-  PROXY_CODE_ISSUED
-  TOKEN_AUTHCODE_RECEIVED
-  TOKEN_AUTHCODE_COMPLETED
-  TOKEN_REFRESH_RECEIVED
-  TOKEN_REFRESH_COMPLETED
-  CONFIG_CHANGED
-  SECURITY_VIOLATION
-}
-
-enum AuditLogSeverity {
-  INFO
-  WARN
-  ERROR
-}
-
 
 enum AuditLogEventType {
   AUTHORIZE_RECEIVED
@@ -493,21 +473,6 @@ model Session {
   expires      DateTime
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-}
-
-model AuditLog {
-  id        String            @id @default(uuid())
-  tenantId  String
-  clientId  String?
-  traceId   String?
-  actorId   String?
-  eventType AuditLogEventType
-  severity  AuditLogSeverity
-  message   String
-  details   Json?
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime         @default(now())
 }
 
 model VerificationToken {
