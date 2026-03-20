@@ -54,6 +54,8 @@ export type ProxyRedirectOutDetails = {
   providerType: string;
   providerScope?: string;
   providerPkceEnabled: boolean;
+  providerAuthorizationUrl: string;
+  providerAuthorizationParams: Record<string, string | string[]>;
   prompt?: string;
   loginHintProvided: boolean;
   redirectUri?: string;
@@ -268,6 +270,8 @@ type ProxyRedirectOutDetailsParams = {
   providerType: string;
   providerScope?: string | null;
   providerPkceEnabled: boolean;
+  providerAuthorizationUrl: string;
+  providerAuthorizationParams: Record<string, string | string[]>;
   prompt?: string | null;
   loginHint?: string | null;
   redirectUri?: string | null;
@@ -283,6 +287,8 @@ export function buildProxyRedirectOutDetails(params: ProxyRedirectOutDetailsPara
     providerType: params.providerType,
     providerScope: params.providerScope ?? undefined,
     providerPkceEnabled: params.providerPkceEnabled,
+    providerAuthorizationUrl: params.providerAuthorizationUrl,
+    providerAuthorizationParams: params.providerAuthorizationParams,
     prompt: params.prompt ?? undefined,
     loginHintProvided: Boolean(params.loginHint),
     redirectUri: params.redirectUri ?? undefined,

@@ -75,6 +75,25 @@ const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
   }
 };
 
+const toSearchParamsRecord = (searchParams: URLSearchParams): Record<string, string | string[]> => {
+  const record: Record<string, string | string[]> = {};
+
+  for (const [key, value] of searchParams.entries()) {
+    const existing = record[key];
+    if (!existing) {
+      record[key] = value;
+      continue;
+    }
+    if (Array.isArray(existing)) {
+      existing.push(value);
+      continue;
+    }
+    record[key] = [existing, value];
+  }
+
+  return record;
+};
+
 export const handleAuthorize = async (
   params: AuthorizeParams,
   origin: string,
@@ -306,7 +325,10 @@ const handleProxyAuthorize = async (args: {
       authorizeUrl.searchParams.set("login_hint", providerLoginHint);
     }
 
-    void emitAuditEvent({
+    const providerAuthorizationUrl = authorizeUrl.toString();
+    const providerAuthorizationParams = toSearchParamsRecord(authorizeUrl.searchParams);
+
+    await emitAuditEvent({
       tenantId,
       clientId: client.id,
       traceId: transaction.id,
@@ -318,6 +340,8 @@ const handleProxyAuthorize = async (args: {
         providerType: proxyConfig.providerType,
         providerScope: providerScopes,
         providerPkceEnabled: proxyConfig.pkceSupported,
+        providerAuthorizationUrl,
+        providerAuthorizationParams,
         prompt: providerPrompt,
         loginHint: providerLoginHint,
         redirectUri: callbackUrl,
@@ -344,7 +368,7 @@ const handleProxyAuthorize = async (args: {
       },
     ];
 
-    return { type: "redirect", redirectTo: authorizeUrl.toString(), cookies };
+    return { type: "redirect", redirectTo: providerAuthorizationUrl, cookies };
   } catch (error) {
     await deleteProxyAuthTransaction(transaction.id);
     throw error;
