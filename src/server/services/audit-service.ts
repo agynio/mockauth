@@ -2,11 +2,16 @@ import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/server/db/client";
 import type { AuditLogSeverity } from "@/lib/audit-log";
+import type { DiagnosticParams } from "@/server/utils/diagnostics";
 import type { RequestContext } from "@/server/utils/request-context";
 import {
+  buildProxyFlowDiagnostics,
   buildSecurityViolationDetails,
   sanitizeAuditDetails,
   type AuditEventInput,
+  type ProxyFlowRequestDetails,
+  type ProxyFlowResponseDetails,
+  type ProxyFlowStage,
   type SecurityViolationReason,
   type TokenAuthMethod,
 } from "@/server/services/audit-event";
@@ -70,6 +75,45 @@ export const emitAuditEvent = async (input: AuditEventInput) => {
       severity: input.severity,
     });
   }
+};
+
+type ProxyFlowDiagnosticInput = {
+  tenantId: string;
+  clientId?: string | null;
+  traceId?: string | null;
+  message: string;
+  stage: ProxyFlowStage;
+  request: ProxyFlowRequestDetails;
+  response?: Partial<ProxyFlowResponseDetails> | null;
+  params: DiagnosticParams;
+  meta?: {
+    clientId?: string | null;
+    traceId?: string | null;
+  };
+  requestContext?: RequestContext | null;
+};
+
+export const emitProxyFlowDiagnostic = async (input: ProxyFlowDiagnosticInput) => {
+  await emitAuditEvent({
+    tenantId: input.tenantId,
+    clientId: input.clientId ?? null,
+    traceId: input.traceId ?? null,
+    actorId: null,
+    eventType: "PROXY_FLOW_DIAGNOSTIC",
+    severity: "INFO",
+    message: input.message,
+    details: buildProxyFlowDiagnostics({
+      stage: input.stage,
+      request: input.request,
+      response: input.response ?? null,
+      params: input.params,
+      meta: {
+        clientId: input.meta?.clientId ?? null,
+        traceId: input.meta?.traceId ?? null,
+      },
+    }),
+    requestContext: input.requestContext ?? null,
+  });
 };
 
 export const recordSecurityViolation = async (input: SecurityViolationInput) => {

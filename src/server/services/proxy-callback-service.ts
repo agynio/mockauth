@@ -1,12 +1,11 @@
 import { URLSearchParams } from "node:url";
 
 import { DomainError } from "@/server/errors";
-import { emitAuditEvent, recordSecurityViolation } from "@/server/services/audit-service";
+import { emitAuditEvent, emitProxyFlowDiagnostic, recordSecurityViolation } from "@/server/services/audit-service";
 import {
   buildProxyCallbackErrorDetails,
   buildProxyCallbackSuccessDetails,
   buildProxyCodeIssuedDetails,
-  buildProxyFlowDiagnostics,
   buildProviderTokenExchangeDiagnostics,
   toTokenResponsePayload,
   type ProxyFlowRequestDetails,
@@ -43,14 +42,6 @@ type ProxyCallbackResult = {
 };
 
 export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<ProxyCallbackResult> => {
-  const buildCallbackDiagnostics = (meta: { clientId?: string | null; traceId?: string | null }) =>
-    buildProxyFlowDiagnostics({
-      stage: "callback",
-      request: params.callbackRequest,
-      response: { status: null, headers: {}, body: null },
-      params: params.callbackParams,
-      meta,
-    });
   let callbackLogged = false;
   const recordCallbackDiagnostics = async (context: {
     tenantId: string;
@@ -62,18 +53,19 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       return;
     }
     callbackLogged = true;
-    await emitAuditEvent({
+    await emitProxyFlowDiagnostic({
       tenantId: context.tenantId,
       clientId: context.clientId ?? null,
       traceId: context.traceId ?? null,
-      actorId: null,
-      eventType: "PROXY_FLOW_DIAGNOSTIC",
-      severity: "INFO",
       message: "Proxy callback received",
-      details: buildCallbackDiagnostics({
+      stage: "callback",
+      request: params.callbackRequest,
+      response: null,
+      params: params.callbackParams,
+      meta: {
         clientId: context.metaClientId ?? null,
         traceId: context.traceId ?? null,
-      }),
+      },
       requestContext: params.requestContext ?? null,
     });
   };
@@ -278,28 +270,23 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       throw error;
     });
 
-    await emitAuditEvent({
+    await emitProxyFlowDiagnostic({
       tenantId: transaction.tenantId,
       clientId: transaction.clientId,
       traceId: transaction.id,
-      actorId: null,
-      eventType: "PROXY_FLOW_DIAGNOSTIC",
-      severity: "INFO",
       message: "Proxy callback exchange",
-      details: buildProxyFlowDiagnostics({
-        stage: "callback",
-        request: result.request,
-        response: {
-          status: result.status,
-          headers: result.headers,
-          body: result.rawBody,
-        },
-        params: params.callbackParams,
-        meta: {
-          clientId: transaction.client.clientId,
-          traceId: transaction.id,
-        },
-      }),
+      stage: "callback",
+      request: result.request,
+      response: {
+        status: result.status,
+        headers: result.headers,
+        body: result.rawBody,
+      },
+      params: params.callbackParams,
+      meta: {
+        clientId: transaction.client.clientId,
+        traceId: transaction.id,
+      },
       requestContext: params.requestContext ?? null,
     });
 
@@ -341,7 +328,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
     }
 
-    if (!result.json || typeof result.json !== "object" || Array.isArray(result.json)) {
+    if (!result.json) {
       await recordCallbackError("Proxy provider token response missing", {
         error: "missing_token_response",
         providerType: config.providerType,

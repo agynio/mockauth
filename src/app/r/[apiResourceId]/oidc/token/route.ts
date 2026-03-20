@@ -13,9 +13,7 @@ import {
 } from "@/server/services/proxy-token-service";
 import { createSecurityViolationReporter } from "@/server/services/security-violation";
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
-import { emitAuditEvent } from "@/server/services/audit-service";
-import { buildProxyFlowDiagnostics } from "@/server/services/audit-event";
-import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import type { ProxyFlowRequestDetails } from "@/server/services/audit-event";
 import { collectHeaders, collectParams } from "@/server/utils/diagnostics";
 
 const authorizationCodeSchema = z.object({
@@ -53,67 +51,43 @@ const parseBasicAuth = (header: string | null) => {
 };
 
 export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
-  const requestHeaders = collectHeaders(request.headers);
-  const requestContentType = request.headers.get("content-type");
-  const requestUrl = resolveUrl(request).toString();
-  const rawBody = await request.clone().text();
   const formEntries = Array.from((await request.clone().formData()).entries(), ([key, value]) => [
     key,
     typeof value === "string" ? value : value.name,
   ]) as Array<[string, string]>;
-  const entries = Object.fromEntries(formEntries);
+  const entries: Record<string, string> = Object.fromEntries(formEntries);
   const params = collectParams(formEntries);
   const validation = tokenSchema.safeParse(entries);
+
+  if (!validation.success) {
+    return Response.json({ error: "invalid_request" }, { status: 400 });
+  }
+
+  const requestHeaders = collectHeaders(request.headers);
+  const requestContentType = request.headers.get("content-type");
+  const requestUrl = resolveUrl(request).toString();
+  const rawBody = await request.clone().text();
+  const requestDetails: ProxyFlowRequestDetails = {
+    url: requestUrl,
+    headers: requestHeaders,
+    contentType: requestContentType,
+    body: rawBody,
+  };
   const basic = parseBasicAuth(request.headers.get("authorization"));
-  const clientId = basic?.clientId ?? (typeof entries.client_id === "string" ? entries.client_id : null);
-  const clientSecret = basic?.clientSecret ?? (typeof entries.client_secret === "string" ? entries.client_secret : null);
+  const clientId = basic?.clientId ?? entries.client_id ?? null;
+  const clientSecret = basic?.clientSecret ?? entries.client_secret ?? null;
   const requestContext = getRequestContextFromRequest(request);
   const origin = resolveOrigin(request);
 
   try {
     const { apiResourceId } = await context.params;
-    const { tenant } = await getApiResourceWithTenant(apiResourceId);
-    await emitAuditEvent({
-      tenantId: tenant.id,
-      clientId: null,
-      traceId: null,
-      actorId: null,
-      eventType: "PROXY_FLOW_DIAGNOSTIC",
-      severity: "INFO",
-      message: "Token request received",
-      details: buildProxyFlowDiagnostics({
-        stage: "token",
-        request: {
-          url: requestUrl,
-          headers: requestHeaders,
-          contentType: requestContentType,
-          body: rawBody,
-        },
-        response: { status: null, headers: {}, body: null },
-        params,
-        meta: {
-          clientId,
-          traceId: null,
-        },
-      }),
-      requestContext: requestContext ?? null,
-    });
-
-    if (!validation.success) {
-      return Response.json({ error: "invalid_request" }, { status: 400 });
-    }
-
     const clientSecretInBody = Boolean(validation.data.client_secret);
     const clientIdProvided = Boolean(clientId);
     const includeAuthHeader = Boolean(basic);
 
     const authMethod = basic ? "client_secret_basic" : clientSecret ? "client_secret_post" : "none";
-    let proxy = false;
     if (validation.data.grant_type === "authorization_code") {
-      proxy = await isProxyCode(validation.data.code);
-    }
-
-    if (validation.data.grant_type === "authorization_code") {
+      const proxy = await isProxyCode(validation.data.code);
       if (proxy) {
         const tokens = await completeProxyAuthorizationCodeGrant({
           apiResourceId,
@@ -130,6 +104,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
             clientIdProvided,
             includeAuthHeader,
             requestParams: params,
+            request: requestDetails,
           },
         });
 
@@ -207,6 +182,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         clientIdProvided,
         includeAuthHeader,
         requestParams: params,
+        request: requestDetails,
       },
     });
 

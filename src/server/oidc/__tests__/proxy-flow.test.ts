@@ -545,7 +545,7 @@ describe("Proxy client OAuth flow", () => {
   });
 
   it("records TOKEN_AUTHCODE_COMPLETED error details for proxy token failures", async () => {
-    const codeVerifier = "verifier-error-token-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const codeVerifier = "verifier-error-token-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const codeChallenge = computeS256Challenge(codeVerifier);
 
     const { authorize, proxyCookie, transactionId } = await startProxyAuthorization({
@@ -725,7 +725,7 @@ describe("Proxy client OAuth flow", () => {
 
     cleanupClientIds.push(proxyClient.id);
 
-    const codeVerifier = "verifier-basic-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const codeVerifier = "verifier-basic-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const codeChallenge = computeS256Challenge(codeVerifier);
 
     const { proxyCookie, transactionId } = await startProxyAuthorization({
@@ -790,7 +790,7 @@ describe("Proxy client OAuth flow", () => {
       { params: Promise.resolve({ apiResourceId }) },
     );
 
-    expect(tokenResponse.status).toBe(400);
+    expect(tokenResponse.status).toBe(401);
 
     const requestLogs = await prisma.auditLog.findMany({
       where: {
@@ -838,7 +838,7 @@ describe("Proxy client OAuth flow", () => {
   });
 
   it("logs token diagnostics for PKCE mismatches", async () => {
-    const codeVerifier = "verifier-pkce-ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const codeVerifier = "verifier-pkce-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const codeChallenge = computeS256Challenge(codeVerifier);
 
     const { proxyCookie, transactionId } = await startProxyAuthorization({
@@ -884,7 +884,7 @@ describe("Proxy client OAuth flow", () => {
       grant_type: "authorization_code",
       code: appCode!,
       redirect_uri: "https://proxy-client.test/callback",
-      code_verifier: "bad-verifier",
+      code_verifier: "bad-verifier-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
       client_id: proxyClientClientId,
     });
 
@@ -916,7 +916,7 @@ describe("Proxy client OAuth flow", () => {
       stage: "token",
       params: expect.objectContaining({
         code: appCode!,
-        code_verifier: "bad-verifier",
+        code_verifier: "bad-verifier-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
       }),
     });
 
