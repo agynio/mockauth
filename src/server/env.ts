@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
-const isPreview = process.env.VERCEL_ENV === "preview";
+const isVercel = process.env.VERCEL === "1" || Boolean(process.env.VERCEL);
+const vercelEnv = process.env.VERCEL_ENV;
+const isPreview = isVercel && vercelEnv !== "production";
 let previewFallbackWarned = false;
 
 const envSchema = z.object({
