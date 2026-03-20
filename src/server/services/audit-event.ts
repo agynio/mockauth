@@ -87,6 +87,32 @@ export type ProxyCallbackErrorDetails = {
   code?: string;
 } & Partial<ProviderTokenExchangeDiagnostics>;
 
+export type ProxyFlowStage = "callback" | "token";
+
+export type ProxyFlowRequestDetails = {
+  url: string;
+  headers: Record<string, string>;
+  contentType: string | null;
+  body: string | null;
+};
+
+export type ProxyFlowResponseDetails = {
+  status: number | null;
+  headers: Record<string, string>;
+  body: string | null;
+};
+
+export type ProxyFlowDiagnostics = {
+  stage: ProxyFlowStage;
+  request: ProxyFlowRequestDetails;
+  response: ProxyFlowResponseDetails;
+  params: Record<string, string | string[]>;
+  meta: {
+    clientId: string | null;
+    traceId: string | null;
+  };
+};
+
 export type TokenAuthCodeErrorDetails = ProviderTokenExchangeDiagnostics & {
   error: string;
   errorDescription?: string;
@@ -97,6 +123,8 @@ export type TokenAuthCodeCompletedDetails = TokenResponsePayload | TokenAuthCode
 export type ProxyCodeIssuedDetails = {
   scope: string;
   redirectUri: string;
+  issued: boolean;
+  authorizationCode?: string | null;
 };
 
 export type TokenAuthCodeReceivedDetails = {
@@ -177,6 +205,7 @@ export type AuditEventDetailsMap = {
   PROXY_REDIRECT_OUT: ProxyRedirectOutDetails;
   PROXY_CALLBACK_SUCCESS: ProxyCallbackSuccessDetails;
   PROXY_CALLBACK_ERROR: ProxyCallbackErrorDetails;
+  PROXY_FLOW_DIAGNOSTIC: ProxyFlowDiagnostics;
   PROXY_CODE_ISSUED: ProxyCodeIssuedDetails;
   TOKEN_AUTHCODE_RECEIVED: TokenAuthCodeReceivedDetails;
   TOKEN_AUTHCODE_COMPLETED: TokenAuthCodeCompletedDetails;
@@ -269,6 +298,37 @@ export const buildProxyCallbackSuccessDetails = (params: {
   tokenResponse: params.providerResponse,
 });
 
+type ProxyFlowDiagnosticsParams = {
+  stage: ProxyFlowStage;
+  request: ProxyFlowRequestDetails;
+  response?: Partial<ProxyFlowResponseDetails> | null;
+  params: Record<string, string | string[]>;
+  meta: {
+    clientId?: string | null;
+    traceId?: string | null;
+  };
+};
+
+export const buildProxyFlowDiagnostics = (params: ProxyFlowDiagnosticsParams): ProxyFlowDiagnostics => ({
+  stage: params.stage,
+  request: {
+    url: params.request.url,
+    headers: params.request.headers,
+    contentType: params.request.contentType ?? null,
+    body: params.request.body ?? null,
+  },
+  response: {
+    status: params.response?.status ?? null,
+    headers: params.response?.headers ?? {},
+    body: params.response?.body ?? null,
+  },
+  params: params.params,
+  meta: {
+    clientId: params.meta.clientId ?? null,
+    traceId: params.meta.traceId ?? null,
+  },
+});
+
 type ProxyCallbackErrorDetailsParams = {
   error: string;
   errorDescription?: string | null;
@@ -327,9 +387,16 @@ export function buildTokenAuthCodeErrorDetails(params: TokenAuthCodeErrorDetails
   };
 }
 
-export const buildProxyCodeIssuedDetails = (params: { scope: string; redirectUri: string }): ProxyCodeIssuedDetails => ({
+export const buildProxyCodeIssuedDetails = (params: {
+  scope: string;
+  redirectUri: string;
+  issued: boolean;
+  authorizationCode?: string | null;
+}): ProxyCodeIssuedDetails => ({
   scope: params.scope,
   redirectUri: params.redirectUri,
+  issued: params.issued,
+  authorizationCode: params.authorizationCode ?? null,
 });
 
 type TokenAuthCodeReceivedParams = {

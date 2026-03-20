@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AuditLogEventType" ADD VALUE 'PROXY_FLOW_DIAGNOSTIC';

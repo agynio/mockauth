@@ -4,7 +4,7 @@ import { z } from "zod";
 import { toResponse } from "@/server/errors";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { issueTokensFromCode } from "@/server/services/token-service";
-import { resolveOrigin } from "@/server/http/origin";
+import { resolveOrigin, resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import {
   isProxyCode,
@@ -13,6 +13,10 @@ import {
 } from "@/server/services/proxy-token-service";
 import { createSecurityViolationReporter } from "@/server/services/security-violation";
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
+import { emitAuditEvent } from "@/server/services/audit-service";
+import { buildProxyFlowDiagnostics } from "@/server/services/audit-event";
+import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { collectHeaders, collectParams } from "@/server/utils/diagnostics";
 
 const authorizationCodeSchema = z.object({
   grant_type: z.literal("authorization_code"),
@@ -49,28 +53,67 @@ const parseBasicAuth = (header: string | null) => {
 };
 
 export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
-  const entries = Object.fromEntries((await request.clone().formData()).entries());
+  const requestHeaders = collectHeaders(request.headers);
+  const requestContentType = request.headers.get("content-type");
+  const requestUrl = resolveUrl(request).toString();
+  const rawBody = await request.clone().text();
+  const formEntries = Array.from((await request.clone().formData()).entries(), ([key, value]) => [
+    key,
+    typeof value === "string" ? value : value.name,
+  ]) as Array<[string, string]>;
+  const entries = Object.fromEntries(formEntries);
+  const params = collectParams(formEntries);
   const validation = tokenSchema.safeParse(entries);
-
-  if (!validation.success) {
-    return Response.json({ error: "invalid_request" }, { status: 400 });
-  }
+  const basic = parseBasicAuth(request.headers.get("authorization"));
+  const clientId = basic?.clientId ?? (typeof entries.client_id === "string" ? entries.client_id : null);
+  const clientSecret = basic?.clientSecret ?? (typeof entries.client_secret === "string" ? entries.client_secret : null);
+  const requestContext = getRequestContextFromRequest(request);
+  const origin = resolveOrigin(request);
 
   try {
-    const basic = parseBasicAuth(request.headers.get("authorization"));
-    const clientId = basic?.clientId ?? validation.data.client_id ?? null;
-    const clientSecret = basic?.clientSecret ?? validation.data.client_secret ?? null;
-    const requestContext = getRequestContextFromRequest(request);
-    const origin = resolveOrigin(request);
+    const { apiResourceId } = await context.params;
+    const { tenant } = await getApiResourceWithTenant(apiResourceId);
+    await emitAuditEvent({
+      tenantId: tenant.id,
+      clientId: null,
+      traceId: null,
+      actorId: null,
+      eventType: "PROXY_FLOW_DIAGNOSTIC",
+      severity: "INFO",
+      message: "Token request received",
+      details: buildProxyFlowDiagnostics({
+        stage: "token",
+        request: {
+          url: requestUrl,
+          headers: requestHeaders,
+          contentType: requestContentType,
+          body: rawBody,
+        },
+        response: { status: null, headers: {}, body: null },
+        params,
+        meta: {
+          clientId,
+          traceId: null,
+        },
+      }),
+      requestContext: requestContext ?? null,
+    });
+
+    if (!validation.success) {
+      return Response.json({ error: "invalid_request" }, { status: 400 });
+    }
+
     const clientSecretInBody = Boolean(validation.data.client_secret);
     const clientIdProvided = Boolean(clientId);
     const includeAuthHeader = Boolean(basic);
 
-    const { apiResourceId } = await context.params;
     const authMethod = basic ? "client_secret_basic" : clientSecret ? "client_secret_post" : "none";
+    let proxy = false;
+    if (validation.data.grant_type === "authorization_code") {
+      proxy = await isProxyCode(validation.data.code);
+    }
 
     if (validation.data.grant_type === "authorization_code") {
-      const proxy = await isProxyCode(validation.data.code);
       if (proxy) {
         const tokens = await completeProxyAuthorizationCodeGrant({
           apiResourceId,
@@ -86,6 +129,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
             clientSecretInBody,
             clientIdProvided,
             includeAuthHeader,
+            requestParams: params,
           },
         });
 
@@ -162,6 +206,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
         clientSecretInBody,
         clientIdProvided,
         includeAuthHeader,
+        requestParams: params,
       },
     });
 

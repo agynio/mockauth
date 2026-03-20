@@ -15,6 +15,7 @@ import { getClientForTenant } from "@/server/services/client-service";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   buildProxyCallbackErrorDetails,
+  buildProxyFlowDiagnostics,
   buildProviderTokenExchangeDiagnostics,
   buildTokenAuthCodeErrorDetails,
   buildTokenAuthCodeReceivedDetails,
@@ -45,6 +46,7 @@ type ProxyTokenAuditContext = {
   clientSecretInBody?: boolean;
   clientIdProvided?: boolean;
   includeAuthHeader?: boolean;
+  requestParams?: Record<string, string | string[]>;
 };
 
 export const isProxyCode = isProxyAuthorizationCode;
@@ -81,7 +83,7 @@ export const completeProxyAuthorizationCodeGrant = async (
       })
     : null;
 
-  void emitAuditEvent({
+  await emitAuditEvent({
     tenantId: record.tenantId,
     clientId: record.clientId,
     traceId,
@@ -155,7 +157,7 @@ export const completeProxyAuthorizationCodeGrant = async (
       fallbackScope: providerScope,
     });
 
-    void emitAuditEvent({
+    await emitAuditEvent({
       tenantId: record.tenantId,
       clientId: record.clientId,
       traceId,
@@ -245,7 +247,7 @@ export const completeProxyRefreshGrant = async (
     throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
   }
 
-  void emitAuditEvent({
+  await emitAuditEvent({
     tenantId: tenant.id,
     clientId: client.id,
     traceId: null,
@@ -313,6 +315,70 @@ export const completeProxyRefreshGrant = async (
     throw new DomainError("Failed to contact provider", { status: 502 });
   }
 
+  await emitAuditEvent({
+    tenantId: tenant.id,
+    clientId: client.id,
+    traceId: null,
+    actorId: null,
+    eventType: "PROXY_FLOW_DIAGNOSTIC",
+    severity: "INFO",
+    message: "Proxy token exchange",
+    details: buildProxyFlowDiagnostics({
+      stage: "token",
+      request: response.request,
+      response: {
+        status: response.status,
+        headers: response.headers,
+        body: response.rawBody,
+      },
+      params: params.auditContext?.requestParams ?? {},
+      meta: {
+        clientId: client.clientId,
+        traceId: null,
+      },
+    }),
+    requestContext: params.auditContext?.requestContext ?? null,
+  });
+
+  if (response.jsonParseError) {
+    await emitAuditEvent({
+      tenantId: tenant.id,
+      clientId: client.id,
+      traceId: null,
+      actorId: null,
+      eventType: "PROXY_CALLBACK_ERROR",
+      severity: "ERROR",
+      message: "Proxy provider refresh failed",
+      details: buildProxyCallbackErrorDetails({
+        error: "invalid_token_response",
+        errorDescription: "Provider token response was not JSON",
+        providerType: proxyConfig.providerType,
+        ...refreshDiagnostics,
+      }),
+      requestContext: params.auditContext?.requestContext ?? null,
+    });
+    throw new DomainError("Provider token response was not JSON", { status: 502 });
+  }
+
+  if (!response.json || typeof response.json !== "object" || Array.isArray(response.json)) {
+    await emitAuditEvent({
+      tenantId: tenant.id,
+      clientId: client.id,
+      traceId: null,
+      actorId: null,
+      eventType: "PROXY_CALLBACK_ERROR",
+      severity: "ERROR",
+      message: "Proxy provider refresh failed",
+      details: buildProxyCallbackErrorDetails({
+        error: "missing_token_response",
+        providerType: proxyConfig.providerType,
+        ...refreshDiagnostics,
+      }),
+      requestContext: params.auditContext?.requestContext ?? null,
+    });
+    throw new DomainError("Provider token response missing", { status: 502 });
+  }
+
   if (!response.ok) {
     const providerError = sanitizeProviderError(typeof response.json?.error === "string" ? response.json.error : undefined);
     const description = sanitizeProviderErrorDescription(
@@ -345,7 +411,7 @@ export const completeProxyRefreshGrant = async (
     fallbackScope: params.scope,
   });
 
-  void emitAuditEvent({
+  await emitAuditEvent({
     tenantId: tenant.id,
     clientId: client.id,
     traceId: null,

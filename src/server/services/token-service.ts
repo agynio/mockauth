@@ -137,7 +137,7 @@ export const issueTokensFromCode = async (params: {
   };
   const reportViolation = createSecurityViolationReporter(violationContext);
 
-  void emitAuditEvent({
+  await emitAuditEvent({
     tenantId: code.tenantId,
     clientId: code.clientId,
     traceId,
@@ -252,7 +252,7 @@ export const issueTokensFromCode = async (params: {
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
   };
 
-  void emitAuditEvent({
+  await emitAuditEvent({
     tenantId: code.tenantId,
     clientId: code.clientId,
     traceId,
