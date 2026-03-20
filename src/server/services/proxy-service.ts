@@ -214,10 +214,21 @@ export const isProxyAuthorizationCode = async (code: string): Promise<boolean> =
   return Boolean(record);
 };
 
+type ProviderTokenRequestDetails = {
+  url: string;
+  headers: Record<string, string>;
+  contentType: string;
+  body: string;
+};
+
 type ProviderTokenResponse = {
   ok: boolean;
   status: number;
-  json: Record<string, unknown>;
+  json: Record<string, unknown> | null;
+  jsonParseError: boolean;
+  rawBody: string;
+  headers: Record<string, string>;
+  request: ProviderTokenRequestDetails;
 };
 
 export const requestProviderTokens = async (
@@ -233,8 +244,7 @@ export const requestProviderTokens = async (
   const trimmedClientId = config.upstreamClientId.trim();
   params.set("client_id", trimmedClientId);
 
-  const configuredAuthMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
-  const authMethod = configuredAuthMethod;
+  const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
   let authorization: string | null = null;
 
   const readUpstreamSecret = (method: "client_secret_basic" | "client_secret_post") => {
@@ -280,15 +290,42 @@ export const requestProviderTokens = async (
     includesRefreshToken,
   });
 
+  const requestHeaders = authorization ? { ...headers, authorization } : { ...headers };
+  const requestBody = params.toString();
+
   const response = await fetch(config.tokenEndpoint, {
     method: "POST",
-    headers: authorization ? { ...headers, authorization } : headers,
-    body: params,
+    headers: requestHeaders,
+    body: requestBody,
   });
 
-  const json = (await response.json().catch(() => {
-    throw new DomainError("Provider token response was not JSON", { status: 502 });
-  })) as Record<string, unknown>;
+  const rawBody = await response.text();
+  let json: Record<string, unknown> | null = null;
+  let jsonParseError = false;
 
-  return { ok: response.ok, status: response.status, json };
+  if (rawBody.length > 0) {
+    try {
+      const parsed = JSON.parse(rawBody);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        json = parsed as Record<string, unknown>;
+      }
+    } catch {
+      jsonParseError = true;
+    }
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    json,
+    jsonParseError,
+    rawBody,
+    headers: Object.fromEntries(response.headers.entries()),
+    request: {
+      url: config.tokenEndpoint,
+      headers: requestHeaders,
+      contentType: headers["content-type"],
+      body: requestBody,
+    },
+  };
 };

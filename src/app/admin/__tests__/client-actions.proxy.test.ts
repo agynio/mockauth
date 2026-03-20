@@ -54,6 +54,9 @@ vi.mock("@/server/db/client", () => ({
     tenant: {
       findUnique: vi.fn(),
     },
+    proxyProviderConfig: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -67,6 +70,7 @@ import { assertTenantMembership, ensureMembershipRole } from "@/server/services/
 import { createClient, upsertProxyProviderConfig } from "@/server/services/client-service";
 import { prisma } from "@/server/db/client";
 import { getRequestOrigin } from "@/server/utils/request-origin";
+import { encrypt } from "@/server/crypto/key-vault";
 
 const mockGetServerSession = vi.mocked(getServerSession);
 const mockAssertTenantMembership = vi.mocked(assertTenantMembership);
@@ -76,6 +80,7 @@ const mockUpsertProxyConfig = vi.mocked(upsertProxyProviderConfig);
 const mockFindClient = vi.mocked(prisma.client.findUnique);
 const mockGetRequestOrigin = vi.mocked(getRequestOrigin);
 const mockFindTenant = vi.mocked(prisma.tenant.findUnique);
+const mockFindProxyConfig = vi.mocked(prisma.proxyProviderConfig.findUnique);
 
 describe("proxy client server actions", () => {
   beforeEach(() => {
@@ -96,6 +101,25 @@ describe("proxy client server actions", () => {
     mockUpsertProxyConfig.mockResolvedValue(undefined);
     mockGetRequestOrigin.mockResolvedValue("https://mockauth.test");
     mockFindTenant.mockResolvedValue({ defaultApiResourceId: "api-default" } as never);
+    mockFindProxyConfig.mockResolvedValue({
+      id: "proxy_config_1",
+      clientId: "client_internal",
+      providerType: "oidc",
+      authorizationEndpoint: "https://idp.example.test/oauth2/authorize",
+      tokenEndpoint: "https://idp.example.test/oauth2/token",
+      userinfoEndpoint: null,
+      jwksUri: null,
+      upstreamClientId: "existing-upstream-client",
+      upstreamClientSecretEncrypted: encrypt("existing-secret"),
+      defaultScopes: ["openid"],
+      scopeMapping: null,
+      pkceSupported: true,
+      oidcEnabled: true,
+      promptPassthroughEnabled: true,
+      loginHintPassthroughEnabled: true,
+      passthroughTokenResponse: false,
+      upstreamTokenEndpointAuthMethod: "client_secret_basic",
+    } as never);
   });
 
   it("creates a proxy client with normalized configuration", async () => {
