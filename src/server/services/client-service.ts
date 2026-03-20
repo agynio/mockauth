@@ -270,6 +270,47 @@ export const rotateClientSecret = async (clientId: string) => {
   return secret;
 };
 
+export const changeClientType = async (clientId: string, newType: "PUBLIC" | "CONFIDENTIAL") => {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) {
+    throw new DomainError("Client not found", { status: 404 });
+  }
+  if (client.clientType === newType) {
+    throw new DomainError(`Client is already ${newType.toLowerCase()}`);
+  }
+
+  let clientSecret: string | null = null;
+  let clientSecretHash: string | null = null;
+  let clientSecretEncrypted: string | null = null;
+  const tokenEndpointAuthMethod = newType === "CONFIDENTIAL" ? "client_secret_basic" : "none";
+
+  if (newType === "CONFIDENTIAL") {
+    clientSecret = generateOpaqueToken(24);
+    clientSecretHash = await hashSecret(clientSecret);
+    clientSecretEncrypted = encrypt(clientSecret);
+  }
+
+  const updated = await prisma.client.update({
+    where: { id: clientId },
+    data: {
+      clientType: newType,
+      clientSecretHash,
+      clientSecretEncrypted,
+      tokenEndpointAuthMethod,
+    },
+  });
+
+  return { client: updated, clientSecret };
+};
+
+export const deleteClient = async (clientId: string) => {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) {
+    throw new DomainError("Client not found", { status: 404 });
+  }
+  return prisma.client.delete({ where: { id: clientId } });
+};
+
 export const upsertProxyProviderConfig = async (
   clientId: string,
   config: ProxyProviderConfigInput,

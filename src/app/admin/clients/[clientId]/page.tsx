@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { CopyBundleButton, CopyField } from "@/app/admin/_components/copy-field";
 import {
   AddRedirectForm,
+  ChangeClientTypeForm,
   DeleteRedirectButton,
   RotateSecretForm,
   UpdateAuthStrategiesForm,
@@ -16,6 +17,7 @@ import {
   UpdateClientNameForm,
   UpdateProxyProviderConfigForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
+import { ClientDangerZone } from "@/app/admin/clients/[clientId]/client-danger-zone";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -379,6 +381,16 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </Card>
       ) : null}
 
+      <Card data-testid="client-type-card">
+        <CardHeader>
+          <CardTitle>Client type</CardTitle>
+          <CardDescription>Switch between public and confidential credentials.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangeClientTypeForm clientId={client.id} clientType={client.clientType} canEdit={canManageClients} />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Metadata</CardTitle>
@@ -432,6 +444,8 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           )}
         </CardContent>
       </Card>
+
+      <ClientDangerZone clientId={client.id} clientName={client.name} canDelete={canManageClients} />
     </div>
   );
 }

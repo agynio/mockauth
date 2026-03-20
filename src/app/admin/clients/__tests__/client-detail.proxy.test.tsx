@@ -46,6 +46,7 @@ vi.mock("@/server/utils/request-origin", () => ({
 
 vi.mock("../[clientId]/client-forms", () => ({
   UpdateClientNameForm: () => <div data-testid="client-name-form" />,
+  ChangeClientTypeForm: () => <div data-testid="client-type-form" />,
   UpdateClientIssuerForm: () => <div data-testid="client-issuer-form" />,
   UpdateProxyProviderConfigForm: ({
     initialConfig,
@@ -61,6 +62,10 @@ vi.mock("../[clientId]/client-forms", () => ({
   AddRedirectForm: () => <div data-testid="add-redirect-form" />,
   DeleteRedirectButton: () => <button type="button" data-testid="delete-redirect-btn" />,
   RotateSecretForm: () => <div data-testid="rotate-secret-form" />,
+}));
+
+vi.mock("../[clientId]/client-danger-zone", () => ({
+  ClientDangerZone: () => <div data-testid="client-danger-zone" />,
 }));
 
 describe("ClientDetailPage proxy mode", () => {

@@ -14,7 +14,9 @@ import { prisma } from "@/server/db/client";
 import { authOptions } from "@/server/auth/options";
 import {
   addRedirectUri,
+  changeClientType,
   createClient,
+  deleteClient,
   proxyProviderConfigSchema,
   rotateClientSecret,
   updateClientName,
@@ -61,6 +63,7 @@ import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/o
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import { buildConfigChangedDetails, type ProxyProviderConfigSnapshot, type TokenAuthMethod } from "@/server/services/audit-event";
+import { DomainError } from "@/server/errors";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 const tenantSchema = z.object({
@@ -296,6 +299,13 @@ const updateClientSigningAlgsSchema = z.object({
   accessTokenAlg: z.enum(accessTokenAlgOptions),
 });
 
+const changeClientTypeSchema = z.object({
+  clientId: z.string().min(1),
+  newType: z.enum(["PUBLIC", "CONFIDENTIAL"] as const),
+});
+
+const deleteClientSchema = z.object({ clientId: z.string().min(1) });
+
 const updateProxyConfigSchema = proxyProviderConfigSchema.extend({ clientId: z.string().min(1) });
 
 const requireSession = async () => {
@@ -348,7 +358,14 @@ const clientPath = (clientId: string) => `/admin/clients/${clientId}`;
 const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles?: MembershipRole[]) => {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { id: true, tenantId: true, clientType: true, oauthClientMode: true },
+    select: {
+      id: true,
+      tenantId: true,
+      name: true,
+      clientType: true,
+      oauthClientMode: true,
+      tokenEndpointAuthMethod: true,
+    },
   });
   if (!client) {
     return null;
@@ -608,6 +625,44 @@ export const rotateClientSecretAction = async (
   } catch (error) {
     console.error(error);
     return { error: "Unable to rotate secret" };
+  }
+};
+
+export const changeClientTypeAction = async (
+  input: z.infer<typeof changeClientTypeSchema>,
+): Promise<ActionState<{ clientSecret?: string }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = changeClientTypeSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+
+    const { client: updated, clientSecret } = await changeClientType(client.id, parsed.newType);
+    revalidatePath(clientPath(client.id));
+    revalidatePath("/admin/clients");
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_type",
+      resourceId: updated.id,
+      resourceName: client.name,
+      clientId: updated.id,
+      message: "Client type updated",
+      authMethodBefore: client.tokenEndpointAuthMethod,
+      authMethodAfter: updated.tokenEndpointAuthMethod,
+    });
+    return clientSecret
+      ? { success: "Client type updated", data: { clientSecret } }
+      : { success: "Client type updated" };
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return { error: error.message };
+    }
+    console.error(error);
+    return { error: "Unable to change client type" };
   }
 };
 
@@ -1056,6 +1111,41 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
   } catch (error) {
     console.error(error);
     return { error: "Unable to remove redirect" };
+  }
+};
+
+export const deleteClientAction = async (input: z.infer<typeof deleteClientSchema>): Promise<ActionState> => {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { error: "Unauthorized" };
+    }
+    const adminId = session.user.id;
+    const parsed = deleteClientSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    await emitConfigChange({
+      tenantId: client.tenantId,
+      actorId: adminId,
+      action: "delete",
+      resource: "client",
+      resourceId: client.id,
+      resourceName: client.name,
+      clientId: client.id,
+      message: "Client deleted",
+    });
+    await deleteClient(client.id);
+    revalidatePath("/admin", "layout");
+    revalidatePath("/admin/clients");
+    return { success: "Client deleted" };
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return { error: error.message };
+    }
+    console.error(error);
+    return { error: "Unable to delete client" };
   }
 };
 
