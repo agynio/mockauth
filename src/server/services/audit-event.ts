@@ -32,6 +32,7 @@ export type TokenResponsePayload = {
   access_token?: string;
   refresh_token?: string;
   id_token?: string;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type AuthorizeReceivedDetails = {
@@ -67,6 +68,7 @@ export type ProxyRedirectOutDetails = {
 export type ProxyCallbackSuccessDetails = {
   providerType: string;
   tokenResponse: TokenResponsePayload;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type ProviderTokenExchangeDiagnostics = {
@@ -85,11 +87,39 @@ export type ProxyCallbackErrorDetails = {
   errorDescription?: string;
   providerType?: string;
   code?: string;
+  diagnostics?: ProxyFlowDiagnostics;
 } & Partial<ProviderTokenExchangeDiagnostics>;
+
+export type ProxyFlowStage = "callback" | "token";
+
+export type ProxyFlowRequestDetails = {
+  url: string;
+  headers: Record<string, string>;
+  contentType: string | null;
+  body: string | null;
+};
+
+export type ProxyFlowResponseDetails = {
+  status: number | null;
+  headers: Record<string, string>;
+  body: string | null;
+};
+
+export type ProxyFlowDiagnostics = {
+  stage: ProxyFlowStage;
+  request: ProxyFlowRequestDetails;
+  response: ProxyFlowResponseDetails;
+  params: Record<string, string | string[]>;
+  meta: {
+    clientId: string | null;
+    traceId: string | null;
+  };
+};
 
 export type TokenAuthCodeErrorDetails = ProviderTokenExchangeDiagnostics & {
   error: string;
   errorDescription?: string;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type TokenAuthCodeCompletedDetails = TokenResponsePayload | TokenAuthCodeErrorDetails;
@@ -97,6 +127,8 @@ export type TokenAuthCodeCompletedDetails = TokenResponsePayload | TokenAuthCode
 export type ProxyCodeIssuedDetails = {
   scope: string;
   redirectUri: string;
+  issued: boolean;
+  authorizationCode?: string | null;
 };
 
 export type TokenAuthCodeReceivedDetails = {
@@ -109,6 +141,7 @@ export type TokenAuthCodeReceivedDetails = {
   redirectUri?: string;
   authorizationCode?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type TokenRefreshReceivedDetails = {
@@ -120,6 +153,7 @@ export type TokenRefreshReceivedDetails = {
   grantType?: string;
   refreshToken?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type ProxyProviderConfigSnapshot = {
@@ -264,9 +298,42 @@ export function buildProxyRedirectOutDetails(params: ProxyRedirectOutDetailsPara
 export const buildProxyCallbackSuccessDetails = (params: {
   providerType: string;
   providerResponse: TokenResponsePayload;
+  diagnostics?: ProxyFlowDiagnostics;
 }): ProxyCallbackSuccessDetails => ({
   providerType: params.providerType,
   tokenResponse: params.providerResponse,
+  diagnostics: params.diagnostics ?? undefined,
+});
+
+type ProxyFlowDiagnosticsParams = {
+  stage: ProxyFlowStage;
+  request: ProxyFlowRequestDetails;
+  response?: Partial<ProxyFlowResponseDetails> | null;
+  params: Record<string, string | string[]>;
+  meta: {
+    clientId?: string | null;
+    traceId?: string | null;
+  };
+};
+
+export const buildProxyFlowDiagnostics = (params: ProxyFlowDiagnosticsParams): ProxyFlowDiagnostics => ({
+  stage: params.stage,
+  request: {
+    url: params.request.url,
+    headers: params.request.headers,
+    contentType: params.request.contentType ?? null,
+    body: params.request.body ?? null,
+  },
+  response: {
+    status: params.response?.status ?? null,
+    headers: params.response?.headers ?? {},
+    body: params.response?.body ?? null,
+  },
+  params: params.params,
+  meta: {
+    clientId: params.meta.clientId ?? null,
+    traceId: params.meta.traceId ?? null,
+  },
 });
 
 type ProxyCallbackErrorDetailsParams = {
@@ -276,15 +343,18 @@ type ProxyCallbackErrorDetailsParams = {
   code?: string | null;
   rawError?: string | null;
   rawErrorDescription?: string | null;
+  diagnostics?: ProxyFlowDiagnostics;
 } & Partial<ProviderTokenExchangeDiagnostics>;
 
 export function buildProxyCallbackErrorDetails(params: ProxyCallbackErrorDetailsParams): ProxyCallbackErrorDetails {
-  const { rawError, rawErrorDescription, error, errorDescription, providerType, code, ...exchangeDetails } = params;
+  const { rawError, rawErrorDescription, error, errorDescription, providerType, code, diagnostics, ...exchangeDetails } =
+    params;
   return {
     error: rawError ?? error,
     errorDescription: rawErrorDescription ?? errorDescription ?? undefined,
     providerType: providerType ?? undefined,
     code: code ?? undefined,
+    diagnostics: diagnostics ?? undefined,
     ...exchangeDetails,
   };
 }
@@ -316,20 +386,29 @@ export function buildProviderTokenExchangeDiagnostics(
 type TokenAuthCodeErrorDetailsParams = {
   error: string;
   errorDescription?: string | null;
-  diagnostics: ProviderTokenExchangeDiagnostics;
+  exchangeDiagnostics: ProviderTokenExchangeDiagnostics;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export function buildTokenAuthCodeErrorDetails(params: TokenAuthCodeErrorDetailsParams): TokenAuthCodeErrorDetails {
   return {
     error: params.error,
     errorDescription: params.errorDescription ?? undefined,
-    ...params.diagnostics,
+    diagnostics: params.diagnostics ?? undefined,
+    ...params.exchangeDiagnostics,
   };
 }
 
-export const buildProxyCodeIssuedDetails = (params: { scope: string; redirectUri: string }): ProxyCodeIssuedDetails => ({
+export const buildProxyCodeIssuedDetails = (params: {
+  scope: string;
+  redirectUri: string;
+  issued: boolean;
+  authorizationCode?: string | null;
+}): ProxyCodeIssuedDetails => ({
   scope: params.scope,
   redirectUri: params.redirectUri,
+  issued: params.issued,
+  authorizationCode: params.authorizationCode ?? null,
 });
 
 type TokenAuthCodeReceivedParams = {
@@ -342,6 +421,7 @@ type TokenAuthCodeReceivedParams = {
   redirectUri?: string;
   authorizationCode?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export function buildTokenAuthCodeReceivedDetails(
@@ -357,6 +437,7 @@ export function buildTokenAuthCodeReceivedDetails(
     redirectUri: params.redirectUri ?? undefined,
     authorizationCode: params.authorizationCode ?? undefined,
     includeAuthHeader: params.includeAuthHeader ?? undefined,
+    diagnostics: params.diagnostics ?? undefined,
   };
 }
 
@@ -369,6 +450,7 @@ type TokenRefreshReceivedParams = {
   grantType?: string;
   refreshToken?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export function buildTokenRefreshReceivedDetails(params: TokenRefreshReceivedParams): TokenRefreshReceivedDetails {
@@ -381,6 +463,7 @@ export function buildTokenRefreshReceivedDetails(params: TokenRefreshReceivedPar
     grantType: params.grantType ?? undefined,
     refreshToken: params.refreshToken ?? undefined,
     includeAuthHeader: params.includeAuthHeader ?? undefined,
+    diagnostics: params.diagnostics ?? undefined,
   };
 }
 
@@ -452,7 +535,10 @@ export function buildSecurityViolationDetails(params: SecurityViolationDetailsPa
   };
 }
 
-export const toTokenResponsePayload = (response: Record<string, unknown>): TokenResponsePayload => ({
+export const toTokenResponsePayload = (
+  response: Record<string, unknown>,
+  diagnostics?: ProxyFlowDiagnostics,
+): TokenResponsePayload => ({
   token_type: typeof response.token_type === "string" ? response.token_type : undefined,
   scope: typeof response.scope === "string" ? response.scope : undefined,
   expires_in:
@@ -462,6 +548,7 @@ export const toTokenResponsePayload = (response: Record<string, unknown>): Token
   access_token: typeof response.access_token === "string" ? response.access_token : undefined,
   refresh_token: typeof response.refresh_token === "string" ? response.refresh_token : undefined,
   id_token: typeof response.id_token === "string" ? response.id_token : undefined,
+  diagnostics: diagnostics ?? undefined,
 });
 
 const compactDetails = (value: Record<string, unknown>): Prisma.InputJsonObject | null => {

@@ -7,6 +7,7 @@ import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
+import { collectHeaders, collectParams } from "@/server/utils/diagnostics";
 
 const callbackSchema = z.object({
   state: z.string().min(1),
@@ -17,6 +18,13 @@ const callbackSchema = z.object({
 
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
   const normalizedUrl = resolveUrl(request);
+  const callbackParams = collectParams(normalizedUrl.searchParams.entries());
+  const callbackRequest = {
+    url: normalizedUrl.toString(),
+    headers: collectHeaders(request.headers),
+    contentType: request.headers.get("content-type"),
+    body: null,
+  };
   const query = callbackSchema.safeParse(Object.fromEntries(normalizedUrl.searchParams.entries()));
 
   if (!query.success) {
@@ -35,6 +43,8 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
       transactionCookie,
       origin: normalizedUrl.origin,
       requestContext: getRequestContextFromRequest(request),
+      callbackRequest,
+      callbackParams,
     });
 
     const response = NextResponse.redirect(result.redirectTo, { status: 302 });

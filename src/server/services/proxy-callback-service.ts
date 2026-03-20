@@ -6,8 +6,12 @@ import {
   buildProxyCallbackErrorDetails,
   buildProxyCallbackSuccessDetails,
   buildProxyCodeIssuedDetails,
+  buildProxyFlowDiagnostics,
   buildProviderTokenExchangeDiagnostics,
   toTokenResponsePayload,
+  type ProxyFlowDiagnostics,
+  type ProxyFlowRequestDetails,
+  type ProxyFlowResponseDetails,
 } from "@/server/services/audit-event";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
@@ -31,6 +35,8 @@ type ProxyCallbackParams = {
   transactionCookie?: string;
   origin: string;
   requestContext?: RequestContext;
+  callbackRequest: ProxyFlowRequestDetails;
+  callbackParams: Record<string, string | string[]>;
 };
 
 type ProxyCallbackResult = {
@@ -86,9 +92,27 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
   }
 
   type ProxyCallbackErrorParams = Parameters<typeof buildProxyCallbackErrorDetails>[0];
+  const buildCallbackDiagnostics = (options?: {
+    request?: ProxyFlowRequestDetails;
+    response?: Partial<ProxyFlowResponseDetails> | null;
+  }) =>
+    buildProxyFlowDiagnostics({
+      stage: "callback",
+      request: options?.request ?? params.callbackRequest,
+      response: options?.response ?? null,
+      params: params.callbackParams,
+      meta: {
+        clientId: transaction.client.clientId,
+        traceId: transaction.id,
+      },
+    });
   let errorLogged = false;
   let exchangeDiagnostics: ReturnType<typeof buildProviderTokenExchangeDiagnostics> | null = null;
-  const recordCallbackError = async (message: string, details: ProxyCallbackErrorParams) => {
+  const recordCallbackError = async (
+    message: string,
+    details: ProxyCallbackErrorParams,
+    diagnostics?: ProxyFlowDiagnostics,
+  ) => {
     errorLogged = true;
     await emitAuditEvent({
       tenantId: transaction.tenantId,
@@ -98,7 +122,33 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       eventType: "PROXY_CALLBACK_ERROR",
       severity: "ERROR",
       message,
-      details: buildProxyCallbackErrorDetails(details),
+      details: buildProxyCallbackErrorDetails({
+        ...details,
+        diagnostics: diagnostics ?? buildCallbackDiagnostics(),
+      }),
+      requestContext: params.requestContext ?? null,
+    });
+  };
+  let proxyCodeLogged = false;
+  const recordProxyCodeIssued = async (issued: boolean, authorizationCode?: string | null) => {
+    if (proxyCodeLogged) {
+      return;
+    }
+    proxyCodeLogged = true;
+    await emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PROXY_CODE_ISSUED",
+      severity: "INFO",
+      message: issued ? "Proxy authorization code issued" : "Proxy authorization code not issued",
+      details: buildProxyCodeIssuedDetails({
+        scope: transaction.appScope,
+        redirectUri: transaction.redirectUri,
+        issued,
+        authorizationCode,
+      }),
       requestContext: params.requestContext ?? null,
     });
   };
@@ -109,6 +159,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       providerType: transaction.client.proxyConfig?.providerType,
       code: params.code ?? undefined,
     });
+    await recordProxyCodeIssued(false);
     await markProxyTransactionCompleted(transaction.id);
     throw new DomainError("Proxy transaction has expired", { status: 400, code: "invalid_request" });
   }
@@ -120,6 +171,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       providerType: transaction.client.proxyConfig?.providerType,
       code: params.code ?? undefined,
     });
+    await recordProxyCodeIssued(false);
     await markProxyTransactionCompleted(transaction.id);
     throw new DomainError("Proxy configuration missing", { status: 500 });
   }
@@ -144,6 +196,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       rawError: params.providerError ?? undefined,
       rawErrorDescription: params.providerErrorDescription ?? undefined,
     });
+    await recordProxyCodeIssued(false);
     await markProxyTransactionCompleted(transaction.id);
     return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
   }
@@ -154,6 +207,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       providerType: config.providerType,
       code: params.code ?? undefined,
     });
+    await recordProxyCodeIssued(false);
     await markProxyTransactionCompleted(transaction.id);
     throw new DomainError("Authorization code not provided by provider", { status: 400, code: "invalid_request" });
   }
@@ -192,8 +246,28 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         code: params.code ?? undefined,
         ...exchangeDetails,
       });
+      await recordProxyCodeIssued(false);
       throw error;
     });
+    const callbackDiagnostics = buildCallbackDiagnostics({
+      request: result.request,
+      response: {
+        status: result.status,
+        headers: result.headers,
+        body: result.rawBody,
+      },
+    });
+
+    if (result.jsonParseError) {
+      await recordCallbackError("Proxy provider token response was not JSON", {
+        error: "invalid_token_response",
+        providerType: config.providerType,
+        code: params.code ?? undefined,
+        ...exchangeDetails,
+      }, callbackDiagnostics);
+      await recordProxyCodeIssued(false);
+      throw new DomainError("Provider token response was not JSON", { status: 502 });
+    }
 
     if (!result.ok) {
       const rawError = typeof result.json?.error === "string" ? result.json.error : undefined;
@@ -216,18 +290,20 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
         rawError,
         rawErrorDescription: rawDescription,
         ...exchangeDetails,
-      });
+      }, callbackDiagnostics);
+      await recordProxyCodeIssued(false);
       await markProxyTransactionCompleted(transaction.id);
       return { redirectTo: redirectUrl.toString(), clearTransactionCookie: true };
     }
 
-    if (!result.json || typeof result.json !== "object" || Array.isArray(result.json)) {
+    if (!result.json) {
       await recordCallbackError("Proxy provider token response missing", {
         error: "missing_token_response",
         providerType: config.providerType,
         code: params.code ?? undefined,
         ...exchangeDetails,
-      });
+      }, callbackDiagnostics);
+      await recordProxyCodeIssued(false);
       throw new DomainError("Provider token response missing", { status: 502 });
     }
 
@@ -241,7 +317,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       providerResponse: result.json,
     });
 
-    void emitAuditEvent({
+    await emitAuditEvent({
       tenantId: transaction.tenantId,
       clientId: transaction.clientId,
       traceId: transaction.id,
@@ -252,6 +328,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       details: buildProxyCallbackSuccessDetails({
         providerType: config.providerType,
         providerResponse: providerPayload,
+        diagnostics: callbackDiagnostics,
       }),
       requestContext: params.requestContext ?? null,
     });
@@ -269,20 +346,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
       tokenExchangeId: exchange.id,
     });
 
-    void emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: null,
-      eventType: "PROXY_CODE_ISSUED",
-      severity: "INFO",
-      message: "Proxy authorization code issued",
-      details: buildProxyCodeIssuedDetails({
-        scope: transaction.appScope,
-        redirectUri: transaction.redirectUri,
-      }),
-      requestContext: params.requestContext ?? null,
-    });
+    await recordProxyCodeIssued(true, proxyCode);
 
     await markProxyTransactionCompleted(transaction.id);
 
@@ -295,6 +359,9 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
     return { redirectTo: successRedirect.toString(), clearTransactionCookie: true };
   } catch (error) {
     await deleteProxyAuthTransaction(transaction.id);
+    if (!proxyCodeLogged) {
+      await recordProxyCodeIssued(false);
+    }
     if (!errorLogged) {
       const errorCode = error instanceof DomainError && error.options.code ? error.options.code : "server_error";
       const description = sanitizeProviderErrorDescription(
