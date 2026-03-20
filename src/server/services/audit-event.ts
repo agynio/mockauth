@@ -32,6 +32,7 @@ export type TokenResponsePayload = {
   access_token?: string;
   refresh_token?: string;
   id_token?: string;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type AuthorizeReceivedDetails = {
@@ -67,6 +68,7 @@ export type ProxyRedirectOutDetails = {
 export type ProxyCallbackSuccessDetails = {
   providerType: string;
   tokenResponse: TokenResponsePayload;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type ProviderTokenExchangeDiagnostics = {
@@ -85,6 +87,7 @@ export type ProxyCallbackErrorDetails = {
   errorDescription?: string;
   providerType?: string;
   code?: string;
+  diagnostics?: ProxyFlowDiagnostics;
 } & Partial<ProviderTokenExchangeDiagnostics>;
 
 export type ProxyFlowStage = "callback" | "token";
@@ -116,6 +119,7 @@ export type ProxyFlowDiagnostics = {
 export type TokenAuthCodeErrorDetails = ProviderTokenExchangeDiagnostics & {
   error: string;
   errorDescription?: string;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type TokenAuthCodeCompletedDetails = TokenResponsePayload | TokenAuthCodeErrorDetails;
@@ -137,6 +141,7 @@ export type TokenAuthCodeReceivedDetails = {
   redirectUri?: string;
   authorizationCode?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type TokenRefreshReceivedDetails = {
@@ -148,6 +153,7 @@ export type TokenRefreshReceivedDetails = {
   grantType?: string;
   refreshToken?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export type ProxyProviderConfigSnapshot = {
@@ -205,7 +211,6 @@ export type AuditEventDetailsMap = {
   PROXY_REDIRECT_OUT: ProxyRedirectOutDetails;
   PROXY_CALLBACK_SUCCESS: ProxyCallbackSuccessDetails;
   PROXY_CALLBACK_ERROR: ProxyCallbackErrorDetails;
-  PROXY_FLOW_DIAGNOSTIC: ProxyFlowDiagnostics;
   PROXY_CODE_ISSUED: ProxyCodeIssuedDetails;
   TOKEN_AUTHCODE_RECEIVED: TokenAuthCodeReceivedDetails;
   TOKEN_AUTHCODE_COMPLETED: TokenAuthCodeCompletedDetails;
@@ -293,9 +298,11 @@ export function buildProxyRedirectOutDetails(params: ProxyRedirectOutDetailsPara
 export const buildProxyCallbackSuccessDetails = (params: {
   providerType: string;
   providerResponse: TokenResponsePayload;
+  diagnostics?: ProxyFlowDiagnostics;
 }): ProxyCallbackSuccessDetails => ({
   providerType: params.providerType,
   tokenResponse: params.providerResponse,
+  diagnostics: params.diagnostics ?? undefined,
 });
 
 type ProxyFlowDiagnosticsParams = {
@@ -336,15 +343,18 @@ type ProxyCallbackErrorDetailsParams = {
   code?: string | null;
   rawError?: string | null;
   rawErrorDescription?: string | null;
+  diagnostics?: ProxyFlowDiagnostics;
 } & Partial<ProviderTokenExchangeDiagnostics>;
 
 export function buildProxyCallbackErrorDetails(params: ProxyCallbackErrorDetailsParams): ProxyCallbackErrorDetails {
-  const { rawError, rawErrorDescription, error, errorDescription, providerType, code, ...exchangeDetails } = params;
+  const { rawError, rawErrorDescription, error, errorDescription, providerType, code, diagnostics, ...exchangeDetails } =
+    params;
   return {
     error: rawError ?? error,
     errorDescription: rawErrorDescription ?? errorDescription ?? undefined,
     providerType: providerType ?? undefined,
     code: code ?? undefined,
+    diagnostics: diagnostics ?? undefined,
     ...exchangeDetails,
   };
 }
@@ -376,14 +386,16 @@ export function buildProviderTokenExchangeDiagnostics(
 type TokenAuthCodeErrorDetailsParams = {
   error: string;
   errorDescription?: string | null;
-  diagnostics: ProviderTokenExchangeDiagnostics;
+  exchangeDiagnostics: ProviderTokenExchangeDiagnostics;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export function buildTokenAuthCodeErrorDetails(params: TokenAuthCodeErrorDetailsParams): TokenAuthCodeErrorDetails {
   return {
     error: params.error,
     errorDescription: params.errorDescription ?? undefined,
-    ...params.diagnostics,
+    diagnostics: params.diagnostics ?? undefined,
+    ...params.exchangeDiagnostics,
   };
 }
 
@@ -409,6 +421,7 @@ type TokenAuthCodeReceivedParams = {
   redirectUri?: string;
   authorizationCode?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export function buildTokenAuthCodeReceivedDetails(
@@ -424,6 +437,7 @@ export function buildTokenAuthCodeReceivedDetails(
     redirectUri: params.redirectUri ?? undefined,
     authorizationCode: params.authorizationCode ?? undefined,
     includeAuthHeader: params.includeAuthHeader ?? undefined,
+    diagnostics: params.diagnostics ?? undefined,
   };
 }
 
@@ -436,6 +450,7 @@ type TokenRefreshReceivedParams = {
   grantType?: string;
   refreshToken?: string;
   includeAuthHeader?: boolean;
+  diagnostics?: ProxyFlowDiagnostics;
 };
 
 export function buildTokenRefreshReceivedDetails(params: TokenRefreshReceivedParams): TokenRefreshReceivedDetails {
@@ -448,6 +463,7 @@ export function buildTokenRefreshReceivedDetails(params: TokenRefreshReceivedPar
     grantType: params.grantType ?? undefined,
     refreshToken: params.refreshToken ?? undefined,
     includeAuthHeader: params.includeAuthHeader ?? undefined,
+    diagnostics: params.diagnostics ?? undefined,
   };
 }
 
@@ -519,7 +535,10 @@ export function buildSecurityViolationDetails(params: SecurityViolationDetailsPa
   };
 }
 
-export const toTokenResponsePayload = (response: Record<string, unknown>): TokenResponsePayload => ({
+export const toTokenResponsePayload = (
+  response: Record<string, unknown>,
+  diagnostics?: ProxyFlowDiagnostics,
+): TokenResponsePayload => ({
   token_type: typeof response.token_type === "string" ? response.token_type : undefined,
   scope: typeof response.scope === "string" ? response.scope : undefined,
   expires_in:
@@ -529,6 +548,7 @@ export const toTokenResponsePayload = (response: Record<string, unknown>): Token
   access_token: typeof response.access_token === "string" ? response.access_token : undefined,
   refresh_token: typeof response.refresh_token === "string" ? response.refresh_token : undefined,
   id_token: typeof response.id_token === "string" ? response.id_token : undefined,
+  diagnostics: diagnostics ?? undefined,
 });
 
 const compactDetails = (value: Record<string, unknown>): Prisma.InputJsonObject | null => {

@@ -325,18 +325,18 @@ describe("Proxy client OAuth flow", () => {
       }),
     ).rejects.toMatchObject({ options: { code: "invalid_request" } });
 
-    const diagnosticLog = await prisma.auditLog.findFirst({
+    const callbackErrorLog = await prisma.auditLog.findFirst({
       where: {
         tenantId,
         traceId: transactionId ?? undefined,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Proxy callback received",
+        eventType: "PROXY_CALLBACK_ERROR",
+        message: "Proxy provider did not return a code",
       },
       orderBy: { createdAt: "desc" },
     });
 
-    expect(diagnosticLog).not.toBeNull();
-    const diagnosticDetails = diagnosticLog?.details as Record<string, unknown>;
+    expect(callbackErrorLog).not.toBeNull();
+    const diagnosticDetails = (callbackErrorLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(diagnosticDetails).toMatchObject({
       stage: "callback",
       request: {
@@ -395,18 +395,18 @@ describe("Proxy client OAuth flow", () => {
 
     expect(callback.redirectTo).toContain("error=access_denied");
 
-    const diagnosticLog = await prisma.auditLog.findFirst({
+    const callbackErrorLog = await prisma.auditLog.findFirst({
       where: {
         tenantId,
         traceId: transactionId ?? undefined,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Proxy callback received",
+        eventType: "PROXY_CALLBACK_ERROR",
+        message: "Proxy provider returned error",
       },
       orderBy: { createdAt: "desc" },
     });
 
-    expect(diagnosticLog).not.toBeNull();
-    const diagnosticDetails = diagnosticLog?.details as Record<string, unknown>;
+    expect(callbackErrorLog).not.toBeNull();
+    const diagnosticDetails = (callbackErrorLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(diagnosticDetails).toMatchObject({
       stage: "callback",
       params: {
@@ -495,18 +495,7 @@ describe("Proxy client OAuth flow", () => {
       code_verifier_present: true,
     });
 
-    const exchangeLog = await prisma.auditLog.findFirst({
-      where: {
-        tenantId,
-        traceId: transactionId ?? undefined,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Proxy callback exchange",
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    expect(exchangeLog).not.toBeNull();
-    const exchangeDetails = exchangeLog?.details as Record<string, unknown>;
+    const exchangeDetails = (callbackDetails as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(exchangeDetails).toMatchObject({
       stage: "callback",
       request: {
@@ -645,18 +634,17 @@ describe("Proxy client OAuth flow", () => {
     const requestLogs = await prisma.auditLog.findMany({
       where: {
         tenantId,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Token request received",
+        eventType: "TOKEN_AUTHCODE_RECEIVED",
       },
       orderBy: { createdAt: "desc" },
     });
     const requestLog = requestLogs.find((log) => {
-      const details = log.details as { request?: { body?: unknown } };
-      return details.request?.body === requestBody.toString();
+      const details = log.details as { diagnostics?: { request?: { body?: unknown } } };
+      return details.diagnostics?.request?.body === requestBody.toString();
     });
 
     expect(requestLog).toBeDefined();
-    const requestDetails = requestLog?.details as Record<string, unknown>;
+    const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(requestDetails).toMatchObject({
       stage: "token",
       request: {
@@ -795,18 +783,17 @@ describe("Proxy client OAuth flow", () => {
     const requestLogs = await prisma.auditLog.findMany({
       where: {
         tenantId,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Token request received",
+        eventType: "TOKEN_AUTHCODE_RECEIVED",
       },
       orderBy: { createdAt: "desc" },
     });
     const requestLog = requestLogs.find((log) => {
-      const details = log.details as { request?: { body?: unknown } };
-      return details.request?.body === requestBody.toString();
+      const details = log.details as { diagnostics?: { request?: { body?: unknown } } };
+      return details.diagnostics?.request?.body === requestBody.toString();
     });
 
     expect(requestLog).toBeDefined();
-    const requestDetails = requestLog?.details as Record<string, unknown>;
+    const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(requestDetails).toMatchObject({
       stage: "token",
       request: {
@@ -904,14 +891,13 @@ describe("Proxy client OAuth flow", () => {
     const requestLog = await prisma.auditLog.findFirst({
       where: {
         tenantId,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Token request received",
+        eventType: "TOKEN_AUTHCODE_RECEIVED",
       },
       orderBy: { createdAt: "desc" },
     });
 
     expect(requestLog).not.toBeNull();
-    const requestDetails = requestLog?.details as Record<string, unknown>;
+    const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(requestDetails).toMatchObject({
       stage: "token",
       params: expect.objectContaining({
@@ -973,14 +959,13 @@ describe("Proxy client OAuth flow", () => {
     const requestLog = await prisma.auditLog.findFirst({
       where: {
         tenantId,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Token request received",
+        eventType: "TOKEN_REFRESH_RECEIVED",
       },
       orderBy: { createdAt: "desc" },
     });
 
     expect(requestLog).not.toBeNull();
-    const requestDetails = requestLog?.details as Record<string, unknown>;
+    const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(requestDetails).toMatchObject({
       stage: "token",
       request: {
@@ -997,14 +982,14 @@ describe("Proxy client OAuth flow", () => {
     const exchangeLog = await prisma.auditLog.findFirst({
       where: {
         tenantId,
-        eventType: "PROXY_FLOW_DIAGNOSTIC",
-        message: "Proxy token exchange",
+        eventType: "PROXY_CALLBACK_ERROR",
+        message: "Proxy provider refresh failed",
       },
       orderBy: { createdAt: "desc" },
     });
 
     expect(exchangeLog).not.toBeNull();
-    const exchangeDetails = exchangeLog?.details as Record<string, unknown>;
+    const exchangeDetails = (exchangeLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect(exchangeDetails).toMatchObject({
       stage: "token",
       request: {

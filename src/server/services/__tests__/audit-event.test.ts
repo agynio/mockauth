@@ -107,7 +107,7 @@ describe("sanitizeAuditDetails", () => {
   });
 
   it("preserves raw proxy diagnostics", () => {
-    const details = buildProxyFlowDiagnostics({
+    const diagnostics = buildProxyFlowDiagnostics({
       stage: "token",
       request: {
         url: "https://mockauth.test/r/api-default/oidc/token",
@@ -123,28 +123,37 @@ describe("sanitizeAuditDetails", () => {
       params: { client_id: "client", code: "code-123" },
       meta: { clientId: "client", traceId: "trace-123" },
     });
+    const details = buildProxyCallbackErrorDetails({
+      error: "invalid_grant",
+      providerType: "oidc",
+      diagnostics,
+    });
     const event: AuditEventInput = {
       ...baseEvent,
-      eventType: "PROXY_FLOW_DIAGNOSTIC",
+      eventType: "PROXY_CALLBACK_ERROR",
       details,
     };
 
     const sanitized = sanitize(event);
     expect(sanitized).toMatchObject({
-      stage: "token",
-      request: {
-        url: "https://mockauth.test/r/api-default/oidc/token",
-        headers: { authorization: "Basic client:secret" },
-        contentType: "application/x-www-form-urlencoded",
-        body: "client_id=client&code=code-123",
+      error: "invalid_grant",
+      providerType: "oidc",
+      diagnostics: {
+        stage: "token",
+        request: {
+          url: "https://mockauth.test/r/api-default/oidc/token",
+          headers: { authorization: "Basic client:secret" },
+          contentType: "application/x-www-form-urlencoded",
+          body: "client_id=client&code=code-123",
+        },
+        response: {
+          status: 400,
+          headers: { "content-type": "application/json" },
+          body: "{\"error\":\"invalid_grant\"}",
+        },
+        params: { client_id: "client", code: "code-123" },
+        meta: { clientId: "client", traceId: "trace-123" },
       },
-      response: {
-        status: 400,
-        headers: { "content-type": "application/json" },
-        body: "{\"error\":\"invalid_grant\"}",
-      },
-      params: { client_id: "client", code: "code-123" },
-      meta: { clientId: "client", traceId: "trace-123" },
     });
   });
 
