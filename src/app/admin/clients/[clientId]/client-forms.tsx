@@ -613,7 +613,7 @@ export function ChangeClientTypeForm({
   const dialogDescription =
     nextType === "CONFIDENTIAL"
       ? "A new client secret will be generated and required for token requests."
-      : "The existing client secret will be removed and the token endpoint will require PKCE only.";
+      : "The existing client secret will be removed and the token endpoint will be set to none.";
 
   const handleSwitch = () => {
     startTransition(async () => {
