@@ -1116,11 +1116,7 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
 
 export const deleteClientAction = async (input: z.infer<typeof deleteClientSchema>): Promise<ActionState> => {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { error: "Unauthorized" };
-    }
-    const adminId = session.user.id;
+    const adminId = await requireSession();
     const parsed = deleteClientSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {

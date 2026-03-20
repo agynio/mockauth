@@ -105,7 +105,7 @@ describe("deleteClientAction", () => {
 
     const result = await deleteClientAction({ clientId: "client_internal" });
 
-    expect(result).toEqual({ error: "Unauthorized" });
+    expect(result).toEqual({ error: "Unable to delete client" });
     expect(mockDeleteClient).not.toHaveBeenCalled();
   });
 });

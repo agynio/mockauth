@@ -287,9 +287,23 @@ describe("client service", () => {
       },
     });
 
+    const auditLog = await prisma.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        actorId: admin.id,
+        eventType: $Enums.AuditLogEventType.CONFIG_CHANGED,
+        severity: $Enums.AuditLogSeverity.INFO,
+        message: "Client updated",
+      },
+    });
+
     await deleteClient(client.id);
 
+    const retainedLog = await prisma.auditLog.findUnique({ where: { id: auditLog.id } });
     expect(await prisma.client.findUnique({ where: { id: client.id } })).toBeNull();
+    expect(retainedLog).not.toBeNull();
+    expect(retainedLog?.clientId).toBeNull();
     expect(await prisma.redirectUri.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.oAuthTestSession.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.authorizationCode.count({ where: { clientId: client.id } })).toBe(0);
