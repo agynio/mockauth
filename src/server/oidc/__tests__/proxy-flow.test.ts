@@ -69,6 +69,8 @@ describe("Proxy client OAuth flow", () => {
     codeChallenge: string;
     state: string;
     scope?: string;
+    nonce?: string;
+    prompt?: string;
     loginHint?: string;
   }) => {
     const authorize = await handleAuthorize(
@@ -79,8 +81,10 @@ describe("Proxy client OAuth flow", () => {
         responseType: "code",
         scope: options.scope ?? "openid profile",
         state: options.state,
+        nonce: options.nonce,
         codeChallenge: options.codeChallenge,
         codeChallengeMethod: "S256",
+        prompt: options.prompt,
         sessionToken,
         loginHint: options.loginHint,
       },
@@ -149,6 +153,140 @@ describe("Proxy client OAuth flow", () => {
     await Promise.all(
       cleanupClientIds.map((id) => prisma.client.delete({ where: { id } }).catch(() => undefined)),
     );
+  });
+
+  it("logs provider redirect details with PKCE", async () => {
+    const codeVerifier = "verifier-redirect-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+    const codeChallenge = computeS256Challenge(codeVerifier);
+
+    const { authorize, transactionId } = await startProxyAuthorization({
+      clientId: proxyClientClientId,
+      redirectUri: "https://proxy-client.test/callback",
+      codeChallenge,
+      state: "redirect-pkce-state",
+      nonce: "redirect-nonce",
+      prompt: "login",
+      loginHint: "pkce@example.com",
+    });
+
+    const redirectLog = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        traceId: transactionId ?? undefined,
+        eventType: "PROXY_REDIRECT_OUT",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(redirectLog).not.toBeNull();
+    expect(redirectLog).toMatchObject({
+      clientId: proxyClientId,
+      traceId: transactionId,
+      eventType: "PROXY_REDIRECT_OUT",
+    });
+
+    const redirectDetails = redirectLog?.details as {
+      providerAuthorizationUrl?: string;
+      providerAuthorizationParams?: Record<string, string | string[]>;
+    };
+    expect(redirectDetails.providerAuthorizationUrl).toBe(authorize.redirectTo);
+
+    const authorizationParams = redirectDetails.providerAuthorizationParams ?? {};
+    expect(authorizationParams).toMatchObject({
+      client_id: "up-client",
+      redirect_uri: buildProxyCallbackUrl("https://mockauth.test", apiResourceId),
+      response_type: "code",
+      scope: "openid profile.read",
+      state: transactionId,
+      nonce: "redirect-nonce",
+      prompt: "login",
+      login_hint: "pkce@example.com",
+      code_challenge_method: "S256",
+    });
+    expect(authorizationParams.code_challenge).toEqual(expect.any(String));
+  });
+
+  it("logs provider redirect details without PKCE", async () => {
+    const noPkceClient = await prisma.client.create({
+      data: {
+        tenantId,
+        clientId: `proxy_nopkce_${randomUUID().slice(0, 8)}`,
+        name: "Proxy No PKCE Client",
+        clientType: "PUBLIC",
+        tokenEndpointAuthMethod: "none",
+        oauthClientMode: "proxy",
+        allowedScopes: ["openid", "profile"],
+        authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
+        redirectUris: {
+          create: [{ uri: "https://proxy-nopkce.test/callback", type: "EXACT" }],
+        },
+        proxyConfig: {
+          create: {
+            providerType: "oidc",
+            authorizationEndpoint: "https://upstream-nopkce.example.com/oauth2/authorize",
+            tokenEndpoint: "https://upstream-nopkce.example.com/oauth2/token",
+            upstreamClientId: "up-nopkce-client",
+            defaultScopes: ["openid", "email"],
+            scopeMapping: { profile: ["profile.read"] },
+            pkceSupported: false,
+            oidcEnabled: true,
+            promptPassthroughEnabled: true,
+            loginHintPassthroughEnabled: true,
+            passthroughTokenResponse: false,
+            upstreamTokenEndpointAuthMethod: "none",
+          },
+        },
+      },
+    });
+
+    cleanupClientIds.push(noPkceClient.id);
+
+    const codeVerifier = "verifier-nopkce-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+    const codeChallenge = computeS256Challenge(codeVerifier);
+
+    const { authorize, transactionId } = await startProxyAuthorization({
+      clientId: noPkceClient.clientId,
+      redirectUri: "https://proxy-nopkce.test/callback",
+      codeChallenge,
+      state: "redirect-nopkce-state",
+      prompt: "consent",
+      loginHint: "nopkce@example.com",
+    });
+
+    const redirectLog = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        traceId: transactionId ?? undefined,
+        eventType: "PROXY_REDIRECT_OUT",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(redirectLog).not.toBeNull();
+    expect(redirectLog).toMatchObject({
+      clientId: noPkceClient.id,
+      traceId: transactionId,
+      eventType: "PROXY_REDIRECT_OUT",
+    });
+
+    const redirectDetails = redirectLog?.details as {
+      providerAuthorizationUrl?: string;
+      providerAuthorizationParams?: Record<string, string | string[]>;
+    };
+    expect(redirectDetails.providerAuthorizationUrl).toBe(authorize.redirectTo);
+
+    const authorizationParams = redirectDetails.providerAuthorizationParams ?? {};
+    expect(authorizationParams).toMatchObject({
+      client_id: "up-nopkce-client",
+      redirect_uri: buildProxyCallbackUrl("https://mockauth.test", apiResourceId),
+      response_type: "code",
+      scope: "openid profile.read",
+      state: transactionId,
+      prompt: "consent",
+      login_hint: "nopkce@example.com",
+    });
+    expect(authorizationParams).not.toHaveProperty("code_challenge");
+    expect(authorizationParams).not.toHaveProperty("code_challenge_method");
   });
 
   it("brokers authorization_code and refresh_token flows", async () => {
