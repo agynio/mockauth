@@ -1,9 +1,12 @@
 import { randomUUID } from "crypto";
 
+import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { decrypt } from "@/server/crypto/key-vault";
 import {
+  changeClientType,
   createClient,
+  deleteClient,
   getClientByIdForTenant,
   rotateClientSecret,
   updateClientSigningAlgorithms,
@@ -24,6 +27,15 @@ const createTenant = async () => {
   });
   await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
   return tenant;
+};
+
+const createAdminUser = async () => {
+  return prisma.adminUser.create({
+    data: {
+      email: `client-test-${randomUUID()}@example.test`,
+      name: "Client Service Tester",
+    },
+  });
 };
 
 describe("client service", () => {
@@ -105,6 +117,51 @@ describe("client service", () => {
     expect(decrypt(updated?.clientSecretEncrypted as string)).toEqual(nextSecret);
   });
 
+  it("changes public clients to confidential", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Public Client",
+      clientType: "PUBLIC",
+    });
+
+    const result = await changeClientType(client.id, "CONFIDENTIAL");
+    expect(result.client.clientType).toBe("CONFIDENTIAL");
+    expect(result.clientSecret).toBeTruthy();
+
+    const stored = await prisma.client.findUnique({ where: { id: client.id } });
+    expect(stored?.clientSecretHash).toBeTruthy();
+    expect(stored?.clientSecretEncrypted).toBeTruthy();
+    expect(stored?.tokenEndpointAuthMethod).toBe("client_secret_basic");
+    expect(decrypt(stored?.clientSecretEncrypted as string)).toBe(result.clientSecret);
+  });
+
+  it("changes confidential clients to public", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Confidential Client",
+      clientType: "CONFIDENTIAL",
+    });
+
+    const result = await changeClientType(client.id, "PUBLIC");
+    expect(result.client.clientType).toBe("PUBLIC");
+    expect(result.clientSecret).toBeNull();
+
+    const stored = await prisma.client.findUnique({ where: { id: client.id } });
+    expect(stored?.clientSecretHash).toBeNull();
+    expect(stored?.clientSecretEncrypted).toBeNull();
+    expect(stored?.tokenEndpointAuthMethod).toBe("none");
+  });
+
+  it("rejects switching to the same client type", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Same Type",
+      clientType: "PUBLIC",
+    });
+
+    await expect(changeClientType(client.id, "PUBLIC")).rejects.toThrowError("Client is already public");
+  });
+
   it("updates signing algorithms with nullable defaults", async () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
@@ -123,5 +180,141 @@ describe("client service", () => {
     refreshed = await prisma.client.findUnique({ where: { id: client.id } });
     expect(refreshed?.idTokenSignedResponseAlg).toBeNull();
     expect(refreshed?.accessTokenSigningAlg).toBeNull();
+  });
+
+  it("deletes clients and cascades dependent records", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Cascade Client",
+      clientType: "CONFIDENTIAL",
+      redirectUris: ["https://cascade.example/callback"],
+      oauthClientMode: "proxy",
+      proxyConfig: {
+        providerType: "oidc",
+        authorizationEndpoint: "https://proxy.example/auth",
+        tokenEndpoint: "https://proxy.example/token",
+        upstreamClientId: "proxy-client",
+      },
+    });
+    const apiResource = await prisma.apiResource.findFirstOrThrow({ where: { tenantId: tenant.id } });
+    const admin = await createAdminUser();
+    const mockUser = await prisma.mockUser.create({
+      data: {
+        tenantId: tenant.id,
+        username: `user-${randomUUID()}`,
+        displayName: "Cascade User",
+      },
+    });
+
+    await prisma.oAuthTestSession.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        adminUserId: admin.id,
+        codeVerifier: "verifier",
+        redirectUri: "https://cascade.example/callback",
+        scopes: "openid",
+        nonce: "nonce",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      },
+    });
+
+    await prisma.authorizationCode.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        apiResourceId: apiResource.id,
+        userId: mockUser.id,
+        loginStrategy: $Enums.LoginStrategy.USERNAME,
+        subject: mockUser.username,
+        codeHash: randomUUID(),
+        redirectUri: "https://cascade.example/callback",
+        scope: "openid",
+        codeChallenge: "challenge",
+        codeChallengeMethod: "S256",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      },
+    });
+
+    await prisma.accessToken.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        apiResourceId: apiResource.id,
+        userId: mockUser.id,
+        jti: randomUUID(),
+        scope: "openid",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      },
+    });
+
+    const proxyAuth = await prisma.proxyAuthTransaction.create({
+      data: {
+        tenantId: tenant.id,
+        apiResourceId: apiResource.id,
+        clientId: client.id,
+        redirectUri: "https://cascade.example/callback",
+        appScope: "openid",
+        appCodeChallenge: "challenge",
+        providerScope: "openid",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      },
+    });
+
+    const proxyExchange = await prisma.proxyTokenExchange.create({
+      data: {
+        tenantId: tenant.id,
+        apiResourceId: apiResource.id,
+        clientId: client.id,
+        transactionId: proxyAuth.id,
+        providerResponseEncrypted: "encrypted-payload",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      },
+    });
+
+    await prisma.proxyAuthorizationCode.create({
+      data: {
+        tenantId: tenant.id,
+        apiResourceId: apiResource.id,
+        clientId: client.id,
+        codeHash: randomUUID(),
+        redirectUri: "https://cascade.example/callback",
+        scope: "openid",
+        codeChallenge: "challenge",
+        codeChallengeMethod: "S256",
+        expiresAt: new Date(Date.now() + 60 * 1000),
+        tokenExchangeId: proxyExchange.id,
+      },
+    });
+
+    const auditLog = await prisma.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        actorId: admin.id,
+        eventType: $Enums.AuditLogEventType.CONFIG_CHANGED,
+        severity: $Enums.AuditLogSeverity.INFO,
+        message: "Client updated",
+      },
+    });
+
+    await deleteClient(client.id);
+
+    const retainedLog = await prisma.auditLog.findUnique({ where: { id: auditLog.id } });
+    expect(await prisma.client.findUnique({ where: { id: client.id } })).toBeNull();
+    expect(retainedLog).not.toBeNull();
+    expect(retainedLog?.clientId).toBeNull();
+    expect(await prisma.redirectUri.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.oAuthTestSession.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.authorizationCode.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.accessToken.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.proxyProviderConfig.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.proxyAuthTransaction.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.proxyTokenExchange.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.proxyAuthorizationCode.count({ where: { clientId: client.id } })).toBe(0);
+  });
+
+  it("throws when deleting unknown clients", async () => {
+    await expect(deleteClient("missing-client")).rejects.toThrowError("Client not found");
   });
 });

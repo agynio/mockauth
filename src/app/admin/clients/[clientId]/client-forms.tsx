@@ -9,6 +9,7 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import {
   addRedirectUriAction,
+  changeClientTypeAction,
   deleteRedirectUriAction,
   rotateClientSecretAction,
   updateClientAuthStrategiesAction,
@@ -26,6 +27,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { RHFSelectField } from "@/components/rhf/rhf-select-field";
@@ -577,6 +588,82 @@ export function RotateSecretForm({ clientId, canRotate }: { clientId: string; ca
       <Button type="button" variant="secondary" onClick={rotate} disabled={pending} className="w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Rotate secret"}
       </Button>
+    </div>
+  );
+}
+
+export function ChangeClientTypeForm({
+  clientId,
+  clientType,
+  canEdit,
+}: {
+  clientId: string;
+  clientType: "PUBLIC" | "CONFIDENTIAL";
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [isDialogOpen, setDialogOpen] = useState(false);
+  const { toast } = useToast();
+
+  const nextType = clientType === "PUBLIC" ? "CONFIDENTIAL" : "PUBLIC";
+  const currentLabel = clientType === "PUBLIC" ? "public" : "confidential";
+  const nextLabel = nextType === "PUBLIC" ? "public" : "confidential";
+  const dialogDescription =
+    nextType === "CONFIDENTIAL"
+      ? "A new client secret will be generated and required for token requests."
+      : "The existing client secret will be removed and the token endpoint will be set to none.";
+
+  const handleSwitch = () => {
+    startTransition(async () => {
+      const result = await changeClientTypeAction({ clientId, newType: nextType });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      setClientSecret(result.data?.clientSecret ?? null);
+      setDialogOpen(false);
+      router.refresh();
+      toast({
+        title: "Client type updated",
+        description:
+          nextType === "CONFIDENTIAL"
+            ? "Copy the new client secret immediately."
+            : "Client secrets are no longer required.",
+      });
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {clientSecret ? (
+        <CopyField label="New client secret" value={clientSecret} description="Secret is shown once. Store securely." />
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-xs uppercase text-muted-foreground">Current type</p>
+          <Badge variant={clientType === "CONFIDENTIAL" ? "default" : "secondary"}>{currentLabel}</Badge>
+        </div>
+        <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)} disabled={!canEdit || pending}>
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Switch to ${nextLabel}`}
+        </Button>
+      </div>
+      {!canEdit ? <p className="text-xs text-muted-foreground">Only owners or writers can change client types.</p> : null}
+      <AlertDialog open={isDialogOpen} onOpenChange={setDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch to {nextLabel}?</AlertDialogTitle>
+            <AlertDialogDescription>{dialogDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSwitch} disabled={pending}>
+              Switch to {nextLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
