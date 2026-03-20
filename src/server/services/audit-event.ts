@@ -145,6 +145,7 @@ export type TokenAuthCodeReceivedDetails = {
   authorizationCode?: string;
   includeAuthHeader?: boolean;
   diagnostics?: ProxyFlowDiagnostics;
+  upstreamCall?: boolean;
 };
 
 export type TokenRefreshReceivedDetails = {

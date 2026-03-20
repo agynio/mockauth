@@ -22,7 +22,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { RHFSelectField, type RHFSelectOption } from "@/components/rhf/rhf-select-field";
+import { RHFSelectField } from "@/components/rhf/rhf-select-field";
+import {
+  PROXY_TOKEN_AUTH_OPTIONS,
+  getProxyTokenAuthDescription,
+} from "@/app/admin/clients/proxy-auth-options";
 
 const scopeMappingSchema = z.object({
   appScope: z.string().optional(),
@@ -325,21 +329,10 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
 
   const watchMode = useWatch({ control: form.control, name: "mode" });
   const watchTokenEndpoint = useWatch({ control: form.control, name: "proxyConfig.tokenEndpoint", defaultValue: "" });
-  const isLinkedInEndpoint = useMemo(() => {
-    if (!watchTokenEndpoint) {
-      return false;
-    }
-    const trimmed = watchTokenEndpoint.trim();
-    if (!trimmed) {
-      return false;
-    }
-    try {
-      const hostname = new URL(trimmed).hostname.toLowerCase();
-      return hostname === "linkedin.com" || hostname.endsWith(".linkedin.com");
-    } catch {
-      return false;
-    }
-  }, [watchTokenEndpoint]);
+  const tokenAuthDescription = useMemo(
+    () => getProxyTokenAuthDescription(watchTokenEndpoint ?? undefined),
+    [watchTokenEndpoint],
+  );
   const { getValues, setValue } = form;
 
   useEffect(() => {
@@ -382,24 +375,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
     }
   }, [watchMode, getValues, setValue]);
 
-  const tokenAuthOptions: RHFSelectOption<"client_secret_basic" | "client_secret_post" | "none">[] = [
-    {
-      value: "client_secret_basic",
-      label: "HTTP Basic (client_secret_basic)",
-    },
-    {
-      value: "client_secret_post",
-      label: "POST body (client_secret_post)",
-    },
-    {
-      value: "none",
-      label: "Public client (none)",
-    },
-  ];
-
-  const tokenAuthDescription = isLinkedInEndpoint
-    ? "LinkedIn commonly expects client_secret_post. Choose POST body if LinkedIn rejects HTTP Basic."
-    : "Determines how MockAuth authenticates to the upstream token endpoint.";
+  const tokenAuthOptions = PROXY_TOKEN_AUTH_OPTIONS;
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {

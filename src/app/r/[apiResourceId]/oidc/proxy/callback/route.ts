@@ -7,6 +7,7 @@ import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
 import { buildRequestContext } from "@/server/utils/request-context";
+import { searchParamsToRecord } from "@/server/utils/search-params";
 
 const callbackSchema = z.object({
   state: z.string().min(1),
@@ -14,15 +15,6 @@ const callbackSchema = z.object({
   error: z.string().optional(),
   error_description: z.string().optional(),
 });
-
-const searchParamsToRecord = (params: URLSearchParams): Record<string, string | string[]> => {
-  const record: Record<string, string | string[]> = {};
-  for (const key of new Set(Array.from(params.keys()))) {
-    const values = params.getAll(key);
-    record[key] = values.length === 1 ? values[0] : values;
-  }
-  return record;
-};
 
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
   const normalizedUrl = resolveUrl(request);

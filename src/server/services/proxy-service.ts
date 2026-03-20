@@ -241,8 +241,9 @@ export const requestProviderTokens = async (
   };
 
   const params = new URLSearchParams(body);
-  const trimmedClientId = config.upstreamClientId.trim();
-  params.set("client_id", trimmedClientId);
+  const rawClientId = config.upstreamClientId;
+  const normalizedClientId = rawClientId.trim();
+  params.set("client_id", normalizedClientId);
 
   const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
   let authorization: string | null = null;
@@ -263,7 +264,7 @@ export const requestProviderTokens = async (
 
   if (authMethod === "client_secret_basic") {
     const secret = readUpstreamSecret("client_secret_basic");
-    authorization = `Basic ${Buffer.from(`${trimmedClientId}:${secret}`).toString("base64")}`;
+    authorization = `Basic ${Buffer.from(`${normalizedClientId}:${secret}`).toString("base64")}`;
   } else if (authMethod === "client_secret_post") {
     const secret = readUpstreamSecret("client_secret_post");
     params.set("client_secret", secret);
@@ -277,21 +278,20 @@ export const requestProviderTokens = async (
   const includesCode = params.has("code");
   const includesRefreshToken = params.has("refresh_token");
 
-  console.debug("proxy_provider_token_request", {
-    provider: config.providerType,
-    authMethod,
-    includeAuthHeader,
-    includeClientSecretInBody,
-    clientId: trimmedClientId,
-    hasClientId,
-    grantType,
-    includesRedirectUri,
-    includesCode,
-    includesRefreshToken,
-  });
-
   const requestHeaders = authorization ? { ...headers, authorization } : { ...headers };
   const requestBody = params.toString();
+  const recordedHeaders = { ...requestHeaders };
+  if (recordedHeaders.authorization) {
+    recordedHeaders.authorization = "[redacted]";
+  }
+  const recordedBodyParams = new URLSearchParams(requestBody);
+  if (recordedBodyParams.has("client_secret")) {
+    recordedBodyParams.set("client_secret", "[redacted]");
+  }
+  if (recordedBodyParams.has("client_id")) {
+    recordedBodyParams.set("client_id", normalizedClientId);
+  }
+  const recordedBody = recordedBodyParams.toString();
 
   const response = await fetch(config.tokenEndpoint, {
     method: "POST",
@@ -323,9 +323,9 @@ export const requestProviderTokens = async (
     headers: Object.fromEntries(response.headers.entries()),
     request: {
       url: config.tokenEndpoint,
-      headers: requestHeaders,
+      headers: recordedHeaders,
       contentType: headers["content-type"],
-      body: requestBody,
+      body: recordedBody,
     },
   };
 };

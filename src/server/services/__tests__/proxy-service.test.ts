@@ -108,9 +108,7 @@ describe("requestProviderTokens", () => {
           upstreamTokenEndpointAuthMethod: method,
           upstreamClientSecretEncrypted: method === "none" ? null : encrypt("secret"),
         });
-        const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
-
-        await requestProviderTokens(config, body);
+        const result = await requestProviderTokens(config, body);
 
         expect(fetchSpy).toHaveBeenCalledTimes(1);
         const [, init] = fetchSpy.mock.calls[0];
@@ -129,21 +127,22 @@ describe("requestProviderTokens", () => {
           expect(params.has("client_secret")).toBe(false);
         }
 
-        expect(debugSpy).toHaveBeenCalledTimes(1);
-        const debugCall = debugSpy.mock.calls[0];
-        expect(debugCall[0]).toBe("proxy_provider_token_request");
-        expect(debugCall[1]).toMatchObject({
-          provider: config.providerType,
-          authMethod: method,
-          includeAuthHeader: usesAuthorization,
-          includeClientSecretInBody: params.has("client_secret"),
-          clientId: config.upstreamClientId.trim(),
-          hasClientId: params.has("client_id"),
-          grantType: params.get("grant_type"),
-          includesRedirectUri: params.has("redirect_uri"),
-          includesCode: params.has("code"),
-          includesRefreshToken: params.has("refresh_token"),
-        });
+        const recordedRequest = result.request;
+        const recordedParams = toParams(recordedRequest.body);
+        const recordedAuthorization = recordedRequest.headers.authorization;
+
+        if (usesAuthorization) {
+          expect(recordedAuthorization).toBe("[redacted]");
+        } else {
+          expect(recordedAuthorization).toBeUndefined();
+        }
+
+        expect(recordedParams.get("client_id")).toBe("up-client");
+        if (method === "client_secret_post") {
+          expect(recordedParams.get("client_secret")).toBe("[redacted]");
+        } else {
+          expect(recordedParams.has("client_secret")).toBe(false);
+        }
       },
     );
   });
@@ -166,14 +165,13 @@ describe("requestProviderTokens", () => {
 
   it("trims upstream credentials for client_secret_basic", async () => {
     const fetchSpy = mockFetch();
-    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const config = buildConfig({
       upstreamClientId: "  up-client  \n",
       upstreamClientSecretEncrypted: encrypt("  secret  \n"),
       upstreamTokenEndpointAuthMethod: "client_secret_basic",
     });
 
-    await requestProviderTokens(config, grantBodies.authorization_code);
+    const result = await requestProviderTokens(config, grantBodies.authorization_code);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0];
@@ -185,22 +183,19 @@ describe("requestProviderTokens", () => {
     const params = toParams(init?.body);
     expect(params.get("client_id")).toBe("up-client");
 
-    expect(debugSpy).toHaveBeenCalledWith(
-      "proxy_provider_token_request",
-      expect.objectContaining({ clientId: "up-client" }),
-    );
+    const recordedParams = toParams(result.request.body);
+    expect(recordedParams.get("client_id")).toBe("up-client");
   });
 
   it("trims upstream credentials for client_secret_post", async () => {
     const fetchSpy = mockFetch();
-    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const config = buildConfig({
       upstreamClientId: " \tup-client  \n",
       upstreamClientSecretEncrypted: encrypt(" \nsecret\t"),
       upstreamTokenEndpointAuthMethod: "client_secret_post",
     });
 
-    await requestProviderTokens(config, grantBodies.refresh_token);
+    const result = await requestProviderTokens(config, grantBodies.refresh_token);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0];
@@ -209,9 +204,8 @@ describe("requestProviderTokens", () => {
     expect(params.get("client_id")).toBe("up-client");
     expect(params.get("client_secret")).toBe("secret");
 
-    expect(debugSpy).toHaveBeenCalledWith(
-      "proxy_provider_token_request",
-      expect.objectContaining({ clientId: "up-client" }),
-    );
+    const recordedParams = toParams(result.request.body);
+    expect(recordedParams.get("client_id")).toBe("up-client");
+    expect(recordedParams.get("client_secret")).toBe("[redacted]");
   });
 });
