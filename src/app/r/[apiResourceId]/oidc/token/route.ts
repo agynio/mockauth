@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { toResponse } from "@/server/errors";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
+import { preflightResponse, withCorsHeaders } from "@/server/http/cors";
 import { issueTokensFromCode } from "@/server/services/token-service";
 import { resolveOrigin, resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
@@ -50,7 +51,7 @@ const parseBasicAuth = (header: string | null) => {
   return { clientId: id, clientSecret: secret };
 };
 
-export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
+const handleTokenRequest = async (request: NextRequest, context: ApiResourceRouteContext): Promise<Response> => {
   const formEntries = Array.from((await request.clone().formData()).entries(), ([key, value]) => [
     key,
     typeof value === "string" ? value : value.name,
@@ -190,4 +191,13 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
   } catch (error) {
     return toResponse(error);
   }
+};
+
+export function OPTIONS(request: Request) {
+  return preflightResponse(request);
+}
+
+export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
+  const response = await handleTokenRequest(request, context);
+  return withCorsHeaders(response, request);
 }
