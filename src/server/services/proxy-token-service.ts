@@ -3,7 +3,7 @@ import { URLSearchParams } from "node:url";
 import { DomainError } from "@/server/errors";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
-import { normalizeTokenAuthMethods } from "@/server/oidc/token-auth-method";
+import { resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import {
   isProxyAuthorizationCode,
   consumeProxyAuthorizationCode,
@@ -53,9 +53,6 @@ type ProxyTokenAuditContext = {
   requestParams?: Record<string, string | string[]>;
   request?: ProxyFlowRequestDetails | null;
 };
-
-const resolveUpstreamAuthMethod = (method: string | null | undefined): TokenAuthMethod =>
-  normalizeTokenAuthMethods(method ? [method] : undefined)[0];
 
 export const isProxyCode = isProxyAuthorizationCode;
 

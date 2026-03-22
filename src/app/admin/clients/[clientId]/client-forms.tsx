@@ -21,6 +21,12 @@ import {
   updateProxyClientConfigAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
+import {
+  GRANT_TYPE_LABELS,
+  TOKEN_AUTH_METHOD_LABELS,
+  grantTypeOptions,
+  tokenAuthMethodOptions,
+} from "@/app/admin/clients/_constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,8 +72,6 @@ const authStrategiesSchema = z
     message: "Enable at least one strategy",
     path: ["root"],
   });
-const tokenAuthMethodOptions = ["client_secret_basic", "client_secret_post", "none"] as const;
-const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
 const tokenConfigSchema = z.object({
   tokenEndpointAuthMethods: z
     .array(z.enum(tokenAuthMethodOptions))
@@ -77,34 +81,6 @@ const tokenConfigSchema = z.object({
     .array(z.enum(grantTypeOptions))
     .min(1, "Select at least one grant type"),
 });
-const TOKEN_AUTH_METHOD_LABELS: Record<(typeof tokenAuthMethodOptions)[number], { title: string; description: string }> = {
-  client_secret_basic: {
-    title: "Client secret (basic)",
-    description: "Authenticate using HTTP basic auth at the token endpoint.",
-  },
-  client_secret_post: {
-    title: "Client secret (post)",
-    description: "Send client_id and client_secret in the request body.",
-  },
-  none: {
-    title: "None",
-    description: "Public client without a secret.",
-  },
-};
-const GRANT_TYPE_LABELS: Record<(typeof grantTypeOptions)[number], { title: string; description: string }> = {
-  authorization_code: {
-    title: "Authorization code",
-    description: "Standard redirect-based flow.",
-  },
-  password: {
-    title: "Resource owner password",
-    description: "Exchange username/password directly.",
-  },
-  refresh_token: {
-    title: "Refresh token",
-    description: "Allow refresh_token grants (proxy clients only).",
-  },
-};
 const MAX_REAUTH_TTL_SECONDS = 86400;
 const reauthTtlSchema = z.object({
   reauthTtlSeconds: z.coerce

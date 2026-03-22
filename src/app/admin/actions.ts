@@ -67,7 +67,7 @@ import { DomainError } from "@/server/errors";
 import {
   TOKEN_AUTH_METHODS,
   isTokenAuthMethod,
-  normalizeTokenAuthMethods,
+  parseTokenAuthMethods,
   requiresClientSecret,
 } from "@/server/oidc/token-auth-method";
 
@@ -626,7 +626,7 @@ export const rotateClientSecretAction = async (
     if (!client) {
       return { error: "Client not found" };
     }
-    const tokenAuthMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+    const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
     if (!requiresClientSecret(tokenAuthMethods)) {
       return { error: "Client does not require a secret" };
     }
@@ -665,8 +665,8 @@ export const updateClientTokenConfigAction = async (
       pkceRequired: parsed.pkceRequired,
       allowedGrantTypes: parsed.allowedGrantTypes,
     });
-    const authMethodsBefore = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
-    const authMethodsAfter = normalizeTokenAuthMethods(updated.tokenEndpointAuthMethods);
+    const authMethodsBefore = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+    const authMethodsAfter = parseTokenAuthMethods(updated.tokenEndpointAuthMethods);
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
     void emitConfigChange({
@@ -831,7 +831,7 @@ export const prepareClientOauthTestAction = async (
 
     await assertTenantMembership(adminId, client.tenantId);
 
-    const tokenAuthMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+    const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
 
     const clearedStates = await resetOauthTestSessionsForClient(client.id, adminId);
     if (clearedStates.length && requiresClientSecret(tokenAuthMethods)) {
@@ -855,7 +855,7 @@ export const prepareClientOauthTestAction = async (
     }
 
     const tokenAuthMethod = tokenAuthMethods[0];
-    const requiresSecret = tokenAuthMethod !== "none";
+    const requiresSecret = requiresClientSecret(tokenAuthMethods);
     const submittedSecretProvided = typeof parsed.clientSecret === "string";
     const submittedSecret = requiresSecret && submittedSecretProvided ? parsed.clientSecret?.trim() || null : null;
     const storedSecret = requiresSecret ? await getClientSecret(client.id) : null;

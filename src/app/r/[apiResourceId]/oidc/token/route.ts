@@ -29,7 +29,7 @@ const authorizationCodeSchema = z.object({
 const passwordSchema = z.object({
   grant_type: z.literal("password"),
   username: z.string().min(1),
-  password: z.string().min(1),
+  password: z.string().optional(),
   scope: z.string().min(1),
   client_id: z.string().optional(),
   client_secret: z.string().optional(),

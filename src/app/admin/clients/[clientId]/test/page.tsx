@@ -10,7 +10,7 @@ import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant, getClientSecret } from "@/server/services/client-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
-import { normalizeTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
+import { parseTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -47,7 +47,7 @@ export default async function ClientTestOAuthPage({ params }: { params: PagePara
 
   const viewerRole = activeMembership?.role ?? "READER";
   const canManageRedirects = viewerRole === "OWNER" || viewerRole === "WRITER";
-  const tokenAuthMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
   const requiresClientSecretForTest = requiresClientSecret(tokenAuthMethods);
   const defaultClientSecret = requiresClientSecretForTest ? await getClientSecret(client.id) : null;
 

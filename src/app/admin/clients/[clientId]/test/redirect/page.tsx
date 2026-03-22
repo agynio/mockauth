@@ -13,7 +13,7 @@ import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { consumeOauthTestSession } from "@/server/services/oauth-test-service";
 import { readOauthTestSecretCookie } from "@/server/oauth/test-cookie";
-import { normalizeTokenAuthMethods } from "@/server/oidc/token-auth-method";
+import { parseTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -78,8 +78,9 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
     notFound();
   }
 
-  const tokenAuthMethod = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods)[0];
-  const requiresSecret = tokenAuthMethod !== "none";
+  const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const tokenAuthMethod = tokenAuthMethods[0];
+  const requiresSecret = requiresClientSecret(tokenAuthMethods);
 
   const origin = await getRequestOrigin();
   const resourceId = client.apiResourceId ?? activeTenant.defaultApiResourceId;

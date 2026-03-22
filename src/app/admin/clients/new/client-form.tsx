@@ -9,6 +9,12 @@ import type { ZodIssue } from "zod";
 
 import { createClientAction } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
+import {
+  GRANT_TYPE_LABELS,
+  TOKEN_AUTH_METHOD_LABELS,
+  grantTypeOptions,
+  tokenAuthMethodOptions,
+} from "@/app/admin/clients/_constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -40,39 +46,6 @@ const proxyConfigSchema = z.object({
   loginHintPassthroughEnabled: z.boolean().default(false),
   passthroughTokenResponse: z.boolean().default(false),
 });
-
-const tokenAuthMethodOptions = ["client_secret_basic", "client_secret_post", "none"] as const;
-const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
-
-const TOKEN_AUTH_METHOD_LABELS: Record<(typeof tokenAuthMethodOptions)[number], { title: string; description: string }> = {
-  client_secret_basic: {
-    title: "Client secret (basic)",
-    description: "Authenticate with HTTP basic auth at the token endpoint.",
-  },
-  client_secret_post: {
-    title: "Client secret (post)",
-    description: "Send client_id/client_secret in the token request body.",
-  },
-  none: {
-    title: "None",
-    description: "Public client without a secret.",
-  },
-};
-
-const GRANT_TYPE_LABELS: Record<(typeof grantTypeOptions)[number], { title: string; description: string }> = {
-  authorization_code: {
-    title: "Authorization code",
-    description: "Standard redirect-based flow.",
-  },
-  password: {
-    title: "Resource owner password",
-    description: "Exchange username/password directly.",
-  },
-  refresh_token: {
-    title: "Refresh token",
-    description: "Allow refresh_token grants for proxy clients.",
-  },
-};
 
 const formSchema = z
   .object({

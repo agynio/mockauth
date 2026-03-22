@@ -15,10 +15,7 @@ import { ensureActiveKeyForAlg } from "@/server/services/key-service";
 import type { ClientAuthStrategy } from "@/server/oidc/auth-strategy";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { normalizeScopes } from "@/server/oidc/scopes";
-import {
-  normalizeTokenAuthMethods,
-  type TokenAuthMethod,
-} from "@/server/oidc/token-auth-method";
+import { parseTokenAuthMethods, type TokenAuthMethod } from "@/server/oidc/token-auth-method";
 import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import {
@@ -60,7 +57,7 @@ export const assertClientAuth = async (
   authMethod: TokenAuthMethod,
   provided?: string | null,
 ) => {
-  const allowedMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const allowedMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
   if (!allowedMethods.includes(authMethod)) {
     throw new SecurityViolationError(
       "Client authentication method not allowed",
@@ -271,7 +268,7 @@ export const issueTokensFromCode = async (params: {
 }) => {
   const { code, codeVerifier, redirectUri, clientSecret, origin, authorizationCode, auditContext } = params;
   const traceId = code.traceId ?? null;
-  const allowedMethods = normalizeTokenAuthMethods(code.client.tokenEndpointAuthMethods);
+  const allowedMethods = parseTokenAuthMethods(code.client.tokenEndpointAuthMethods);
   const authMethod = auditContext?.authMethod ?? allowedMethods[0];
   const violationContext = {
     tenantId: code.tenantId,

@@ -12,7 +12,7 @@ import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import {
   TOKEN_AUTH_METHODS,
-  normalizeTokenAuthMethods,
+  parseTokenAuthMethods,
   requiresClientSecret,
   type TokenAuthMethod,
 } from "@/server/oidc/token-auth-method";
@@ -113,7 +113,7 @@ export const createClient = async (
   tenantId: string,
   data: {
     name: string;
-    tokenEndpointAuthMethods?: TokenAuthMethod[];
+    tokenEndpointAuthMethods: TokenAuthMethod[];
     pkceRequired?: boolean;
     allowedGrantTypes?: string[];
     redirectUris?: string[];
@@ -127,7 +127,7 @@ export const createClient = async (
   let clientSecretHash: string | null = null;
   let clientSecretEncrypted: string | null = null;
   const allowedScopes = canonicalizeAllowedScopes(data.allowedScopes);
-  const tokenEndpointAuthMethods = normalizeTokenAuthMethods(data.tokenEndpointAuthMethods);
+  const tokenEndpointAuthMethods = parseTokenAuthMethods(data.tokenEndpointAuthMethods);
   const allowedGrantTypes = data.allowedGrantTypes ? normalizeAllowedGrantTypes(data.allowedGrantTypes) : undefined;
   const mode = data.oauthClientMode ?? "regular";
 
@@ -283,7 +283,7 @@ export const rotateClientSecret = async (clientId: string) => {
   if (!client) {
     throw new DomainError("Client not found", { status: 404 });
   }
-  const tokenEndpointAuthMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const tokenEndpointAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
   if (!requiresClientSecret(tokenEndpointAuthMethods)) {
     throw new DomainError("Client does not require a secret", { status: 400 });
   }
@@ -305,7 +305,7 @@ export const updateClientTokenConfig = async (input: {
   pkceRequired: boolean;
   allowedGrantTypes: string[];
 }): Promise<{ client: Awaited<ReturnType<typeof prisma.client.update>>; clientSecret: string | null }> => {
-  const tokenEndpointAuthMethods = normalizeTokenAuthMethods(input.tokenEndpointAuthMethods);
+  const tokenEndpointAuthMethods = parseTokenAuthMethods(input.tokenEndpointAuthMethods);
   const allowedGrantTypes = normalizeAllowedGrantTypes(input.allowedGrantTypes);
   const needsSecret = requiresClientSecret(tokenEndpointAuthMethods);
 

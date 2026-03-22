@@ -30,7 +30,7 @@ import { listApiResources } from "@/server/services/api-resource-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
-import { normalizeTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
+import { parseTokenAuthMethods, requiresClientSecret, resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import { decrypt } from "@/server/crypto/key-vault";
 
 type PageParams = Promise<{ clientId: string }>;
@@ -68,7 +68,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     .filter((resource) => resource.id !== defaultResourceId)
     .map((resource) => ({ id: resource.id, label: resource.name }));
   const authStrategies = parseClientAuthStrategies(client.authStrategies);
-  const tokenAuthMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
   const allowedGrantTypes = grantTypeOptions.filter((grantType) => client.allowedGrantTypes.includes(grantType));
   if (allowedGrantTypes.length === 0) {
     throw new Error("Client missing allowed grant types");
@@ -106,11 +106,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     if (client.oauthClientMode !== "proxy" || !client.proxyConfig) {
       return null;
     }
-    const upstreamAuthMethod = client.proxyConfig.upstreamTokenEndpointAuthMethod;
-    if (!upstreamAuthMethod) {
-      throw new Error("Proxy client missing upstream token auth method");
-    }
-    const normalizedUpstreamAuthMethod = normalizeTokenAuthMethods([upstreamAuthMethod])[0];
+    const normalizedUpstreamAuthMethod = resolveUpstreamAuthMethod(
+      client.proxyConfig.upstreamTokenEndpointAuthMethod,
+    );
     const rawMapping = client.proxyConfig.scopeMapping as unknown;
     const parsedMapping: Record<string, string[]> = {};
     if (rawMapping && typeof rawMapping === "object" && !Array.isArray(rawMapping)) {
