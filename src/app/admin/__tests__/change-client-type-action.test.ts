@@ -36,8 +36,8 @@ vi.mock("@/server/services/client-service", async () => {
     updateClientReauthTtl: vi.fn(),
     updateClientAllowedScopes: vi.fn(),
     updateClientSigningAlgorithms: vi.fn(),
-    getConfidentialClientSecret: vi.fn(),
-    changeClientType: vi.fn(),
+    getClientSecret: vi.fn(),
+    updateClientTokenConfig: vi.fn(),
     deleteClient: vi.fn(),
   };
 });
@@ -53,21 +53,21 @@ vi.mock("@/server/db/client", () => ({
   },
 }));
 
-import { changeClientTypeAction } from "../actions";
+import { updateClientTokenConfigAction } from "../actions";
 import { getServerSession } from "next-auth";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/server/db/client";
 import { assertTenantMembership } from "@/server/services/tenant-service";
-import { changeClientType } from "@/server/services/client-service";
+import { updateClientTokenConfig } from "@/server/services/client-service";
 import { DomainError } from "@/server/errors";
 
 const mockSession = vi.mocked(getServerSession);
 const mockRevalidate = vi.mocked(revalidatePath);
 const mockFindClient = vi.mocked(prisma.client.findUnique);
 const mockAssertMembership = vi.mocked(assertTenantMembership);
-const mockChangeClientType = vi.mocked(changeClientType);
+const mockUpdateTokenConfig = vi.mocked(updateClientTokenConfig);
 
-describe("changeClientTypeAction", () => {
+describe("updateClientTokenConfigAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSession.mockResolvedValue({ user: { id: "admin_1" } } as never);
@@ -76,67 +76,97 @@ describe("changeClientTypeAction", () => {
       id: "client_internal",
       tenantId: "tenant_1",
       name: "Public App",
-      clientType: "PUBLIC",
       oauthClientMode: "regular",
-      tokenEndpointAuthMethod: "none",
+      tokenEndpointAuthMethods: ["none"],
+      pkceRequired: true,
     } as never);
-    mockChangeClientType.mockResolvedValue({
+    mockUpdateTokenConfig.mockResolvedValue({
       client: {
         id: "client_internal",
         tenantId: "tenant_1",
-        tokenEndpointAuthMethod: "client_secret_basic",
+        tokenEndpointAuthMethods: ["client_secret_basic"],
       },
       clientSecret: "new-secret",
     } as never);
   });
 
-  it("switches public clients to confidential and returns a secret", async () => {
-    const result = await changeClientTypeAction({ clientId: "client_internal", newType: "CONFIDENTIAL" });
+  it("adds secret auth methods and returns a secret", async () => {
+    const result = await updateClientTokenConfigAction({
+      clientId: "client_internal",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
 
-    expect(result).toEqual({ success: "Client type updated", data: { clientSecret: "new-secret" } });
-    expect(mockChangeClientType).toHaveBeenCalledWith("client_internal", "CONFIDENTIAL");
+    expect(result).toEqual({ success: "Client token settings updated", data: { clientSecret: "new-secret" } });
+    expect(mockUpdateTokenConfig).toHaveBeenCalledWith({
+      clientId: "client_internal",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
     expect(mockRevalidate).toHaveBeenCalledWith("/admin/clients/client_internal");
     expect(mockRevalidate).toHaveBeenCalledWith("/admin/clients");
   });
 
-  it("switches confidential clients to public without a secret", async () => {
+  it("removes secrets when switching to none auth", async () => {
     mockFindClient.mockResolvedValueOnce({
       id: "client_internal",
       tenantId: "tenant_1",
       name: "Confidential App",
-      clientType: "CONFIDENTIAL",
       oauthClientMode: "regular",
-      tokenEndpointAuthMethod: "client_secret_basic",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
     } as never);
-    mockChangeClientType.mockResolvedValueOnce({
+    mockUpdateTokenConfig.mockResolvedValueOnce({
       client: {
         id: "client_internal",
         tenantId: "tenant_1",
-        tokenEndpointAuthMethod: "none",
+        tokenEndpointAuthMethods: ["none"],
       },
       clientSecret: null,
     } as never);
 
-    const result = await changeClientTypeAction({ clientId: "client_internal", newType: "PUBLIC" });
+    const result = await updateClientTokenConfigAction({
+      clientId: "client_internal",
+      tokenEndpointAuthMethods: ["none"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
 
-    expect(result).toEqual({ success: "Client type updated" });
-    expect(mockChangeClientType).toHaveBeenCalledWith("client_internal", "PUBLIC");
+    expect(result).toEqual({ success: "Client token settings updated" });
+    expect(mockUpdateTokenConfig).toHaveBeenCalledWith({
+      clientId: "client_internal",
+      tokenEndpointAuthMethods: ["none"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
   });
 
   it("returns an error when the client is missing", async () => {
     mockFindClient.mockResolvedValueOnce(null as never);
 
-    const result = await changeClientTypeAction({ clientId: "missing", newType: "PUBLIC" });
+    const result = await updateClientTokenConfigAction({
+      clientId: "missing",
+      tokenEndpointAuthMethods: ["none"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
 
     expect(result).toEqual({ error: "Client not found" });
-    expect(mockChangeClientType).not.toHaveBeenCalled();
+    expect(mockUpdateTokenConfig).not.toHaveBeenCalled();
   });
 
-  it("surfaces same-type errors from the service", async () => {
-    mockChangeClientType.mockRejectedValueOnce(new DomainError("Client is already public"));
+  it("surfaces token config errors from the service", async () => {
+    mockUpdateTokenConfig.mockRejectedValueOnce(new DomainError("At least one token auth method is required"));
 
-    const result = await changeClientTypeAction({ clientId: "client_internal", newType: "PUBLIC" });
+    const result = await updateClientTokenConfigAction({
+      clientId: "client_internal",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
 
-    expect(result).toEqual({ error: "Client is already public" });
+    expect(result).toEqual({ error: "At least one token auth method is required" });
   });
 });

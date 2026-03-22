@@ -157,7 +157,9 @@ describe("NewClientForm proxy mode", () => {
     expect(mockCreateClientAction).toHaveBeenCalledWith({
       tenantId: "tenant_123",
       name: "Proxy Demo",
-      type: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
       redirects: ["https://client.example.test/callback"],
       mode: "proxy",
       proxyConfig: {

@@ -14,6 +14,7 @@ import {
   type ProxyFlowResponseDetails,
 } from "@/server/services/audit-event";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
+import { normalizeTokenAuthMethods } from "@/server/oidc/token-auth-method";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import {
   getProxyAuthTransaction,
@@ -38,6 +39,9 @@ type ProxyCallbackParams = {
   callbackRequest: ProxyFlowRequestDetails;
   callbackParams: Record<string, string | string[]>;
 };
+
+const resolveUpstreamAuthMethod = (method: string | null | undefined) =>
+  normalizeTokenAuthMethods(method ? [method] : undefined)[0];
 
 type ProxyCallbackResult = {
   redirectTo: string;
@@ -225,7 +229,7 @@ export const handleProxyCallback = async (params: ProxyCallbackParams): Promise<
 
   exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
     tokenEndpoint: config.tokenEndpoint,
-    authMethod: config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+    authMethod: resolveUpstreamAuthMethod(config.upstreamTokenEndpointAuthMethod),
     clientId: config.upstreamClientId,
     grantType: "authorization_code",
     redirectUri: callbackUrl,

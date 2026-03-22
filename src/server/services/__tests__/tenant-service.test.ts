@@ -22,7 +22,7 @@ describe("tenant service", () => {
     const tenant = await createTenant(admin.id, { name: `Tenant Cascade ${randomUUID()}` });
     const { client } = await createClient(tenant.id, {
       name: "Cascade Client",
-      clientType: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
       redirectUris: ["https://cascade.example/callback"],
     });
     const apiResource = await prisma.apiResource.findFirstOrThrow({ where: { tenantId: tenant.id } });

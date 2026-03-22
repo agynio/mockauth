@@ -9,10 +9,10 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import {
   addRedirectUriAction,
-  changeClientTypeAction,
   deleteRedirectUriAction,
   rotateClientSecretAction,
   updateClientAuthStrategiesAction,
+  updateClientTokenConfigAction,
   updateClientScopesAction,
   updateClientIssuerAction,
   updateClientNameAction,
@@ -27,16 +27,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { RHFSelectField } from "@/components/rhf/rhf-select-field";
@@ -76,6 +66,45 @@ const authStrategiesSchema = z
     message: "Enable at least one strategy",
     path: ["root"],
   });
+const tokenAuthMethodOptions = ["client_secret_basic", "client_secret_post", "none"] as const;
+const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
+const tokenConfigSchema = z.object({
+  tokenEndpointAuthMethods: z
+    .array(z.enum(tokenAuthMethodOptions))
+    .min(1, "Select at least one token auth method"),
+  pkceRequired: z.boolean(),
+  allowedGrantTypes: z
+    .array(z.enum(grantTypeOptions))
+    .min(1, "Select at least one grant type"),
+});
+const TOKEN_AUTH_METHOD_LABELS: Record<(typeof tokenAuthMethodOptions)[number], { title: string; description: string }> = {
+  client_secret_basic: {
+    title: "Client secret (basic)",
+    description: "Authenticate using HTTP basic auth at the token endpoint.",
+  },
+  client_secret_post: {
+    title: "Client secret (post)",
+    description: "Send client_id and client_secret in the request body.",
+  },
+  none: {
+    title: "None",
+    description: "Public client without a secret.",
+  },
+};
+const GRANT_TYPE_LABELS: Record<(typeof grantTypeOptions)[number], { title: string; description: string }> = {
+  authorization_code: {
+    title: "Authorization code",
+    description: "Standard redirect-based flow.",
+  },
+  password: {
+    title: "Resource owner password",
+    description: "Exchange username/password directly.",
+  },
+  refresh_token: {
+    title: "Refresh token",
+    description: "Allow refresh_token grants (proxy clients only).",
+  },
+};
 const MAX_REAUTH_TTL_SECONDS = 86400;
 const reauthTtlSchema = z.object({
   reauthTtlSeconds: z.coerce
@@ -592,79 +621,178 @@ export function RotateSecretForm({ clientId, canRotate }: { clientId: string; ca
   );
 }
 
-export function ChangeClientTypeForm({
+export function UpdateTokenConfigForm({
   clientId,
-  clientType,
   canEdit,
+  initialTokenEndpointAuthMethods,
+  initialPkceRequired,
+  initialAllowedGrantTypes,
 }: {
   clientId: string;
-  clientType: "PUBLIC" | "CONFIDENTIAL";
   canEdit: boolean;
+  initialTokenEndpointAuthMethods: Array<(typeof tokenAuthMethodOptions)[number]>;
+  initialPkceRequired: boolean;
+  initialAllowedGrantTypes: Array<(typeof grantTypeOptions)[number]>;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [isDialogOpen, setDialogOpen] = useState(false);
-  const { toast } = useToast();
 
-  const nextType = clientType === "PUBLIC" ? "CONFIDENTIAL" : "PUBLIC";
-  const currentLabel = clientType === "PUBLIC" ? "public" : "confidential";
-  const nextLabel = nextType === "PUBLIC" ? "public" : "confidential";
-  const dialogDescription =
-    nextType === "CONFIDENTIAL"
-      ? "A new client secret will be generated and required for token requests."
-      : "The existing client secret will be removed and the token endpoint will be set to none.";
+  const form = useForm<z.infer<typeof tokenConfigSchema>>({
+    resolver: zodResolver(tokenConfigSchema),
+    defaultValues: {
+      tokenEndpointAuthMethods: initialTokenEndpointAuthMethods,
+      pkceRequired: initialPkceRequired,
+      allowedGrantTypes: initialAllowedGrantTypes,
+    },
+  });
 
-  const handleSwitch = () => {
+  useEffect(() => {
+    form.reset({
+      tokenEndpointAuthMethods: initialTokenEndpointAuthMethods,
+      pkceRequired: initialPkceRequired,
+      allowedGrantTypes: initialAllowedGrantTypes,
+    });
+  }, [form, initialAllowedGrantTypes, initialPkceRequired, initialTokenEndpointAuthMethods]);
+
+  const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
-      const result = await changeClientTypeAction({ clientId, newType: nextType });
+      const result = await updateClientTokenConfigAction({
+        clientId,
+        tokenEndpointAuthMethods: values.tokenEndpointAuthMethods,
+        pkceRequired: values.pkceRequired,
+        allowedGrantTypes: values.allowedGrantTypes,
+      });
       if (result.error) {
         toast({ variant: "destructive", title: "Unable to update", description: result.error });
         return;
       }
       setClientSecret(result.data?.clientSecret ?? null);
-      setDialogOpen(false);
       router.refresh();
-      toast({
-        title: "Client type updated",
-        description:
-          nextType === "CONFIDENTIAL"
-            ? "Copy the new client secret immediately."
-            : "Client secrets are no longer required.",
-      });
+      toast({ title: "Client token settings updated" });
     });
-  };
+  });
 
   return (
-    <div className="space-y-4">
-      {clientSecret ? (
-        <CopyField label="New client secret" value={clientSecret} description="Secret is shown once. Store securely." />
-      ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs uppercase text-muted-foreground">Current type</p>
-          <Badge variant={clientType === "CONFIDENTIAL" ? "default" : "secondary"}>{currentLabel}</Badge>
-        </div>
-        <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)} disabled={!canEdit || pending}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Switch to ${nextLabel}`}
+    <Form {...form}>
+      <form onSubmit={onSubmit} className="space-y-6">
+        {clientSecret ? (
+          <CopyField label="New client secret" value={clientSecret} description="Secret is shown once. Store securely." />
+        ) : null}
+        <FormField
+          control={form.control}
+          name="tokenEndpointAuthMethods"
+          render={({ field }) => (
+            <FormItem className="space-y-3">
+              <FormLabel>Token endpoint auth methods</FormLabel>
+              <FormDescription>Select how this client authenticates during token exchange.</FormDescription>
+              <div className="grid gap-3 md:grid-cols-3">
+                {tokenAuthMethodOptions.map((option) => {
+                  const meta = TOKEN_AUTH_METHOD_LABELS[option];
+                  const selected = field.value ?? [];
+                  const checked = selected.includes(option);
+                  return (
+                    <label key={option} className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border border-muted"
+                          checked={checked}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                              ? [...new Set([...selected, option])]
+                              : selected.filter((value) => value !== option);
+                            const ordered = tokenAuthMethodOptions.filter((value) => next.includes(value));
+                            field.onChange(ordered);
+                          }}
+                          disabled={!canEdit || pending}
+                        />
+                      </FormControl>
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium text-foreground">{meta.title}</span>
+                        <span className="block text-xs text-muted-foreground">{meta.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="pkceRequired"
+          render={({ field }) => (
+            <FormItem>
+              <div className="flex items-start gap-3 rounded-md border border-dashed p-3">
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={!canEdit || pending}
+                  />
+                </FormControl>
+                <div>
+                  <FormLabel className="mb-1 block">Require PKCE</FormLabel>
+                  <FormDescription>Enforce PKCE verification for authorization_code grants.</FormDescription>
+                </div>
+              </div>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="allowedGrantTypes"
+          render={({ field }) => (
+            <FormItem className="space-y-3">
+              <FormLabel>Grant types</FormLabel>
+              <FormDescription>Select which OAuth grant types this client can use.</FormDescription>
+              <div className="grid gap-3 md:grid-cols-3">
+                {grantTypeOptions.map((option) => {
+                  const meta = GRANT_TYPE_LABELS[option];
+                  const selected = field.value ?? [];
+                  const checked = selected.includes(option);
+                  return (
+                    <label key={option} className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border border-muted"
+                          checked={checked}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                              ? [...new Set([...selected, option])]
+                              : selected.filter((value) => value !== option);
+                            const ordered = grantTypeOptions.filter((value) => next.includes(value));
+                            field.onChange(ordered);
+                          }}
+                          disabled={!canEdit || pending}
+                        />
+                      </FormControl>
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium text-foreground">{meta.title}</span>
+                        <span className="block text-xs text-muted-foreground">{meta.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" disabled={!canEdit || pending} className="w-full sm:w-auto">
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save token settings"}
         </Button>
-      </div>
-      {!canEdit ? <p className="text-xs text-muted-foreground">Only owners or writers can change client types.</p> : null}
-      <AlertDialog open={isDialogOpen} onOpenChange={setDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Switch to {nextLabel}?</AlertDialogTitle>
-            <AlertDialogDescription>{dialogDescription}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSwitch} disabled={pending}>
-              Switch to {nextLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        {!canEdit ? (
+          <p className="text-xs text-muted-foreground">Only owners or writers can update token settings.</p>
+        ) : null}
+      </form>
+    </Form>
   );
 }
 

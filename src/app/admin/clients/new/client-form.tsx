@@ -11,7 +11,7 @@ import { createClientAction } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,10 +41,49 @@ const proxyConfigSchema = z.object({
   passthroughTokenResponse: z.boolean().default(false),
 });
 
+const tokenAuthMethodOptions = ["client_secret_basic", "client_secret_post", "none"] as const;
+const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
+
+const TOKEN_AUTH_METHOD_LABELS: Record<(typeof tokenAuthMethodOptions)[number], { title: string; description: string }> = {
+  client_secret_basic: {
+    title: "Client secret (basic)",
+    description: "Authenticate with HTTP basic auth at the token endpoint.",
+  },
+  client_secret_post: {
+    title: "Client secret (post)",
+    description: "Send client_id/client_secret in the token request body.",
+  },
+  none: {
+    title: "None",
+    description: "Public client without a secret.",
+  },
+};
+
+const GRANT_TYPE_LABELS: Record<(typeof grantTypeOptions)[number], { title: string; description: string }> = {
+  authorization_code: {
+    title: "Authorization code",
+    description: "Standard redirect-based flow.",
+  },
+  password: {
+    title: "Resource owner password",
+    description: "Exchange username/password directly.",
+  },
+  refresh_token: {
+    title: "Refresh token",
+    description: "Allow refresh_token grants for proxy clients.",
+  },
+};
+
 const formSchema = z
   .object({
     name: z.string().min(2, "Name must be at least 2 characters"),
-    type: z.enum(["CONFIDENTIAL", "PUBLIC"] as const),
+    tokenEndpointAuthMethods: z
+      .array(z.enum(tokenAuthMethodOptions))
+      .min(1, "Select at least one token auth method"),
+    pkceRequired: z.boolean().default(true),
+    allowedGrantTypes: z
+      .array(z.enum(grantTypeOptions))
+      .min(1, "Select at least one grant type"),
     redirects: z.string().optional(),
     mode: z.enum(["regular", "proxy"] as const),
     proxyConfig: proxyConfigSchema.optional(),
@@ -295,7 +334,9 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
     resolver: proxyFormResolver,
     defaultValues: {
       name: "",
-      type: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
       redirects: "",
       mode: "regular",
       proxyConfig: createDefaultProxyConfig(),
@@ -382,7 +423,9 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       const result = await createClientAction({
         tenantId,
         name: values.name,
-        type: values.type,
+        tokenEndpointAuthMethods: values.tokenEndpointAuthMethods,
+        pkceRequired: values.pkceRequired,
+        allowedGrantTypes: values.allowedGrantTypes,
         redirects: redirectEntries,
         mode: values.mode,
         proxyConfig: proxyConfigInput,
@@ -397,7 +440,9 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       setCredentials(result.data ?? null);
       form.reset({
         name: "",
-        type: values.type,
+        tokenEndpointAuthMethods: values.tokenEndpointAuthMethods,
+        pkceRequired: values.pkceRequired,
+        allowedGrantTypes: values.allowedGrantTypes,
         redirects: "",
         mode: values.mode,
         proxyConfig: createDefaultProxyConfig(),
@@ -424,22 +469,108 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
 
         <FormField
           control={form.control}
-          name="type"
+          name="tokenEndpointAuthMethods"
           render={({ field }) => (
             <FormItem className="space-y-3">
-              <FormLabel>Client type</FormLabel>
-              <Tabs value={field.value} onValueChange={field.onChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="CONFIDENTIAL">Confidential</TabsTrigger>
-                  <TabsTrigger value="PUBLIC">Public</TabsTrigger>
-                </TabsList>
-                <TabsContent value="CONFIDENTIAL" className="rounded-md border p-4 text-sm text-muted-foreground">
-                  Server-based apps that can securely store client secrets and authenticate via HTTP basic auth.
-                </TabsContent>
-                <TabsContent value="PUBLIC" className="rounded-md border p-4 text-sm text-muted-foreground">
-                  Native or browser apps leveraging PKCE. No client secret is issued for these clients.
-                </TabsContent>
-              </Tabs>
+              <FormLabel>Token endpoint auth methods</FormLabel>
+              <FormDescription>Select how the client authenticates during token exchange.</FormDescription>
+              <div className="grid gap-3 md:grid-cols-3">
+                {tokenAuthMethodOptions.map((option) => {
+                  const meta = TOKEN_AUTH_METHOD_LABELS[option];
+                  const selected = field.value ?? [];
+                  const checked = selected.includes(option);
+                  return (
+                    <label key={option} className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border border-muted"
+                          checked={checked}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                              ? [...new Set([...selected, option])]
+                              : selected.filter((value) => value !== option);
+                            const ordered = tokenAuthMethodOptions.filter((value) => next.includes(value));
+                            field.onChange(ordered);
+                          }}
+                          disabled={pending}
+                        />
+                      </FormControl>
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium text-foreground">{meta.title}</span>
+                        <span className="block text-xs text-muted-foreground">{meta.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="pkceRequired"
+          render={({ field }) => (
+            <FormItem>
+              <div className="flex items-start gap-3 rounded-md border border-dashed p-3">
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={pending}
+                  />
+                </FormControl>
+                <div>
+                  <FormLabel className="mb-1 block">Require PKCE</FormLabel>
+                  <FormDescription>Enforce PKCE verification for authorization_code grants.</FormDescription>
+                </div>
+              </div>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="allowedGrantTypes"
+          render={({ field }) => (
+            <FormItem className="space-y-3">
+              <FormLabel>Grant types</FormLabel>
+              <FormDescription>Choose which OAuth grant types the client can use.</FormDescription>
+              <div className="grid gap-3 md:grid-cols-3">
+                {grantTypeOptions.map((option) => {
+                  const meta = GRANT_TYPE_LABELS[option];
+                  const selected = field.value ?? [];
+                  const checked = selected.includes(option);
+                  return (
+                    <label key={option} className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border border-muted"
+                          checked={checked}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                              ? [...new Set([...selected, option])]
+                              : selected.filter((value) => value !== option);
+                            const ordered = grantTypeOptions.filter((value) => next.includes(value));
+                            field.onChange(ordered);
+                          }}
+                          disabled={pending}
+                        />
+                      </FormControl>
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium text-foreground">{meta.title}</span>
+                        <span className="block text-xs text-muted-foreground">{meta.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <FormMessage />
             </FormItem>
           )}
         />

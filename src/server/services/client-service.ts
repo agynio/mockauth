@@ -10,6 +10,12 @@ import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import {
+  TOKEN_AUTH_METHODS,
+  normalizeTokenAuthMethods,
+  requiresClientSecret,
+  type TokenAuthMethod,
+} from "@/server/oidc/token-auth-method";
 import { z } from "zod";
 
 const canonicalizeAllowedScopes = (scopes?: string[]) => {
@@ -24,6 +30,13 @@ const canonicalizeAllowedScopes = (scopes?: string[]) => {
   return ["openid", ...normalized.filter((scope) => scope !== "openid")];
 };
 
+const normalizeAllowedGrantTypes = (grantTypes: string[]) => {
+  if (grantTypes.length === 0) {
+    throw new Error("At least one grant type is required");
+  }
+  return Array.from(new Set(grantTypes));
+};
+
 export const proxyProviderConfigSchema = z.object({
   providerType: z.enum(["oidc", "oauth2"] as const),
   authorizationEndpoint: z.string().url(),
@@ -32,7 +45,7 @@ export const proxyProviderConfigSchema = z.object({
   jwksUri: z.string().url().optional(),
   upstreamClientId: z.string().min(1),
   upstreamClientSecret: z.string().optional(),
-  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"] as const).optional(),
+  upstreamTokenEndpointAuthMethod: z.enum(TOKEN_AUTH_METHODS).optional(),
   defaultScopes: z.array(z.string().min(1)).optional(),
   scopeMapping: z
     .record(z.string(), z.union([z.string(), z.array(z.string().min(1))]))
@@ -100,7 +113,9 @@ export const createClient = async (
   tenantId: string,
   data: {
     name: string;
-    clientType: "PUBLIC" | "CONFIDENTIAL";
+    tokenEndpointAuthMethods?: TokenAuthMethod[];
+    pkceRequired?: boolean;
+    allowedGrantTypes?: string[];
     redirectUris?: string[];
     allowedScopes?: string[];
     oauthClientMode?: "regular" | "proxy";
@@ -112,6 +127,8 @@ export const createClient = async (
   let clientSecretHash: string | null = null;
   let clientSecretEncrypted: string | null = null;
   const allowedScopes = canonicalizeAllowedScopes(data.allowedScopes);
+  const tokenEndpointAuthMethods = normalizeTokenAuthMethods(data.tokenEndpointAuthMethods);
+  const allowedGrantTypes = data.allowedGrantTypes ? normalizeAllowedGrantTypes(data.allowedGrantTypes) : undefined;
   const mode = data.oauthClientMode ?? "regular";
 
   if (mode === "proxy" && !data.proxyConfig) {
@@ -120,7 +137,7 @@ export const createClient = async (
 
   const validatedProxyConfig = data.proxyConfig ? proxyProviderConfigSchema.parse(data.proxyConfig) : null;
 
-  if (data.clientType === "CONFIDENTIAL") {
+  if (requiresClientSecret(tokenEndpointAuthMethods)) {
     clientSecret = generateOpaqueToken(24);
     clientSecretHash = await hashSecret(clientSecret);
     clientSecretEncrypted = encrypt(clientSecret);
@@ -132,12 +149,13 @@ export const createClient = async (
         name: data.name,
         tenantId,
         clientId,
-        clientType: data.clientType,
         clientSecretHash,
         clientSecretEncrypted,
-        tokenEndpointAuthMethod: data.clientType === "PUBLIC" ? "none" : "client_secret_basic",
+        tokenEndpointAuthMethods,
+        pkceRequired: data.pkceRequired ?? true,
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         allowedScopes,
+        ...(allowedGrantTypes ? { allowedGrantTypes } : {}),
         oauthClientMode: mode,
       },
     });
@@ -258,6 +276,17 @@ export const getClientByIdForTenant = async (tenantId: string, clientInternalId:
 };
 
 export const rotateClientSecret = async (clientId: string) => {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { tokenEndpointAuthMethods: true },
+  });
+  if (!client) {
+    throw new DomainError("Client not found", { status: 404 });
+  }
+  const tokenEndpointAuthMethods = normalizeTokenAuthMethods(client.tokenEndpointAuthMethods);
+  if (!requiresClientSecret(tokenEndpointAuthMethods)) {
+    throw new DomainError("Client does not require a secret", { status: 400 });
+  }
   const secret = generateOpaqueToken(24);
   const clientSecretHash = await hashSecret(secret);
   const clientSecretEncrypted = encrypt(secret);
@@ -270,37 +299,53 @@ export const rotateClientSecret = async (clientId: string) => {
   return secret;
 };
 
-export const changeClientType = async (clientId: string, newType: "PUBLIC" | "CONFIDENTIAL") => {
-  const client = await prisma.client.findUnique({ where: { id: clientId } });
-  if (!client) {
-    throw new DomainError("Client not found", { status: 404 });
-  }
-  if (client.clientType === newType) {
-    throw new DomainError(`Client is already ${newType.toLowerCase()}`);
-  }
+export const updateClientTokenConfig = async (input: {
+  clientId: string;
+  tokenEndpointAuthMethods: string[];
+  pkceRequired: boolean;
+  allowedGrantTypes: string[];
+}): Promise<{ client: Awaited<ReturnType<typeof prisma.client.update>>; clientSecret: string | null }> => {
+  const tokenEndpointAuthMethods = normalizeTokenAuthMethods(input.tokenEndpointAuthMethods);
+  const allowedGrantTypes = normalizeAllowedGrantTypes(input.allowedGrantTypes);
+  const needsSecret = requiresClientSecret(tokenEndpointAuthMethods);
 
-  let clientSecret: string | null = null;
-  let clientSecretHash: string | null = null;
-  let clientSecretEncrypted: string | null = null;
-  const tokenEndpointAuthMethod = newType === "CONFIDENTIAL" ? "client_secret_basic" : "none";
+  return prisma.$transaction(async (tx) => {
+    const client = await tx.client.findUnique({
+      where: { id: input.clientId },
+      select: { id: true, clientSecretHash: true, clientSecretEncrypted: true },
+    });
+    if (!client) {
+      throw new DomainError("Client not found", { status: 404 });
+    }
 
-  if (newType === "CONFIDENTIAL") {
-    clientSecret = generateOpaqueToken(24);
-    clientSecretHash = await hashSecret(clientSecret);
-    clientSecretEncrypted = encrypt(clientSecret);
-  }
+    let clientSecret: string | null = null;
+    let clientSecretHash = client.clientSecretHash;
+    let clientSecretEncrypted = client.clientSecretEncrypted;
 
-  const updated = await prisma.client.update({
-    where: { id: clientId },
-    data: {
-      clientType: newType,
-      clientSecretHash,
-      clientSecretEncrypted,
-      tokenEndpointAuthMethod,
-    },
+    if (needsSecret) {
+      if (!clientSecretHash || !clientSecretEncrypted) {
+        clientSecret = generateOpaqueToken(24);
+        clientSecretHash = await hashSecret(clientSecret);
+        clientSecretEncrypted = encrypt(clientSecret);
+      }
+    } else {
+      clientSecretHash = null;
+      clientSecretEncrypted = null;
+    }
+
+    const updated = await tx.client.update({
+      where: { id: input.clientId },
+      data: {
+        tokenEndpointAuthMethods,
+        pkceRequired: input.pkceRequired,
+        allowedGrantTypes,
+        clientSecretHash,
+        clientSecretEncrypted,
+      },
+    });
+
+    return { client: updated, clientSecret };
   });
-
-  return { client: updated, clientSecret };
 };
 
 export const deleteClient = async (clientId: string) => {
@@ -387,12 +432,12 @@ export const updateClientSigningAlgorithms = async (
   });
 };
 
-export const getConfidentialClientSecret = async (clientId: string): Promise<string | null> => {
+export const getClientSecret = async (clientId: string): Promise<string | null> => {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { clientSecretEncrypted: true, clientType: true },
+    select: { clientSecretEncrypted: true },
   });
-  if (!client || client.clientType !== "CONFIDENTIAL" || !client.clientSecretEncrypted) {
+  if (!client?.clientSecretEncrypted) {
     return null;
   }
   try {

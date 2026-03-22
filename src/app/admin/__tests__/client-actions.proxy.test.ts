@@ -35,7 +35,8 @@ vi.mock("@/server/services/client-service", async () => {
     updateClientAuthStrategies: vi.fn(),
     updateClientReauthTtl: vi.fn(),
     updateClientAllowedScopes: vi.fn(),
-    getConfidentialClientSecret: vi.fn(),
+    getClientSecret: vi.fn(),
+    updateClientTokenConfig: vi.fn(),
     updateClientSigningAlgorithms: vi.fn(),
     upsertProxyProviderConfig: vi.fn(),
   };
@@ -96,7 +97,7 @@ describe("proxy client server actions", () => {
     mockFindClient.mockResolvedValue({
       id: "client_internal",
       tenantId: "tenant_123",
-      clientType: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
       oauthClientMode: "proxy",
     } as never);
     mockUpsertProxyConfig.mockResolvedValue(undefined);
@@ -109,7 +110,9 @@ describe("proxy client server actions", () => {
     const result = await createClientAction({
       tenantId: "tenant_123",
       name: "Proxy Client",
-      type: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
       redirects: ["https://client.example.test/callback"],
       scopes: ["openid", "profile"],
       mode: "proxy",
@@ -135,7 +138,9 @@ describe("proxy client server actions", () => {
       "tenant_123",
       expect.objectContaining({
         name: "Proxy Client",
-        clientType: "CONFIDENTIAL",
+        tokenEndpointAuthMethods: ["client_secret_basic"],
+        pkceRequired: true,
+        allowedGrantTypes: ["authorization_code"],
         redirectUris: ["https://client.example.test/callback"],
         allowedScopes: ["openid", "profile"],
         oauthClientMode: "proxy",
@@ -173,7 +178,9 @@ describe("proxy client server actions", () => {
     const result = await createClientAction({
       tenantId: "tenant_123",
       name: "Incomplete Proxy",
-      type: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
       scopes: ["openid"],
       mode: "proxy",
       proxyConfig: undefined,

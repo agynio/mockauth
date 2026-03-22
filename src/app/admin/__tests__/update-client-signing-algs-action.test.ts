@@ -36,7 +36,8 @@ vi.mock("@/server/services/client-service", async () => {
     updateClientReauthTtl: vi.fn(),
     updateClientAllowedScopes: vi.fn(),
     updateClientSigningAlgorithms: vi.fn(),
-    getConfidentialClientSecret: vi.fn(),
+    getClientSecret: vi.fn(),
+    updateClientTokenConfig: vi.fn(),
   };
 });
 
@@ -69,7 +70,11 @@ describe("updateClientSigningAlgsAction", () => {
     vi.clearAllMocks();
     mockSession.mockResolvedValue({ user: { id: "admin_1" } } as never);
     mockAssertMembership.mockResolvedValue({ role: "OWNER" } as never);
-    mockFindClient.mockResolvedValue({ id: "client_internal", tenantId: "tenant_1", clientType: "CONFIDENTIAL" } as never);
+    mockFindClient.mockResolvedValue({
+      id: "client_internal",
+      tenantId: "tenant_1",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+    } as never);
     mockUpdateSigning.mockResolvedValue({} as never);
   });
 

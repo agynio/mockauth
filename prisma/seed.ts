@@ -42,7 +42,7 @@ async function main() {
       clientId: DEFAULT_CLIENT_ID,
       clientSecretHash: await hashSecret(DEFAULT_CLIENT_SECRET),
       clientSecretEncrypted: encrypt(DEFAULT_CLIENT_SECRET),
-      tokenEndpointAuthMethod: "client_secret_post",
+      tokenEndpointAuthMethods: ["client_secret_post"],
     },
   });
 

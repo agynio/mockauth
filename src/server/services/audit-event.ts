@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { AuditLogEventType as PrismaAuditLogEventType, AuditLogSeverity as PrismaAuditLogSeverity } from "@/generated/prisma/client";
 
 import type { AuditLogEventType, AuditLogSeverity } from "@/lib/audit-log";
+import type { TokenAuthMethod } from "@/server/oidc/token-auth-method";
 import type { RequestContext } from "@/server/utils/request-context";
 
 type Assert<T extends true> = T;
@@ -10,7 +11,7 @@ type IsEqual<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends 
 type _AuditLogEventTypeMatches = Assert<IsEqual<AuditLogEventType, PrismaAuditLogEventType>>;
 type _AuditLogSeverityMatches = Assert<IsEqual<AuditLogSeverity, PrismaAuditLogSeverity>>;
 
-export type TokenAuthMethod = "client_secret_basic" | "client_secret_post" | "none";
+export type { TokenAuthMethod } from "@/server/oidc/token-auth-method";
 
 export type SecurityViolationReason =
   | "auth_method_mismatch"
@@ -185,6 +186,8 @@ export type ConfigChangedDetails = {
   proxyConfigAfter?: ProxyProviderConfigSnapshot;
   authMethodBefore?: TokenAuthMethod;
   authMethodAfter?: TokenAuthMethod;
+  authMethodsBefore?: TokenAuthMethod[];
+  authMethodsAfter?: TokenAuthMethod[];
 };
 
 export type SecurityViolationDetails = {
@@ -482,6 +485,8 @@ type ConfigChangedDetailsParams = {
   proxyConfigAfter?: ProxyProviderConfigSnapshot | null;
   authMethodBefore?: TokenAuthMethod | null;
   authMethodAfter?: TokenAuthMethod | null;
+  authMethodsBefore?: TokenAuthMethod[] | null;
+  authMethodsAfter?: TokenAuthMethod[] | null;
 };
 
 export function buildConfigChangedDetails(params: ConfigChangedDetailsParams): ConfigChangedDetails {
@@ -494,6 +499,8 @@ export function buildConfigChangedDetails(params: ConfigChangedDetailsParams): C
     proxyConfigAfter: params.proxyConfigAfter ?? undefined,
     authMethodBefore: params.authMethodBefore ?? undefined,
     authMethodAfter: params.authMethodAfter ?? undefined,
+    authMethodsBefore: params.authMethodsBefore ?? undefined,
+    authMethodsAfter: params.authMethodsAfter ?? undefined,
   };
 }
 

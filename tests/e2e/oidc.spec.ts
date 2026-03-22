@@ -243,7 +243,7 @@ const createClients = async (request: APIRequestContext, tenantId: string) => {
     data: {
       tenantId,
       names: ["Email Strategy", "Username Strategy"],
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["none"],
       redirectUris: [redirectUri],
     },
   });
