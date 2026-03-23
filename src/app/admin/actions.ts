@@ -14,17 +14,17 @@ import { prisma } from "@/server/db/client";
 import { authOptions } from "@/server/auth/options";
 import {
   addRedirectUri,
-  changeClientType,
   createClient,
   deleteClient,
   proxyProviderConfigSchema,
   rotateClientSecret,
+  updateClientTokenConfig,
   updateClientName,
   updateClientApiResource,
   updateClientAuthStrategies,
   updateClientReauthTtl,
   updateClientAllowedScopes,
-  getConfidentialClientSecret,
+  getClientSecret,
   updateClientSigningAlgorithms,
   upsertProxyProviderConfig,
 } from "@/server/services/client-service";
@@ -64,16 +64,26 @@ import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import { buildConfigChangedDetails, type ProxyProviderConfigSnapshot, type TokenAuthMethod } from "@/server/services/audit-event";
 import { DomainError } from "@/server/errors";
+import {
+  TOKEN_AUTH_METHODS,
+  isTokenAuthMethod,
+  parseTokenAuthMethods,
+  requiresClientSecret,
+} from "@/server/oidc/token-auth-method";
 
 const OAUTH_TEST_SESSION_TTL_MINUTES = 15;
 const tenantSchema = z.object({
   name: z.string().min(2, "Tenant name must include at least two characters"),
 });
 
+const grantTypeOptions = ["authorization_code", "refresh_token", "password"] as const;
+
 const clientSchema = z.object({
   tenantId: z.string().min(1),
   name: z.string().min(2),
-  type: z.enum(["PUBLIC", "CONFIDENTIAL"]),
+  tokenEndpointAuthMethods: z.array(z.enum(TOKEN_AUTH_METHODS)).min(1).default(["client_secret_basic"]),
+  pkceRequired: z.boolean().default(true),
+  allowedGrantTypes: z.array(z.enum(grantTypeOptions)).min(1).default(["authorization_code"]),
   redirects: z.array(z.string().min(1)).optional(),
   scopes: z.array(z.string().min(1)).optional(),
   mode: z.enum(["regular", "proxy"]).default("regular"),
@@ -299,9 +309,11 @@ const updateClientSigningAlgsSchema = z.object({
   accessTokenAlg: z.enum(accessTokenAlgOptions),
 });
 
-const changeClientTypeSchema = z.object({
+const updateClientTokenConfigSchema = z.object({
   clientId: z.string().min(1),
-  newType: z.enum(["PUBLIC", "CONFIDENTIAL"] as const),
+  tokenEndpointAuthMethods: z.array(z.enum(TOKEN_AUTH_METHODS)).min(1),
+  pkceRequired: z.boolean(),
+  allowedGrantTypes: z.array(z.enum(grantTypeOptions)).min(1),
 });
 
 const deleteClientSchema = z.object({ clientId: z.string().min(1) });
@@ -329,6 +341,8 @@ const emitConfigChange = async (input: {
   proxyConfigAfter?: ProxyProviderConfigSnapshot | null;
   authMethodBefore?: TokenAuthMethod | null;
   authMethodAfter?: TokenAuthMethod | null;
+  authMethodsBefore?: TokenAuthMethod[] | null;
+  authMethodsAfter?: TokenAuthMethod[] | null;
 }) => {
   const requestContext = await getRequestContext();
   await emitAuditEvent({
@@ -348,6 +362,8 @@ const emitConfigChange = async (input: {
       proxyConfigAfter: input.proxyConfigAfter ?? undefined,
       authMethodBefore: input.authMethodBefore ?? undefined,
       authMethodAfter: input.authMethodAfter ?? undefined,
+      authMethodsBefore: input.authMethodsBefore ?? undefined,
+      authMethodsAfter: input.authMethodsAfter ?? undefined,
     }),
     requestContext,
   });
@@ -362,9 +378,10 @@ const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles
       id: true,
       tenantId: true,
       name: true,
-      clientType: true,
       oauthClientMode: true,
-      tokenEndpointAuthMethod: true,
+      tokenEndpointAuthMethods: true,
+      pkceRequired: true,
+      allowedGrantTypes: true,
     },
   });
   if (!client) {
@@ -454,7 +471,9 @@ export const createClientAction = async (
 
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
-      clientType: parsed.type,
+      tokenEndpointAuthMethods: parsed.tokenEndpointAuthMethods,
+      pkceRequired: parsed.pkceRequired,
+      allowedGrantTypes: parsed.allowedGrantTypes,
       redirectUris: redirectEntries,
       allowedScopes: canonicalScopes,
       oauthClientMode: parsed.mode,
@@ -607,8 +626,9 @@ export const rotateClientSecretAction = async (
     if (!client) {
       return { error: "Client not found" };
     }
-    if (client.clientType !== "CONFIDENTIAL") {
-      return { error: "Public clients do not use secrets" };
+    const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+    if (!requiresClientSecret(tokenAuthMethods)) {
+      return { error: "Client does not require a secret" };
     }
     const clientSecret = await rotateClientSecret(client.id);
     revalidatePath(clientPath(client.id));
@@ -628,41 +648,48 @@ export const rotateClientSecretAction = async (
   }
 };
 
-export const changeClientTypeAction = async (
-  input: z.infer<typeof changeClientTypeSchema>,
+export const updateClientTokenConfigAction = async (
+  input: z.infer<typeof updateClientTokenConfigSchema>,
 ): Promise<ActionState<{ clientSecret?: string }>> => {
   try {
     const adminId = await requireSession();
-    const parsed = changeClientTypeSchema.parse(input);
+    const parsed = updateClientTokenConfigSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {
       return { error: "Client not found" };
     }
 
-    const { client: updated, clientSecret } = await changeClientType(client.id, parsed.newType);
+    const { client: updated, clientSecret } = await updateClientTokenConfig({
+      clientId: client.id,
+      tokenEndpointAuthMethods: parsed.tokenEndpointAuthMethods,
+      pkceRequired: parsed.pkceRequired,
+      allowedGrantTypes: parsed.allowedGrantTypes,
+    });
+    const authMethodsBefore = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+    const authMethodsAfter = parseTokenAuthMethods(updated.tokenEndpointAuthMethods);
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
     void emitConfigChange({
       tenantId: updated.tenantId,
       actorId: adminId,
       action: "update",
-      resource: "client_type",
+      resource: "client_token_config",
       resourceId: updated.id,
       resourceName: client.name,
       clientId: updated.id,
-      message: "Client type updated",
-      authMethodBefore: client.tokenEndpointAuthMethod,
-      authMethodAfter: updated.tokenEndpointAuthMethod,
+      message: "Client token settings updated",
+      authMethodsBefore,
+      authMethodsAfter,
     });
     return clientSecret
-      ? { success: "Client type updated", data: { clientSecret } }
-      : { success: "Client type updated" };
+      ? { success: "Client token settings updated", data: { clientSecret } }
+      : { success: "Client token settings updated" };
   } catch (error) {
     if (error instanceof DomainError) {
       return { error: error.message };
     }
     console.error(error);
-    return { error: "Unable to change client type" };
+    return { error: "Unable to update client token settings" };
   }
 };
 
@@ -694,9 +721,11 @@ export const updateProxyClientConfigAction = async (
     }
 
     const existingConfig = await prisma.proxyProviderConfig.findUnique({ where: { clientId: client.id } });
+    const existingAuthMethod = existingConfig?.upstreamTokenEndpointAuthMethod ?? undefined;
+    const normalizedExistingAuthMethod = isTokenAuthMethod(existingAuthMethod) ? existingAuthMethod : undefined;
     const resolvedAuthMethod =
       rawConfig.upstreamTokenEndpointAuthMethod ??
-      existingConfig?.upstreamTokenEndpointAuthMethod ??
+      normalizedExistingAuthMethod ??
       normalized.upstreamTokenEndpointAuthMethod;
     const normalizedConfig = {
       ...normalized,
@@ -714,7 +743,7 @@ export const updateProxyClientConfigAction = async (
           jwksUri: existingConfig.jwksUri ?? undefined,
           upstreamClientId: existingConfig.upstreamClientId,
           upstreamClientSecret: existingSecret ?? undefined,
-          upstreamTokenEndpointAuthMethod: existingConfig.upstreamTokenEndpointAuthMethod ?? undefined,
+          upstreamTokenEndpointAuthMethod: normalizedExistingAuthMethod ?? undefined,
           defaultScopes: existingConfig.defaultScopes ?? [],
           scopeMapping: existingConfig.scopeMapping
             ? (existingConfig.scopeMapping as ProxyProviderConfigInput["scopeMapping"])
@@ -802,8 +831,10 @@ export const prepareClientOauthTestAction = async (
 
     await assertTenantMembership(adminId, client.tenantId);
 
+    const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+
     const clearedStates = await resetOauthTestSessionsForClient(client.id, adminId);
-    if (clearedStates.length && client.tokenEndpointAuthMethod !== "none") {
+    if (clearedStates.length && requiresClientSecret(tokenAuthMethods)) {
       await Promise.all(clearedStates.map((stateId) => clearOauthTestSecretCookie(client.id, stateId)));
     }
 
@@ -823,10 +854,11 @@ export const prepareClientOauthTestAction = async (
       return { error: "Redirect URI must be saved on the client before testing" };
     }
 
-    const requiresSecret = client.tokenEndpointAuthMethod !== "none";
+    const tokenAuthMethod = tokenAuthMethods[0];
+    const requiresSecret = requiresClientSecret(tokenAuthMethods);
     const submittedSecretProvided = typeof parsed.clientSecret === "string";
     const submittedSecret = requiresSecret && submittedSecretProvided ? parsed.clientSecret?.trim() || null : null;
-    const storedSecret = requiresSecret ? await getConfidentialClientSecret(client.id) : null;
+    const storedSecret = requiresSecret ? await getClientSecret(client.id) : null;
     const cookieSecret = requiresSecret ? submittedSecret ?? storedSecret : null;
     if (requiresSecret && submittedSecretProvided && !submittedSecret) {
       return { error: "Enter the client secret before starting the test." };

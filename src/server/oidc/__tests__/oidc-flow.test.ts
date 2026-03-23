@@ -780,8 +780,7 @@ describe("OIDC flow", () => {
         tenantId,
         name: "Alternate signing client",
         clientId: alternateClientId,
-        clientType: "PUBLIC",
-        tokenEndpointAuthMethod: "none",
+        tokenEndpointAuthMethods: ["none"],
         idTokenSignedResponseAlg: "ES256",
         accessTokenSigningAlg: "ES256",
         redirectUris: {

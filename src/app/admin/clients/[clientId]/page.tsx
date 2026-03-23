@@ -6,7 +6,6 @@ import { format } from "date-fns";
 import { CopyBundleButton, CopyField } from "@/app/admin/_components/copy-field";
 import {
   AddRedirectForm,
-  ChangeClientTypeForm,
   DeleteRedirectButton,
   RotateSecretForm,
   UpdateAuthStrategiesForm,
@@ -15,6 +14,7 @@ import {
   UpdateClientReauthTtlForm,
   UpdateClientIssuerForm,
   UpdateClientNameForm,
+  UpdateTokenConfigForm,
   UpdateProxyProviderConfigForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
 import { ClientDangerZone } from "@/app/admin/clients/[clientId]/client-danger-zone";
@@ -30,9 +30,11 @@ import { listApiResources } from "@/server/services/api-resource-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { parseTokenAuthMethods, requiresClientSecret, resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import { decrypt } from "@/server/crypto/key-vault";
 
 type PageParams = Promise<{ clientId: string }>;
+const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
 
 export default async function ClientDetailPage({ params }: { params: PageParams }) {
   const session = await getServerSession(authOptions);
@@ -66,8 +68,17 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     .filter((resource) => resource.id !== defaultResourceId)
     .map((resource) => ({ id: resource.id, label: resource.name }));
   const authStrategies = parseClientAuthStrategies(client.authStrategies);
+  const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const allowedGrantTypes = grantTypeOptions.filter((grantType) => client.allowedGrantTypes.includes(grantType));
+  if (allowedGrantTypes.length === 0) {
+    throw new Error("Client missing allowed grant types");
+  }
+  if (allowedGrantTypes.length !== client.allowedGrantTypes.length) {
+    throw new Error("Client has invalid grant types");
+  }
+  const secretRequired = requiresClientSecret(tokenAuthMethods);
   const clientSecretValue = (() => {
-    if (client.clientType !== "CONFIDENTIAL" || !client.clientSecretEncrypted) {
+    if (!secretRequired || !client.clientSecretEncrypted) {
       return null;
     }
     try {
@@ -95,6 +106,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     if (client.oauthClientMode !== "proxy" || !client.proxyConfig) {
       return null;
     }
+    const normalizedUpstreamAuthMethod = resolveUpstreamAuthMethod(
+      client.proxyConfig.upstreamTokenEndpointAuthMethod,
+    );
     const rawMapping = client.proxyConfig.scopeMapping as unknown;
     const parsedMapping: Record<string, string[]> = {};
     if (rawMapping && typeof rawMapping === "object" && !Array.isArray(rawMapping)) {
@@ -124,7 +138,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
       userinfoEndpoint: client.proxyConfig.userinfoEndpoint,
       jwksUri: client.proxyConfig.jwksUri,
       upstreamClientId: client.proxyConfig.upstreamClientId,
-      upstreamTokenEndpointAuthMethod: client.proxyConfig.upstreamTokenEndpointAuthMethod,
+      upstreamTokenEndpointAuthMethod: normalizedUpstreamAuthMethod,
       defaultScopes: client.proxyConfig.defaultScopes ?? [],
       scopeMapping: parsedMapping,
       pkceSupported: client.proxyConfig.pkceSupported,
@@ -173,8 +187,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
           <UpdateClientNameForm clientId={client.id} initialName={client.name} canEdit={canManageClients} />
           {!canManageClients && <p className="text-xs text-muted-foreground">Read-only access.</p>}
           <div className="flex flex-wrap gap-2">
-            <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
-              {client.clientType.toLowerCase()}
+            <Badge variant="secondary">token auth: {tokenAuthMethods.join(", ")}</Badge>
+            <Badge variant={client.pkceRequired ? "default" : "outline"}>
+              {client.pkceRequired ? "PKCE required" : "PKCE optional"}
             </Badge>
             <Badge variant={client.oauthClientMode === "proxy" ? "default" : "outline"}>
               {client.oauthClientMode === "proxy" ? "proxy mode" : "regular mode"}
@@ -215,7 +230,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               <div className="space-y-3">
                 <CopyField key={tenantField.label} label={tenantField.label} value={tenantField.value} testId={tenantField.testId} />
                 <CopyField key={clientIdField.label} label={clientIdField.label} value={clientIdField.value} testId={clientIdField.testId} />
-                {client.clientType === "CONFIDENTIAL" ? (
+                {secretRequired ? (
                   <div className="space-y-3">
                     {secretField ? (
                       <CopyField
@@ -231,7 +246,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                     <RotateSecretForm clientId={client.id} canRotate={canManageClients} />
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Public clients rely on PKCE and do not store secrets.</p>
+                  <p className="text-xs text-muted-foreground">Token auth is configured without a client secret.</p>
                 )}
                 {protocolFields.map((item) => (
                   <CopyField key={item.label} label={item.label} value={item.value} testId={item.testId} />
@@ -381,13 +396,19 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </Card>
       ) : null}
 
-      <Card data-testid="client-type-card">
+      <Card data-testid="client-token-config-card">
         <CardHeader>
-          <CardTitle>Client type</CardTitle>
-          <CardDescription>Switch between public and confidential credentials.</CardDescription>
+          <CardTitle>Token settings</CardTitle>
+          <CardDescription>Configure token auth methods, PKCE, and grant type access.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ChangeClientTypeForm clientId={client.id} clientType={client.clientType} canEdit={canManageClients} />
+          <UpdateTokenConfigForm
+            clientId={client.id}
+            canEdit={canManageClients}
+            initialTokenEndpointAuthMethods={tokenAuthMethods}
+            initialPkceRequired={client.pkceRequired}
+            initialAllowedGrantTypes={allowedGrantTypes}
+          />
         </CardContent>
       </Card>
 
@@ -400,9 +421,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             <dl className="grid gap-3 text-sm text-muted-foreground">
               <MetadataRow label="Created" value={format(client.createdAt, "PPPp")} />
               <MetadataRow label="Updated" value={format(client.updatedAt, "PPPp")} />
-              <MetadataRow label="Grant types" value={client.allowedGrantTypes.join(", ")} />
+              <MetadataRow label="Grant types" value={allowedGrantTypes.join(", ")} />
               <MetadataRow label="Response types" value={client.allowedResponseTypes.join(", ")} />
-              <MetadataRow label="Token auth" value={client.tokenEndpointAuthMethod} />
+              <MetadataRow label="Token auth" value={tokenAuthMethods.join(", ")} />
               <MetadataRow label="PKCE required" value={client.pkceRequired ? "Yes" : "No"} />
             </dl>
           </CardContent>

@@ -76,7 +76,12 @@ export async function POST(request: Request) {
 const seedClients = async (tenantId: string, names: string[]) => {
   const results: { id: string; name: string; clientId: string }[] = [];
   for (const name of names) {
-    const { client } = await createClient(tenantId, { name, clientType: "CONFIDENTIAL" });
+    const { client } = await createClient(tenantId, {
+      name,
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
     results.push({ id: client.id, name: client.name, clientId: client.clientId });
   }
   return results;

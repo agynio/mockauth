@@ -86,7 +86,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
               <TableHeader>
                 <TableRow>
                   <TableHead>Client</TableHead>
-                  <TableHead className="hidden sm:table-cell">Type</TableHead>
+                  <TableHead className="hidden sm:table-cell">Token auth</TableHead>
                   <TableHead className="hidden md:table-cell">Redirects</TableHead>
                   <TableHead className="hidden md:table-cell">Updated</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -102,9 +102,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <Badge variant={client.clientType === "CONFIDENTIAL" ? "default" : "secondary"}>
-                        {client.clientType.toLowerCase()}
-                      </Badge>
+                      <Badge variant="secondary">{client.tokenEndpointAuthMethods.join(", ")}</Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {client._count.redirectUris} redirect URI{client._count.redirectUris === 1 ? "" : "s"}

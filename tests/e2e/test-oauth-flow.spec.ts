@@ -253,7 +253,7 @@ test.describe("Client Test OAuth", () => {
 
     const publicName = `Public Client ${Date.now()}`;
     const response = await page.request.post("/api/test/clients", {
-      data: { tenantId: QA_TENANT_ID, names: [publicName], clientType: "PUBLIC" },
+      data: { tenantId: QA_TENANT_ID, names: [publicName], tokenEndpointAuthMethods: ["none"] },
     });
     const payload = (await response.json()) as { clients?: { id: string }[] };
     if (!payload.clients?.[0]?.id) {

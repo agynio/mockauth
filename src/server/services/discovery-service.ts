@@ -11,7 +11,7 @@ export const buildDiscoveryDocument = (origin: string, apiResourceId: string) =>
     userinfo_endpoint: `${issuer}/userinfo`,
     jwks_uri: `${issuer}/jwks.json`,
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "password"],
     scopes_supported: SUPPORTED_SCOPES,
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post", "none"],

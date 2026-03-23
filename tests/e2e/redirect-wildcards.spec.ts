@@ -51,7 +51,7 @@ const seedClient = async (request: APIRequestContext, tenantId: string, options:
   const response = await request.post("/api/test/clients", {
     data: {
       names: ["Wildcard QA"],
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["none"],
       tenantId,
       redirectUris: options.redirectUris,
     },

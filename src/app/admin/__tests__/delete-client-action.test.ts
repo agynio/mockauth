@@ -36,8 +36,8 @@ vi.mock("@/server/services/client-service", async () => {
     updateClientReauthTtl: vi.fn(),
     updateClientAllowedScopes: vi.fn(),
     updateClientSigningAlgorithms: vi.fn(),
-    getConfidentialClientSecret: vi.fn(),
-    changeClientType: vi.fn(),
+    getClientSecret: vi.fn(),
+    updateClientTokenConfig: vi.fn(),
     deleteClient: vi.fn(),
   };
 });
@@ -75,9 +75,9 @@ describe("deleteClientAction", () => {
       id: "client_internal",
       tenantId: "tenant_1",
       name: "Delete Me",
-      clientType: "PUBLIC",
       oauthClientMode: "regular",
-      tokenEndpointAuthMethod: "none",
+      tokenEndpointAuthMethods: ["none"],
+      pkceRequired: true,
     } as never);
     mockDeleteClient.mockResolvedValue({} as never);
   });

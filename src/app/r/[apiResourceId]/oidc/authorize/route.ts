@@ -18,7 +18,7 @@ const authorizeSchema = z.object({
   nonce: z.string().optional(),
   prompt: z.enum(["login", "none"]).optional(),
   login_hint: z.string().optional(),
-  code_challenge: z.string().min(43).max(128),
+  code_challenge: z.string().min(43).max(128).optional(),
   code_challenge_method: z.string().default("S256"),
   fresh_login: z.string().optional(),
 });

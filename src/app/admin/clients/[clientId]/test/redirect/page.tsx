@@ -13,6 +13,7 @@ import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { consumeOauthTestSession } from "@/server/services/oauth-test-service";
 import { readOauthTestSecretCookie } from "@/server/oauth/test-cookie";
+import { parseTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -77,6 +78,10 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
     notFound();
   }
 
+  const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const tokenAuthMethod = tokenAuthMethods[0];
+  const requiresSecret = requiresClientSecret(tokenAuthMethods);
+
   const origin = await getRequestOrigin();
   const resourceId = client.apiResourceId ?? activeTenant.defaultApiResourceId;
   if (!resourceId) {
@@ -115,7 +120,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
     result = { status: "error", message: `Test session expired. ${RERUN_HINT}` };
   } else if (!code) {
     result = { status: "error", message: "Authorization code missing from redirect." };
-  } else if (client.tokenEndpointAuthMethod !== "none" && !cookieSecret) {
+  } else if (requiresSecret && !cookieSecret) {
     result = { status: "error", message: `Client secret expired. ${RERUN_HINT}` };
   } else {
     const exchange = await exchangeAuthorizationCode({
@@ -124,8 +129,8 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
       code,
       redirectUri: sessionRecord.redirectUri,
       codeVerifier: sessionRecord.codeVerifier,
-      clientSecret: cookieSecret,
-      tokenAuthMethod: client.tokenEndpointAuthMethod,
+      clientSecret: requiresSecret ? cookieSecret : null,
+      tokenAuthMethod,
       requestedScope: sessionRecord.scopes,
     });
     result = exchange;
@@ -142,7 +147,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
-      <TestSecretCleanup clientId={client.id} state={state} enabled={client.tokenEndpointAuthMethod !== "none"} />
+      <TestSecretCleanup clientId={client.id} state={state} enabled={requiresSecret} />
       <Button asChild variant="ghost" size="sm">
         <Link href={`/admin/clients/${client.id}/test`}>← Back to test config</Link>
       </Button>

@@ -29,7 +29,8 @@ vi.mock("@/server/services/client-service", async () => {
     updateClientName: vi.fn(),
     updateClientApiResource: vi.fn(),
     updateClientAuthStrategies: vi.fn(),
-    getConfidentialClientSecret: vi.fn(),
+    getClientSecret: vi.fn(),
+    updateClientTokenConfig: vi.fn(),
   };
 });
 
@@ -86,7 +87,7 @@ vi.mock("@/server/db/client", () => ({
 import { prepareClientOauthTestAction } from "../actions";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/server/db/client";
-import { getConfidentialClientSecret } from "@/server/services/client-service";
+import { getClientSecret } from "@/server/services/client-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { computeS256Challenge } from "@/server/crypto/pkce";
@@ -95,7 +96,7 @@ import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/o
 
 const mockGetServerSession = vi.mocked(getServerSession);
 const mockFindClient = vi.mocked(prisma.client.findUnique);
-const mockGetSecret = vi.mocked(getConfidentialClientSecret);
+const mockGetSecret = vi.mocked(getClientSecret);
 const mockOrigin = vi.mocked(getRequestOrigin);
 const mockBuildUrls = vi.mocked(buildOidcUrls);
 const mockS256 = vi.mocked(computeS256Challenge);
@@ -113,12 +114,11 @@ describe("prepareClientOauthTestAction", () => {
       clientId: "client_public",
       tenantId: "tenant_123",
       name: "Test Client",
-      clientType: "CONFIDENTIAL",
       tenant: { id: "tenant_123", defaultApiResourceId: "resource_123", defaultApiResource: { id: "resource_123" } },
       apiResourceId: null,
       apiResource: null,
       redirectUris: [{ id: "redirect_1", uri: "https://admin.example.test/callback" }],
-      tokenEndpointAuthMethod: "client_secret_basic",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
     } as never);
     mockGetSecret.mockResolvedValue("stored-secret");
     mockOrigin.mockResolvedValue("https://admin.example.test");

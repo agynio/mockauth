@@ -32,8 +32,8 @@ type AuthorizeParams = {
   scope: string;
   state?: string;
   nonce?: string;
-  codeChallenge: string;
-  codeChallengeMethod: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
   prompt?: string;
   loginHint?: string;
   sessionToken?: string;
@@ -104,10 +104,6 @@ export const handleAuthorize = async (
     throw new DomainError("Only response_type=code is supported", { status: 400, code: "unsupported_response_type" });
   }
 
-  if (params.codeChallengeMethod !== "S256") {
-    throw new DomainError("Only PKCE S256 is supported", { status: 400, code: "invalid_request" });
-  }
-
   const { tenant, resource } = await getApiResourceWithTenant(params.apiResourceId);
   const client = await getClientForTenant(tenant.id, params.clientId);
   const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
@@ -115,12 +111,40 @@ export const handleAuthorize = async (
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
-  if (client.oauthClientMode === "proxy") {
-    return handleProxyAuthorize({ params, origin, tenantId: tenant.id, resourceId: resource.id, client, requestContext });
+  const codeChallengeMethod = params.codeChallengeMethod ?? "S256";
+  let resolvedCodeChallenge = "";
+  let resolvedCodeChallengeMethod = "S256";
+  if (client.pkceRequired) {
+    const codeChallenge = params.codeChallenge;
+    if (!codeChallenge) {
+      throw new DomainError("code_challenge is required", { status: 400, code: "invalid_request" });
+    }
+    if (codeChallengeMethod !== "S256") {
+      throw new DomainError("Only PKCE S256 is supported", { status: 400, code: "invalid_request" });
+    }
+    resolvedCodeChallenge = codeChallenge;
+    resolvedCodeChallengeMethod = codeChallengeMethod;
   }
-  const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
+  const resolvedParams = {
+    ...params,
+    codeChallenge: resolvedCodeChallenge,
+    codeChallengeMethod: resolvedCodeChallengeMethod,
+  };
+  const auditCodeChallenge = client.pkceRequired ? resolvedCodeChallenge : undefined;
 
-  ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
+  if (client.oauthClientMode === "proxy") {
+    return handleProxyAuthorize({
+      params: resolvedParams,
+      origin,
+      tenantId: tenant.id,
+      resourceId: resource.id,
+      client,
+      requestContext,
+    });
+  }
+  const redirect = resolveRedirectUri(resolvedParams.redirectUri, client.redirectUris ?? []);
+
+  ensureScopes(resolvedParams.scope.split(" ").filter(Boolean), client.allowedScopes);
   const traceId = randomUUID();
   void emitAuditEvent({
     tenantId: tenant.id,
@@ -131,31 +155,31 @@ export const handleAuthorize = async (
     severity: "INFO",
     message: "Authorization request received",
     details: buildAuthorizeReceivedDetails({
-      responseType: params.responseType,
-      scope: params.scope,
-      prompt: params.prompt,
+      responseType: resolvedParams.responseType,
+      scope: resolvedParams.scope,
+      prompt: resolvedParams.prompt,
       redirectUri: redirect,
-      state: params.state,
-      nonce: params.nonce,
-      codeChallenge: params.codeChallenge,
-      codeChallengeMethod: params.codeChallengeMethod,
-      loginHint: params.loginHint,
-      freshLoginRequested: params.freshLoginRequested,
+      state: resolvedParams.state,
+      nonce: resolvedParams.nonce,
+      codeChallenge: auditCodeChallenge,
+      codeChallengeMethod: resolvedCodeChallengeMethod,
+      loginHint: resolvedParams.loginHint,
+      freshLoginRequested: resolvedParams.freshLoginRequested,
     }),
     requestContext: requestContext ?? null,
   });
   const strategies = parseClientAuthStrategies(client.authStrategies);
-  const session = params.sessionToken ? await getSessionUser(tenant.id, params.sessionToken) : null;
+  const session = resolvedParams.sessionToken ? await getSessionUser(tenant.id, resolvedParams.sessionToken) : null;
   const strategyAllowed = session
     ? strategies[fromPrismaLoginStrategy(session.loginStrategy)]?.enabled ?? false
     : false;
   const reauthTtlSeconds = client.reauthTtlSeconds ?? 0;
-  const sessionTokenHash = params.sessionToken ? hashOpaqueToken(params.sessionToken) : null;
+  const sessionTokenHash = resolvedParams.sessionToken ? hashOpaqueToken(resolvedParams.sessionToken) : null;
   const cookieValid = Boolean(
     reauthTtlSeconds > 0 &&
       sessionTokenHash &&
-      params.reauthCookie &&
-      verifyReauthCookieValue(params.reauthCookie, {
+      resolvedParams.reauthCookie &&
+      verifyReauthCookieValue(resolvedParams.reauthCookie, {
         tenantId: tenant.id,
         apiResourceId: resource.id,
         clientId: client.clientId,
@@ -163,10 +187,10 @@ export const handleAuthorize = async (
       }),
   );
   const freshLoginCookieValid = Boolean(
-    params.freshLoginRequested &&
+    resolvedParams.freshLoginRequested &&
       sessionTokenHash &&
-      params.freshLoginCookie &&
-      verifyFreshLoginCookieValue(params.freshLoginCookie, {
+      resolvedParams.freshLoginCookie &&
+      verifyFreshLoginCookieValue(resolvedParams.freshLoginCookie, {
         tenantId: tenant.id,
         apiResourceId: resource.id,
         clientId: client.clientId,
@@ -176,22 +200,23 @@ export const handleAuthorize = async (
 
   const reusedViaFreshLogin = Boolean(freshLoginCookieValid && session && strategyAllowed);
   const reusedViaReauthCookie = Boolean(cookieValid && session && strategyAllowed);
-  const hasReusableLogin = params.prompt === "login" ? reusedViaFreshLogin : reusedViaFreshLogin || reusedViaReauthCookie;
+  const hasReusableLogin =
+    resolvedParams.prompt === "login" ? reusedViaFreshLogin : reusedViaFreshLogin || reusedViaReauthCookie;
 
   const buildLoginRedirect = (): AuthorizeResult => ({
     type: "login",
     redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
   });
 
-  if (params.prompt === "login" && !reusedViaFreshLogin) {
+  if (resolvedParams.prompt === "login" && !reusedViaFreshLogin) {
     return buildLoginRedirect();
   }
 
-  if (params.prompt === "none" && !hasReusableLogin) {
+  if (resolvedParams.prompt === "none" && !hasReusableLogin) {
     const redirectUrl = new URL(redirect);
     redirectUrl.searchParams.set("error", "login_required");
-    if (params.state) {
-      redirectUrl.searchParams.set("state", params.state);
+    if (resolvedParams.state) {
+      redirectUrl.searchParams.set("state", resolvedParams.state);
     }
     return { type: "redirect" as const, redirectTo: redirectUrl.toString(), consumeFreshLoginCookie: reusedViaFreshLogin };
   }
@@ -213,18 +238,18 @@ export const handleAuthorize = async (
     subject: session.subject,
     emailVerifiedOverride: session.emailVerifiedOverride ?? undefined,
     redirectUri: redirect,
-    scope: params.scope,
-    nonce: params.nonce,
-    state: params.state,
-    codeChallenge: params.codeChallenge,
-    codeChallengeMethod: params.codeChallengeMethod,
+    scope: resolvedParams.scope,
+    nonce: resolvedParams.nonce,
+    state: resolvedParams.state,
+    codeChallenge: resolvedCodeChallenge,
+    codeChallengeMethod: resolvedCodeChallengeMethod,
     traceId,
   });
 
   const redirectUrl = new URL(redirect);
   redirectUrl.searchParams.set("code", code);
-  if (params.state) {
-    redirectUrl.searchParams.set("state", params.state);
+  if (resolvedParams.state) {
+    redirectUrl.searchParams.set("state", resolvedParams.state);
   }
 
   return { type: "redirect" as const, redirectTo: redirectUrl.toString(), consumeFreshLoginCookie: reusedViaFreshLogin };
@@ -239,6 +264,8 @@ const handleProxyAuthorize = async (args: {
   requestContext?: RequestContext;
 }): Promise<AuthorizeResult> => {
   const { params, origin, tenantId, resourceId, client, requestContext } = args;
+  const codeChallenge = params.codeChallenge ?? "";
+  const codeChallengeMethod = params.codeChallengeMethod ?? "S256";
 
   const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
   ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
@@ -268,8 +295,8 @@ const handleProxyAuthorize = async (args: {
     appState: params.state,
     appNonce: params.nonce,
     appScope: params.scope,
-    appCodeChallenge: params.codeChallenge,
-    appCodeChallengeMethod: params.codeChallengeMethod,
+    appCodeChallenge: codeChallenge,
+    appCodeChallengeMethod: codeChallengeMethod,
     providerScope: providerScopes,
     providerCodeVerifier,
     providerPkceEnabled: Boolean(proxyConfig.pkceSupported),
@@ -292,8 +319,8 @@ const handleProxyAuthorize = async (args: {
       redirectUri: redirect,
       state: params.state,
       nonce: params.nonce,
-      codeChallenge: params.codeChallenge,
-      codeChallengeMethod: params.codeChallengeMethod,
+      codeChallenge: codeChallenge,
+      codeChallengeMethod: codeChallengeMethod,
       loginHint: params.loginHint,
       freshLoginRequested: params.freshLoginRequested,
     }),

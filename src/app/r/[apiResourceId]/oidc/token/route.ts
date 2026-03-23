@@ -4,7 +4,7 @@ import { z } from "zod";
 import { toResponse } from "@/server/errors";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { preflightResponse, withCorsHeaders } from "@/server/http/cors";
-import { issueTokensFromCode } from "@/server/services/token-service";
+import { issueTokensFromCode, issueTokensFromPassword } from "@/server/services/token-service";
 import { resolveOrigin, resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import {
@@ -21,7 +21,16 @@ const authorizationCodeSchema = z.object({
   grant_type: z.literal("authorization_code"),
   code: z.string().min(10),
   redirect_uri: z.string().min(1),
-  code_verifier: z.string().min(43).max(128),
+  code_verifier: z.string().min(43).max(128).optional(),
+  client_id: z.string().optional(),
+  client_secret: z.string().optional(),
+});
+
+const passwordSchema = z.object({
+  grant_type: z.literal("password"),
+  username: z.string().min(1),
+  password: z.string().optional(),
+  scope: z.string().min(1),
   client_id: z.string().optional(),
   client_secret: z.string().optional(),
 });
@@ -34,7 +43,7 @@ const refreshTokenSchema = z.object({
   client_secret: z.string().optional(),
 });
 
-const tokenSchema = z.union([authorizationCodeSchema, refreshTokenSchema]);
+const tokenSchema = z.union([authorizationCodeSchema, refreshTokenSchema, passwordSchema]);
 
 const parseBasicAuth = (header: string | null) => {
   if (!header) {
@@ -138,14 +147,6 @@ const handleTokenRequest = async (request: NextRequest, context: ApiResourceRout
         return Response.json({ error: "invalid_client" }, { status: 401 });
       }
 
-      if (codeRecord.client.tokenEndpointAuthMethod !== authMethod) {
-        await reportViolation("auth_method_mismatch", {
-          expectedAuthMethod: codeRecord.client.tokenEndpointAuthMethod,
-          receivedAuthMethod: authMethod,
-        });
-        return Response.json({ error: "invalid_client" }, { status: 401 });
-      }
-
       const tokens = await issueTokensFromCode({
         code: codeRecord,
         codeVerifier: validation.data.code_verifier,
@@ -153,6 +154,32 @@ const handleTokenRequest = async (request: NextRequest, context: ApiResourceRout
         clientSecret,
         origin,
         authorizationCode: validation.data.code,
+        auditContext: {
+          requestContext,
+          authMethod,
+          clientSecretInBody,
+          clientIdProvided,
+          clientId: clientId ?? undefined,
+          includeAuthHeader,
+        },
+      });
+
+      return Response.json(tokens);
+    }
+
+    if (validation.data.grant_type === "password") {
+      if (!clientId) {
+        return Response.json({ error: "invalid_client" }, { status: 401 });
+      }
+
+      const tokens = await issueTokensFromPassword({
+        apiResourceId,
+        clientId,
+        username: validation.data.username,
+        scope: validation.data.scope,
+        origin,
+        authMethod,
+        clientSecret,
         auditContext: {
           requestContext,
           authMethod,

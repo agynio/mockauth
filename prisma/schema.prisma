@@ -18,11 +18,6 @@ enum MembershipRole {
   READER
 }
 
-enum ClientType {
-  PUBLIC
-  CONFIDENTIAL
-}
-
 enum RedirectUriType {
   EXACT
   HOST_WILDCARD
@@ -34,12 +29,6 @@ enum KeyStatus {
   ACTIVE
   ROTATED
   REVOKED
-}
-
-enum TokenEndpointAuthMethod {
-  client_secret_basic
-  client_secret_post
-  none
 }
 
 enum OAuthClientMode {
@@ -183,13 +172,12 @@ model Client {
   clientId                 String
   clientSecretHash         String?
   clientSecretEncrypted    String?
-  clientType               ClientType               @default(CONFIDENTIAL)
   oauthClientMode          OAuthClientMode          @default(regular)
   allowedScopes            String[]                 @default(["openid", "profile", "email"])
   allowedGrantTypes        String[]                 @default(["authorization_code"])
   allowedResponseTypes     String[]                 @default(["code"])
   pkceRequired             Boolean                  @default(true)
-  tokenEndpointAuthMethod  TokenEndpointAuthMethod  @default(client_secret_basic)
+  tokenEndpointAuthMethods String[]                 @default(["client_secret_basic"])
   idTokenSignedResponseAlg JwtSigningAlg?
   accessTokenSigningAlg    JwtSigningAlg?
   authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\",\"emailVerifiedMode\":\"false\"}}")
@@ -336,7 +324,7 @@ model ProxyProviderConfig {
   jwksUri                     String?
   upstreamClientId            String
   upstreamClientSecretEncrypted String?
-  upstreamTokenEndpointAuthMethod TokenEndpointAuthMethod @default(client_secret_basic)
+  upstreamTokenEndpointAuthMethod String             @default("client_secret_basic")
   defaultScopes               String[]           @default([])
   scopeMapping                Json?
   pkceSupported               Boolean            @default(false)

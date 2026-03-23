@@ -3,13 +3,14 @@ import { URLSearchParams } from "node:url";
 import { DomainError } from "@/server/errors";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
+import { resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import {
   isProxyAuthorizationCode,
   consumeProxyAuthorizationCode,
   requestProviderTokens,
 } from "@/server/services/proxy-service";
 import { buildProxyTokenResponse, sanitizeProviderError, sanitizeProviderErrorDescription } from "@/server/services/proxy-utils";
-import { assertClientSecret, verifyPkce } from "@/server/services/token-service";
+import { assertClientAuth, verifyPkce } from "@/server/services/token-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { emitAuditEvent } from "@/server/services/audit-service";
@@ -27,6 +28,7 @@ import {
 } from "@/server/services/audit-event";
 import {
   createSecurityViolationReporter,
+  SecurityViolationError,
   withSecurityViolationAudit,
 } from "@/server/services/security-violation";
 import type { RequestContext } from "@/server/utils/request-context";
@@ -35,7 +37,7 @@ type AuthorizationCodeGrantParams = {
   apiResourceId: string;
   code: string;
   redirectUri: string;
-  codeVerifier: string;
+  codeVerifier?: string | null;
   authMethod: TokenAuthMethod;
   clientIdFromRequest?: string | null;
   clientSecret?: string | null;
@@ -76,7 +78,7 @@ export const completeProxyAuthorizationCodeGrant = async (
   const exchangeDiagnostics = proxyConfig
     ? buildProviderTokenExchangeDiagnostics({
         tokenEndpoint: proxyConfig.tokenEndpoint,
-        authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+        authMethod: resolveUpstreamAuthMethod(proxyConfig.upstreamTokenEndpointAuthMethod),
         clientId: proxyConfig.upstreamClientId,
         grantType: "authorization_code",
         redirectUri: callbackUrl,
@@ -139,15 +141,10 @@ export const completeProxyAuthorizationCodeGrant = async (
       throw new DomainError("Client mismatch", { status: 401, code: "invalid_client" });
     }
 
-    if (record.client.tokenEndpointAuthMethod !== params.authMethod) {
-      await reportViolation("auth_method_mismatch", {
-        expectedAuthMethod: record.client.tokenEndpointAuthMethod,
-        receivedAuthMethod: params.authMethod,
-      });
-      throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
-    }
-
-    await withSecurityViolationAudit(() => assertClientSecret(record.client, params.clientSecret), violationContext);
+    await withSecurityViolationAudit(
+      () => assertClientAuth(record.client, params.authMethod, params.clientSecret),
+      violationContext,
+    );
 
     const normalizedRedirect = resolveRedirectUri(params.redirectUri, record.client.redirectUris ?? []);
     if (normalizedRedirect !== record.redirectUri) {
@@ -158,7 +155,22 @@ export const completeProxyAuthorizationCodeGrant = async (
       throw new DomainError("redirect_uri mismatch", { status: 400, code: "invalid_grant" });
     }
 
-    await withSecurityViolationAudit(async () => verifyPkce(record, params.codeVerifier), violationContext);
+    if (record.client.pkceRequired) {
+      await withSecurityViolationAudit(async () => {
+        if (!params.codeVerifier) {
+          throw new SecurityViolationError(
+            "Code verifier required",
+            { status: 400, code: "invalid_grant" },
+            "pkce_mismatch",
+            {
+              expectedCodeChallenge: record.codeChallenge,
+              receivedCodeVerifier: params.codeVerifier ?? undefined,
+            },
+          );
+        }
+        verifyPkce(record, params.codeVerifier);
+      }, violationContext);
+    }
 
     if (!proxyConfig) {
       throw new DomainError("Proxy configuration missing", { status: 500 });
@@ -269,14 +281,6 @@ export const completeProxyRefreshGrant = async (
     throw new DomainError("Proxy configuration missing", { status: 500 });
   }
 
-  if (client.tokenEndpointAuthMethod !== params.authMethod) {
-    await reportViolation("auth_method_mismatch", {
-      expectedAuthMethod: client.tokenEndpointAuthMethod,
-      receivedAuthMethod: params.authMethod,
-    });
-    throw new DomainError("Client authentication method mismatch", { status: 401, code: "invalid_client" });
-  }
-
   await emitAuditEvent({
     tenantId: tenant.id,
     clientId: client.id,
@@ -299,11 +303,14 @@ export const completeProxyRefreshGrant = async (
     requestContext: params.auditContext?.requestContext ?? null,
   });
 
-  await withSecurityViolationAudit(() => assertClientSecret(client, params.clientSecret), violationContext);
+  await withSecurityViolationAudit(
+    () => assertClientAuth(client, params.authMethod, params.clientSecret),
+    violationContext,
+  );
 
   const refreshDiagnostics = buildProviderTokenExchangeDiagnostics({
     tokenEndpoint: proxyConfig.tokenEndpoint,
-    authMethod: proxyConfig.upstreamTokenEndpointAuthMethod ?? "client_secret_basic",
+    authMethod: resolveUpstreamAuthMethod(proxyConfig.upstreamTokenEndpointAuthMethod),
     clientId: proxyConfig.upstreamClientId,
     grantType: "refresh_token",
   });

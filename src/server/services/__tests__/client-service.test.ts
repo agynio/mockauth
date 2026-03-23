@@ -4,11 +4,11 @@ import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { decrypt } from "@/server/crypto/key-vault";
 import {
-  changeClientType,
   createClient,
   deleteClient,
   getClientByIdForTenant,
   rotateClientSecret,
+  updateClientTokenConfig,
   updateClientSigningAlgorithms,
 } from "@/server/services/client-service";
 import { describe, expect, it } from "vitest";
@@ -43,7 +43,7 @@ describe("client service", () => {
     const tenant = await createTenant();
     const { client, clientSecret } = await createClient(tenant.id, {
       name: "Admin E2E",
-      clientType: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
       redirectUris: [
         "https://example.com/callback",
         "https://*.example.com/post-login",
@@ -68,7 +68,7 @@ describe("client service", () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "QA Tester",
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["none"],
       allowedScopes: ["openid", "tenant:write", "profile"],
     });
 
@@ -81,7 +81,7 @@ describe("client service", () => {
     await expect(
       createClient(tenant.id, {
         name: "Bad Scope",
-        clientType: "PUBLIC",
+        tokenEndpointAuthMethods: ["none"],
         allowedScopes: ["openid", "invalid scope"],
       }),
     ).rejects.toThrowError("Invalid scope format: invalid scope");
@@ -91,7 +91,7 @@ describe("client service", () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "SPA",
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["none"],
       redirectUris: ["https://spa.test/callback"],
     });
 
@@ -104,7 +104,7 @@ describe("client service", () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "Machine",
-      clientType: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
     });
 
     const original = await prisma.client.findUnique({ where: { id: client.id } });
@@ -117,56 +117,75 @@ describe("client service", () => {
     expect(decrypt(updated?.clientSecretEncrypted as string)).toEqual(nextSecret);
   });
 
-  it("changes public clients to confidential", async () => {
+  it("adds secret auth methods when updating token config", async () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "Public Client",
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["none"],
     });
 
-    const result = await changeClientType(client.id, "CONFIDENTIAL");
-    expect(result.client.clientType).toBe("CONFIDENTIAL");
+    const result = await updateClientTokenConfig({
+      clientId: client.id,
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
+
+    expect(result.client.tokenEndpointAuthMethods).toEqual(["client_secret_basic"]);
     expect(result.clientSecret).toBeTruthy();
 
     const stored = await prisma.client.findUnique({ where: { id: client.id } });
     expect(stored?.clientSecretHash).toBeTruthy();
     expect(stored?.clientSecretEncrypted).toBeTruthy();
-    expect(stored?.tokenEndpointAuthMethod).toBe("client_secret_basic");
+    expect(stored?.tokenEndpointAuthMethods).toEqual(["client_secret_basic"]);
     expect(decrypt(stored?.clientSecretEncrypted as string)).toBe(result.clientSecret);
   });
 
-  it("changes confidential clients to public", async () => {
+  it("removes secrets when updating token config", async () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "Confidential Client",
-      clientType: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
     });
 
-    const result = await changeClientType(client.id, "PUBLIC");
-    expect(result.client.clientType).toBe("PUBLIC");
+    const result = await updateClientTokenConfig({
+      clientId: client.id,
+      tokenEndpointAuthMethods: ["none"],
+      pkceRequired: true,
+      allowedGrantTypes: ["authorization_code"],
+    });
+
+    expect(result.client.tokenEndpointAuthMethods).toEqual(["none"]);
     expect(result.clientSecret).toBeNull();
 
     const stored = await prisma.client.findUnique({ where: { id: client.id } });
     expect(stored?.clientSecretHash).toBeNull();
     expect(stored?.clientSecretEncrypted).toBeNull();
-    expect(stored?.tokenEndpointAuthMethod).toBe("none");
+    expect(stored?.tokenEndpointAuthMethods).toEqual(["none"]);
   });
 
-  it("rejects switching to the same client type", async () => {
+  it("rejects empty token auth methods", async () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "Same Type",
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
     });
 
-    await expect(changeClientType(client.id, "PUBLIC")).rejects.toThrowError("Client is already public");
+    await expect(
+      updateClientTokenConfig({
+        clientId: client.id,
+        tokenEndpointAuthMethods: [],
+        pkceRequired: true,
+        allowedGrantTypes: ["authorization_code"],
+      }),
+    ).rejects.toThrowError("At least one token auth method is required");
   });
 
   it("updates signing algorithms with nullable defaults", async () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "Alg Tester",
-      clientType: "PUBLIC",
+      tokenEndpointAuthMethods: ["none"],
     });
 
     await updateClientSigningAlgorithms(client.id, { idTokenAlg: "ES384", accessTokenAlg: "PS256" });
@@ -186,7 +205,7 @@ describe("client service", () => {
     const tenant = await createTenant();
     const { client } = await createClient(tenant.id, {
       name: "Cascade Client",
-      clientType: "CONFIDENTIAL",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
       redirectUris: ["https://cascade.example/callback"],
       oauthClientMode: "proxy",
       proxyConfig: {

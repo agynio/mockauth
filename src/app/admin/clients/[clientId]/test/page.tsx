@@ -7,9 +7,10 @@ import { TestOAuthConfigurator } from "@/app/admin/clients/[clientId]/test/test-
 import { DEFAULT_TEST_SCOPES } from "@/app/admin/clients/[clientId]/test/constants";
 import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
-import { getClientByIdForTenant, getConfidentialClientSecret } from "@/server/services/client-service";
+import { getClientByIdForTenant, getClientSecret } from "@/server/services/client-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
+import { parseTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -46,8 +47,9 @@ export default async function ClientTestOAuthPage({ params }: { params: PagePara
 
   const viewerRole = activeMembership?.role ?? "READER";
   const canManageRedirects = viewerRole === "OWNER" || viewerRole === "WRITER";
-  const requiresClientSecret = client.tokenEndpointAuthMethod !== "none";
-  const defaultClientSecret = requiresClientSecret ? await getConfidentialClientSecret(client.id) : null;
+  const tokenAuthMethods = parseTokenAuthMethods(client.tokenEndpointAuthMethods);
+  const requiresClientSecretForTest = requiresClientSecret(tokenAuthMethods);
+  const defaultClientSecret = requiresClientSecretForTest ? await getClientSecret(client.id) : null;
 
   return (
     <div className="space-y-8">
@@ -77,7 +79,7 @@ export default async function ClientTestOAuthPage({ params }: { params: PagePara
             defaultRedirectUri={testRedirectUri}
             canManageRedirects={canManageRedirects}
             redirectAllowed={redirectAllowed}
-            requiresClientSecret={requiresClientSecret}
+            requiresClientSecret={requiresClientSecretForTest}
             defaultClientSecret={defaultClientSecret ?? undefined}
           />
         </CardContent>
