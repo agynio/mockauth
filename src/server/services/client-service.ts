@@ -43,7 +43,6 @@ export const proxyProviderConfigSchema = z.object({
   tokenEndpoint: z.string().url(),
   userinfoEndpoint: z.string().url().optional(),
   jwksUri: z.string().url().optional(),
-<<<<<<< HEAD
   upstreamClientId: z.string().trim().min(1),
   upstreamClientSecret: z
     .string()
@@ -53,17 +52,6 @@ export const proxyProviderConfigSchema = z.object({
     })
     .optional(),
   upstreamTokenEndpointAuthMethod: z.enum(TOKEN_AUTH_METHODS).optional(),
-=======
-  upstreamClientId: z.string().trim().min(1),
-  upstreamClientSecret: z
-    .string()
-    .transform((value) => {
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : undefined;
-    })
-    .optional(),
-  upstreamTokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"] as const).optional(),
->>>>>>> 3dd56b5 (fix(proxy): trim upstream credentials)
   defaultScopes: z.array(z.string().min(1)).optional(),
   scopeMapping: z
     .record(z.string(), z.union([z.string(), z.array(z.string().min(1))]))
