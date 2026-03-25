@@ -478,6 +478,80 @@ describe("Proxy client OAuth flow", () => {
     fetchMock.mockRestore();
   });
 
+  it("does not contact the upstream provider when redeeming proxy authorization codes", async () => {
+    const codeVerifier = "verifier-no-upstream-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+    const codeChallenge = computeS256Challenge(codeVerifier);
+    const { proxyCookie, transactionId } = await startProxyAuthorization({
+      clientId: proxyClientClientId,
+      redirectUri: "https://proxy-client.test/callback",
+      codeChallenge,
+      state: "no-upstream-state",
+    });
+
+    const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => {
+      const payload = upstreamTokenResponses.shift();
+      if (!payload) {
+        return new Response(JSON.stringify({ error: "unexpected" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    upstreamTokenResponses.push({
+      access_token: "up-access-token",
+      token_type: "Bearer",
+      expires_in: 3600,
+      refresh_token: "up-refresh-token",
+      scope: "openid profile",
+    });
+
+    const callbackContext = buildCallbackContext({
+      state: transactionId!,
+      code: "provider-code-no-upstream",
+      sessionState: "session-no-upstream",
+    });
+
+    const callback = await handleProxyCallback({
+      apiResourceId,
+      state: transactionId!,
+      code: "provider-code-no-upstream",
+      transactionCookie: proxyCookie?.value,
+      origin: "https://mockauth.test",
+      callbackRequest: callbackContext.callbackRequest,
+      callbackParams: callbackContext.callbackParams,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const proxyCode = new URL(callback.redirectTo).searchParams.get("code");
+    expect(proxyCode).toBeTruthy();
+
+    const issued = await completeProxyAuthorizationCodeGrant({
+      apiResourceId,
+      code: proxyCode!,
+      redirectUri: "https://proxy-client.test/callback",
+      codeVerifier,
+      authMethod: "none",
+      clientIdFromRequest: null,
+      clientSecret: null,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(issued).toMatchObject({
+      access_token: "up-access-token",
+      refresh_token: "up-refresh-token",
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: "openid profile",
+    });
+
+    fetchMock.mockRestore();
+  });
+
   it("logs diagnostics when callback is missing a code", async () => {
     const codeChallenge = computeS256Challenge("verifier-missing-code-ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
