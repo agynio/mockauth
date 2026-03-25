@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { z } from "zod";
 import { toNestErrors, validateFieldsNatively } from "@hookform/resolvers";
 import { appendErrors, useFieldArray, useForm, useFormContext, useWatch } from "react-hook-form";
@@ -23,6 +23,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { RHFSelectField } from "@/components/rhf/rhf-select-field";
+import {
+  PROXY_TOKEN_AUTH_OPTIONS,
+  getProxyTokenAuthDescription,
+} from "@/app/admin/clients/proxy-auth-options";
 
 const scopeMappingSchema = z.object({
   appScope: z.string().optional(),
@@ -324,6 +328,11 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
   } | null>(null);
 
   const watchMode = useWatch({ control: form.control, name: "mode" });
+  const watchTokenEndpoint = useWatch({ control: form.control, name: "proxyConfig.tokenEndpoint", defaultValue: "" });
+  const tokenAuthDescription = useMemo(
+    () => getProxyTokenAuthDescription(watchTokenEndpoint ?? undefined),
+    [watchTokenEndpoint],
+  );
   const { getValues, setValue } = form;
 
   useEffect(() => {
@@ -365,6 +374,8 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       });
     }
   }, [watchMode, getValues, setValue]);
+
+  const tokenAuthOptions = PROXY_TOKEN_AUTH_OPTIONS;
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -627,13 +638,9 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
               name="proxyConfig.upstreamTokenEndpointAuthMethod"
               label="Token endpoint auth"
               placeholder="Select auth method"
-              options={[
-                { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
-                { value: "client_secret_post", label: "POST body (client_secret_post)" },
-                { value: "none", label: "Public client (none)" },
-              ]}
+              options={tokenAuthOptions}
               disabled={pending}
-              description="Determines how MockAuth authenticates to the upstream token endpoint."
+              description={tokenAuthDescription}
             />
 
             <div className="grid gap-4 md:grid-cols-2">

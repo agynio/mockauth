@@ -396,6 +396,49 @@ describe("Proxy client OAuth flow", () => {
       token_type: "Bearer",
       expires_in: 1800,
     });
+    const receivedLog = await prisma.auditLog.findFirst({
+      where: { tenantId, traceId: transactionId ?? undefined, eventType: "TOKEN_AUTHCODE_RECEIVED" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(receivedLog).not.toBeNull();
+    const receivedDetails = receivedLog?.details as Record<string, unknown> & {
+      upstreamCall?: boolean;
+      authorizationCode?: string;
+    };
+    expect(receivedDetails.upstreamCall).toBe(false);
+    expect(receivedDetails.authorizationCode).toBe(appCode);
+
+    const completedLog = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        traceId: transactionId ?? undefined,
+        eventType: "TOKEN_AUTHCODE_COMPLETED",
+        severity: "INFO",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(completedLog).not.toBeNull();
+    const completedDetails = completedLog?.details as Record<string, unknown> & {
+      upstreamCall?: boolean;
+      providerResponse?: Record<string, unknown>;
+    };
+    expect(completedDetails.upstreamCall).toBe(false);
+    expect(completedDetails).toMatchObject({
+      access_token: "up-access-token",
+      refresh_token: "up-refresh-token",
+      token_type: "Bearer",
+      scope: "openid profile",
+      id_token: "up-id-token",
+      expires_in: 3600,
+    });
+    expect(completedDetails.providerResponse).toMatchObject({
+      access_token: "up-access-token",
+      refresh_token: "up-refresh-token",
+      token_type: "Bearer",
+      scope: "openid profile",
+      id_token: "up-id-token",
+      expires_in: 3600,
+    });
 
     const traceLogs = await prisma.auditLog.findMany({
       where: { tenantId, traceId: transactionId ?? undefined },
@@ -757,6 +800,7 @@ describe("Proxy client OAuth flow", () => {
     });
     const tokenErrorDetails = auditLog?.details as Record<string, unknown>;
     expect(tokenErrorDetails).toMatchObject({
+      upstreamCall: false,
       tokenEndpointHost: "upstream.example.com",
       authMethod: "none",
       includeAuthHeader: false,
@@ -781,6 +825,7 @@ describe("Proxy client OAuth flow", () => {
 
     expect(requestLog).toBeDefined();
     const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
+    expect((requestLog?.details as { upstreamCall?: boolean }).upstreamCall).toBe(false);
     expect(requestDetails).toMatchObject({
       stage: "token",
       request: {
@@ -929,6 +974,7 @@ describe("Proxy client OAuth flow", () => {
 
     expect(requestLog).toBeDefined();
     const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
+    expect((requestLog?.details as { upstreamCall?: boolean }).upstreamCall).toBe(false);
     expect(requestDetails).toMatchObject({
       stage: "token",
       request: {
@@ -1033,6 +1079,7 @@ describe("Proxy client OAuth flow", () => {
 
     expect(requestLog).not.toBeNull();
     const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
+    expect((requestLog?.details as { upstreamCall?: boolean }).upstreamCall).toBe(false);
     expect(requestDetails).toMatchObject({
       stage: "token",
       params: expect.objectContaining({

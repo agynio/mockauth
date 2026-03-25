@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Check, Copy, Eye, EyeOff, Loader2, Trash2, X } from "lucide-react";
@@ -36,6 +36,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { RHFSelectField } from "@/components/rhf/rhf-select-field";
+import {
+  PROXY_TOKEN_AUTH_OPTIONS,
+  getProxyTokenAuthDescription,
+} from "@/app/admin/clients/proxy-auth-options";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { cn } from "@/lib/utils";
@@ -1472,6 +1476,13 @@ export function UpdateProxyProviderConfigForm({
   }, [initialConfig, form]);
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "scopeMappings" });
+  const watchTokenEndpoint = useWatch({ control: form.control, name: "tokenEndpoint", defaultValue: initialConfig.tokenEndpoint });
+  const tokenAuthDescription = useMemo(
+    () => getProxyTokenAuthDescription(watchTokenEndpoint ?? undefined),
+    [watchTokenEndpoint],
+  );
+
+  const tokenAuthOptions = PROXY_TOKEN_AUTH_OPTIONS;
 
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
@@ -1552,28 +1563,27 @@ export function UpdateProxyProviderConfigForm({
           )}
         />
 
-        {storedSecret ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">Stored provider secret</p>
-            <StoredProxySecretField value={storedSecret} />
-            <p className="text-xs text-muted-foreground" data-testid="proxy-secret-caution">
-              Revealed secrets render only in your browser. Share cautiously.
-            </p>
-          </div>
-        ) : null}
+        <div className="space-y-4">
+          <CopyField label="Stored provider client ID" value={initialConfig.upstreamClientId} testId="proxy-client-id-field" />
+          {storedSecret ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Stored provider secret</p>
+              <StoredProxySecretField value={storedSecret} />
+              <p className="text-xs text-muted-foreground" data-testid="proxy-secret-caution">
+                Revealed secrets render only in your browser. Share cautiously.
+              </p>
+            </div>
+          ) : null}
+        </div>
 
         <RHFSelectField
           control={form.control}
           name="upstreamTokenEndpointAuthMethod"
           label="Token endpoint auth"
           placeholder="Select auth method"
-          options={[
-            { value: "client_secret_basic", label: "HTTP Basic (client_secret_basic)" },
-            { value: "client_secret_post", label: "POST body (client_secret_post)" },
-            { value: "none", label: "Public client (none)" },
-          ]}
+          options={tokenAuthOptions}
           disabled={disableForm}
-          description="Determines how MockAuth authenticates to the upstream token endpoint."
+          description={tokenAuthDescription}
         />
 
         <div className="grid gap-4 md:grid-cols-2">

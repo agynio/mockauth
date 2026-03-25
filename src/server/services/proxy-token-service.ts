@@ -22,6 +22,7 @@ import {
   buildTokenAuthCodeReceivedDetails,
   buildTokenRefreshReceivedDetails,
   toTokenResponsePayload,
+  type TokenAuthCodeCompletedDetails,
   type ProxyFlowDiagnostics,
   type ProxyFlowRequestDetails,
   type TokenAuthMethod,
@@ -120,6 +121,7 @@ export const completeProxyAuthorizationCodeGrant = async (
       authorizationCode: params.code,
       includeAuthHeader: params.auditContext?.includeAuthHeader,
       diagnostics: requestDiagnostics,
+      upstreamCall: false,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
@@ -186,6 +188,12 @@ export const completeProxyAuthorizationCodeGrant = async (
       fallbackScope: providerScope,
     });
 
+    const issuedTokenDetails = {
+      upstreamCall: false,
+      providerResponse,
+      ...toTokenResponsePayload(response),
+    } satisfies TokenAuthCodeCompletedDetails;
+
     await emitAuditEvent({
       tenantId: record.tenantId,
       clientId: record.clientId,
@@ -194,7 +202,7 @@ export const completeProxyAuthorizationCodeGrant = async (
       eventType: "TOKEN_AUTHCODE_COMPLETED",
       severity: "INFO",
       message: "Token response issued",
-      details: toTokenResponsePayload(response),
+      details: issuedTokenDetails,
       requestContext: params.auditContext?.requestContext ?? null,
     });
 
@@ -216,6 +224,7 @@ export const completeProxyAuthorizationCodeGrant = async (
           error: errorCode,
           errorDescription: description,
           exchangeDiagnostics,
+          upstreamCall: false,
         }),
         requestContext: params.auditContext?.requestContext ?? null,
       });

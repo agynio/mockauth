@@ -241,7 +241,9 @@ export const requestProviderTokens = async (
   };
 
   const params = new URLSearchParams(body);
-  params.set("client_id", config.upstreamClientId);
+  const rawClientId = config.upstreamClientId;
+  const normalizedClientId = rawClientId.trim();
+  params.set("client_id", normalizedClientId);
 
   const authMethod = config.upstreamTokenEndpointAuthMethod ?? "client_secret_basic";
   let authorization: string | null = null;
@@ -250,21 +252,46 @@ export const requestProviderTokens = async (
     if (!config.upstreamClientSecretEncrypted) {
       throw new DomainError(`Provider client secret is required for ${method}`, { status: 500 });
     }
-    return decrypt(config.upstreamClientSecretEncrypted);
+    const decrypted = decrypt(config.upstreamClientSecretEncrypted);
+    const trimmed = decrypted.trim();
+    if (!trimmed) {
+      throw new DomainError(`Provider client secret is required for ${method}`, { status: 500 });
+    }
+    return trimmed;
   };
 
   params.delete("client_secret");
 
   if (authMethod === "client_secret_basic") {
     const secret = readUpstreamSecret("client_secret_basic");
-    authorization = `Basic ${Buffer.from(`${config.upstreamClientId}:${secret}`).toString("base64")}`;
+    authorization = `Basic ${Buffer.from(`${normalizedClientId}:${secret}`).toString("base64")}`;
   } else if (authMethod === "client_secret_post") {
     const secret = readUpstreamSecret("client_secret_post");
     params.set("client_secret", secret);
   }
 
+  const includeAuthHeader = Boolean(authorization);
+  const includeClientSecretInBody = params.has("client_secret");
+  const hasClientId = params.has("client_id");
+  const grantType = params.get("grant_type");
+  const includesRedirectUri = params.has("redirect_uri");
+  const includesCode = params.has("code");
+  const includesRefreshToken = params.has("refresh_token");
+
   const requestHeaders = authorization ? { ...headers, authorization } : { ...headers };
   const requestBody = params.toString();
+  const recordedHeaders = { ...requestHeaders };
+  if (recordedHeaders.authorization) {
+    recordedHeaders.authorization = "[redacted]";
+  }
+  const recordedBodyParams = new URLSearchParams(requestBody);
+  if (recordedBodyParams.has("client_secret")) {
+    recordedBodyParams.set("client_secret", "[redacted]");
+  }
+  if (recordedBodyParams.has("client_id")) {
+    recordedBodyParams.set("client_id", normalizedClientId);
+  }
+  const recordedBody = recordedBodyParams.toString();
 
   const response = await fetch(config.tokenEndpoint, {
     method: "POST",
@@ -296,9 +323,9 @@ export const requestProviderTokens = async (
     headers: Object.fromEntries(response.headers.entries()),
     request: {
       url: config.tokenEndpoint,
-      headers: requestHeaders,
+      headers: recordedHeaders,
       contentType: headers["content-type"],
-      body: requestBody,
+      body: recordedBody,
     },
   };
 };

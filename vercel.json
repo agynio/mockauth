@@ -1,4 +1,4 @@
 {
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm prisma:generate && if [ \"$VERCEL_ENV\" != \"development\" ]; then pnpm db:migrate; fi && pnpm build"
+  "buildCommand": "pnpm prisma:generate && if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm db:migrate; else echo 'Skipping prisma migrate deploy (non-production Vercel environment)'; fi && pnpm build"
 }

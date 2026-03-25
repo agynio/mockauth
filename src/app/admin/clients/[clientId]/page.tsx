@@ -32,6 +32,7 @@ import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { parseTokenAuthMethods, requiresClientSecret, resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import { decrypt } from "@/server/crypto/key-vault";
+import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 
 type PageParams = Promise<{ clientId: string }>;
 const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
@@ -153,7 +154,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const urls = buildOidcUrls(origin, currentResourceId);
   const providerRedirectUri =
     client.oauthClientMode === "proxy"
-      ? new URL(`/r/${currentResourceId}/oidc/proxy/callback`, origin).toString()
+      ? buildProxyCallbackUrl(origin, currentResourceId)
       : null;
   const showLocalClientSettings = client.oauthClientMode !== "proxy";
   const testFlowHref = `/admin/clients/${client.id}/test`;

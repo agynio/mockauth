@@ -6,8 +6,8 @@ import { handleProxyCallback } from "@/server/services/proxy-callback-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
-import { getRequestContextFromRequest } from "@/server/utils/request-context";
-import { collectHeaders, collectParams } from "@/server/utils/diagnostics";
+import { buildRequestContext } from "@/server/utils/request-context";
+import { searchParamsToRecord } from "@/server/utils/search-params";
 
 const callbackSchema = z.object({
   state: z.string().min(1),
@@ -18,13 +18,6 @@ const callbackSchema = z.object({
 
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
   const normalizedUrl = resolveUrl(request);
-  const callbackParams = collectParams(normalizedUrl.searchParams.entries());
-  const callbackRequest = {
-    url: normalizedUrl.toString(),
-    headers: collectHeaders(request.headers),
-    contentType: request.headers.get("content-type"),
-    body: null,
-  };
   const query = callbackSchema.safeParse(Object.fromEntries(normalizedUrl.searchParams.entries()));
 
   if (!query.success) {
@@ -34,6 +27,8 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
   try {
     const { apiResourceId } = await context.params;
     const transactionCookie = request.cookies.get(PROXY_TRANSACTION_COOKIE)?.value;
+    const callbackParams = searchParamsToRecord(normalizedUrl.searchParams);
+    const requestHeaders = Object.fromEntries(request.headers.entries());
     const result = await handleProxyCallback({
       apiResourceId,
       state: query.data.state,
@@ -42,9 +37,14 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
       providerErrorDescription: query.data.error_description,
       transactionCookie,
       origin: normalizedUrl.origin,
-      requestContext: getRequestContextFromRequest(request),
-      callbackRequest,
+      callbackRequest: {
+        url: normalizedUrl.toString(),
+        headers: requestHeaders,
+        contentType: null,
+        body: null,
+      },
       callbackParams,
+      requestContext: buildRequestContext(request.headers, (request as { ip?: string | null }).ip ?? null),
     });
 
     const response = NextResponse.redirect(result.redirectTo, { status: 302 });

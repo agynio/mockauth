@@ -8,47 +8,82 @@ export type RequestContext = {
 
 const MAX_USER_AGENT_LENGTH = 256;
 
-const extractIpAddress = (headerList: Headers) => {
-  const forwarded = headerList.get("x-forwarded-for");
-  if (forwarded) {
-    const [first] = forwarded.split(",");
-    const trimmed = first?.trim();
-    if (trimmed) {
-      return trimmed;
+const headerValue = (source: Headers | Record<string, string>, name: string): string | null => {
+  if (source instanceof Headers) {
+    return source.get(name);
+  }
+
+  const entry = Object.entries(source).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  return entry ? entry[1] : null;
+};
+
+const normalize = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const firstForwardedFor = (forwarded: string | null): string | null => {
+  if (!forwarded) {
+    return null;
+  }
+
+  for (const candidate of forwarded.split(",")) {
+    const normalized = normalize(candidate);
+    if (normalized) {
+      return normalized;
     }
   }
-  const realIp = headerList.get("x-real-ip");
-  if (realIp?.trim()) {
-    return realIp.trim();
-  }
-  const cfIp = headerList.get("cf-connecting-ip");
-  if (cfIp?.trim()) {
-    return cfIp.trim();
-  }
+
   return null;
 };
 
-const extractUserAgent = (headerList: Headers) => {
-  const raw = headerList.get("user-agent");
-  if (!raw) {
+const truncateUserAgent = (value: string | null): string | null => {
+  const normalized = normalize(value);
+  if (!normalized) {
     return null;
   }
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return trimmed.length > MAX_USER_AGENT_LENGTH ? trimmed.slice(0, MAX_USER_AGENT_LENGTH) : trimmed;
+
+  return normalized.length > MAX_USER_AGENT_LENGTH ? normalized.slice(0, MAX_USER_AGENT_LENGTH) : normalized;
 };
 
-const buildContext = (headerList: Headers): RequestContext => ({
-  ipAddress: extractIpAddress(headerList),
-  userAgent: extractUserAgent(headerList),
-});
+const buildFromHeaders = (
+  headerList: Headers | Record<string, string>,
+  ipOverride?: string | null,
+): RequestContext => {
+  const ipAddress =
+    normalize(ipOverride) ??
+    firstForwardedFor(headerValue(headerList, "x-forwarded-for")) ??
+    normalize(headerValue(headerList, "x-real-ip")) ??
+    normalize(headerValue(headerList, "cf-connecting-ip")) ??
+    null;
+
+  const userAgent = truncateUserAgent(headerValue(headerList, "user-agent"));
+
+  return {
+    ipAddress,
+    userAgent,
+  } satisfies RequestContext;
+};
+
+export const buildRequestContext = (
+  headerList: Headers | Record<string, string>,
+  ipOverride?: string | null,
+): RequestContext => {
+  if (headerList instanceof Headers && ipOverride === undefined) {
+    return buildFromHeaders(headerList);
+  }
+
+  return buildFromHeaders(headerList, ipOverride ?? null);
+};
 
 export const getRequestContext = async (): Promise<RequestContext> => {
   try {
     const headerList = await headers();
-    return buildContext(headerList);
+    return buildFromHeaders(headerList);
   } catch (error) {
     const errorPayload =
       error instanceof Error
@@ -60,5 +95,6 @@ export const getRequestContext = async (): Promise<RequestContext> => {
 };
 
 export const getRequestContextFromRequest = (request: Request | NextRequest): RequestContext => {
-  return buildContext(request.headers);
+  const ipOverride = (request as { ip?: string | null }).ip ?? null;
+  return buildFromHeaders(request.headers, ipOverride);
 };

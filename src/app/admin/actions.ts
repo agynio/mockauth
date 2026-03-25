@@ -12,6 +12,7 @@ import { addHours, addMinutes } from "date-fns";
 import type { MembershipRole } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { authOptions } from "@/server/auth/options";
+import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import {
   addRedirectUri,
   createClient,
@@ -488,7 +489,7 @@ export const createClientAction = async (
       });
       const resourceId = client.apiResourceId ?? tenant?.defaultApiResourceId;
       if (resourceId) {
-        providerRedirectUri = new URL(`/r/${resourceId}/oidc/proxy/callback`, origin).toString();
+        providerRedirectUri = buildProxyCallbackUrl(origin, resourceId);
       }
     }
     revalidatePath("/admin", "layout");

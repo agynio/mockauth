@@ -34,6 +34,7 @@ export type TokenResponsePayload = {
   refresh_token?: string;
   id_token?: string;
   diagnostics?: ProxyFlowDiagnostics;
+  upstreamCall?: boolean;
 };
 
 export type AuthorizeReceivedDetails = {
@@ -123,9 +124,15 @@ export type TokenAuthCodeErrorDetails = ProviderTokenExchangeDiagnostics & {
   error: string;
   errorDescription?: string;
   diagnostics?: ProxyFlowDiagnostics;
+  upstreamCall?: boolean;
 };
 
-export type TokenAuthCodeCompletedDetails = TokenResponsePayload | TokenAuthCodeErrorDetails;
+export type TokenAuthCodeCompletedDetails =
+  | (TokenResponsePayload & {
+      upstreamCall?: boolean;
+      providerResponse?: Record<string, unknown>;
+    })
+  | TokenAuthCodeErrorDetails;
 
 export type ProxyCodeIssuedDetails = {
   scope: string;
@@ -145,6 +152,7 @@ export type TokenAuthCodeReceivedDetails = {
   authorizationCode?: string;
   includeAuthHeader?: boolean;
   diagnostics?: ProxyFlowDiagnostics;
+  upstreamCall?: boolean;
 };
 
 export type TokenRefreshReceivedDetails = {
@@ -397,6 +405,7 @@ type TokenAuthCodeErrorDetailsParams = {
   errorDescription?: string | null;
   exchangeDiagnostics: ProviderTokenExchangeDiagnostics;
   diagnostics?: ProxyFlowDiagnostics;
+  upstreamCall?: boolean;
 };
 
 export function buildTokenAuthCodeErrorDetails(params: TokenAuthCodeErrorDetailsParams): TokenAuthCodeErrorDetails {
@@ -404,6 +413,7 @@ export function buildTokenAuthCodeErrorDetails(params: TokenAuthCodeErrorDetails
     error: params.error,
     errorDescription: params.errorDescription ?? undefined,
     diagnostics: params.diagnostics ?? undefined,
+    upstreamCall: params.upstreamCall ?? undefined,
     ...params.exchangeDiagnostics,
   };
 }
@@ -431,6 +441,7 @@ type TokenAuthCodeReceivedParams = {
   authorizationCode?: string;
   includeAuthHeader?: boolean;
   diagnostics?: ProxyFlowDiagnostics;
+  upstreamCall?: boolean;
 };
 
 export function buildTokenAuthCodeReceivedDetails(
@@ -447,6 +458,7 @@ export function buildTokenAuthCodeReceivedDetails(
     authorizationCode: params.authorizationCode ?? undefined,
     includeAuthHeader: params.includeAuthHeader ?? undefined,
     diagnostics: params.diagnostics ?? undefined,
+    upstreamCall: params.upstreamCall ?? undefined,
   };
 }
 

@@ -8,3 +8,5 @@
 - QA automation can call `POST /api/test/proxy/request-tokens` (behind `ENABLE_TEST_ROUTES`) to trigger proxied token
   requests without wiring a real upstream provider. Pass `{ clientId, tenantId, parameters }` where `parameters`
   mirrors the upstream form-encoded grant payload.
+- Upstream expectations differ by provider. For example, LinkedIn commonly insists on `client_secret_post` for token
+  requests, so select that method in the admin UI when configuring LinkedIn-backed proxies.
