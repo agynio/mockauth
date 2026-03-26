@@ -4,21 +4,17 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 
-import { cn } from "@/components/utils";
-
 type SignInCtaProps = {
   isAuthenticated: boolean;
   className?: string;
-  children?: ReactNode;
+  children: ReactNode;
 };
 
 export function SignInCta({ isAuthenticated, className, children }: SignInCtaProps) {
-  const label = children ?? "Sign in";
-
   if (isAuthenticated) {
     return (
-      <Link href="/admin" className={cn(className)} data-testid="landing-sign-in-link">
-        {label}
+      <Link href="/admin" className={className} data-testid="landing-sign-in-link">
+        {children}
       </Link>
     );
   }
@@ -28,8 +24,8 @@ export function SignInCta({ isAuthenticated, className, children }: SignInCtaPro
   };
 
   return (
-    <button type="button" onClick={handleSignIn} className={cn(className)} data-testid="landing-sign-in-link">
-      {label}
+    <button type="button" onClick={handleSignIn} className={className} data-testid="landing-sign-in-link">
+      {children}
     </button>
   );
 }
