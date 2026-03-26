@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { getServerSession } from "next-auth";
 import TerminalEndpoints from "@/components/TerminalEndpoints";
 import type { LucideIcon } from "lucide-react";
 import { ShieldCheck, KeyRound, Link as LinkIcon, ServerCog, ArrowRightLeft, Repeat } from "lucide-react";
 
+import { SignInCta } from "@/components/sign-in-cta";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { authOptions } from "@/server/auth/options";
 import { cn } from "@/lib/utils";
 
 const frictionPoints = [
@@ -89,8 +92,11 @@ const secondaryHeroLinkClasses = cn(
   "border-border-strong/80 bg-surface-0/10 text-foreground/90 backdrop-blur-sm transition hover:border-brand-400/60 hover:bg-surface-0/20",
 );
 
-export default function Home() {
-  const currentYear = new Date().getFullYear();  return (
+export default async function Home() {
+  const session = await getServerSession(authOptions);
+  const isAuthenticated = !!session?.user?.id;
+  const currentYear = new Date().getFullYear();
+  return (
     <>
       <div className="landing-glow" aria-hidden>
         <div className="landing-glow__layer" data-layer="1" />
@@ -127,9 +133,9 @@ export default function Home() {
   <span className="block">without running a production identity server.</span>
 </h3>
                                 <div className="mt-7 flex flex-wrap items-center gap-4">
-                  <Link href="/api/auth/signin/logto?callbackUrl=%2Fadmin" className={cn(primaryHeroButtonClasses, "animate-pulse")}>
+                  <SignInCta isAuthenticated={isAuthenticated} className={cn(primaryHeroButtonClasses, "animate-pulse")}>
                     Get Started
-                  </Link>
+                  </SignInCta>
                   <a
                     href="https://github.com/agynio/mockauth"
                     target="_blank"
