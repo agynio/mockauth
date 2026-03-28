@@ -201,7 +201,7 @@ export const completeProxyAuthorizationCodeGrant = async (
   params: AuthorizationCodeGrantParams,
 ): Promise<Record<string, unknown>> => {
   const { record, providerResponse } = await consumeProxyAuthorizationCode(params.code).catch(async (error) => {
-    await emitInvalidGrantAudit(params, error);
+    await emitInvalidGrantAudit(params, error).catch(() => undefined);
     throw error;
   });
   const authCodeAuditContext = buildProxyAuthCodeAuditContext(record, params);
