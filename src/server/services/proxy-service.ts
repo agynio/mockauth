@@ -196,6 +196,15 @@ export const consumeProxyAuthorizationCode = async (code: string): Promise<Consu
   });
 };
 
+export const findProxyAuthorizationCodeRecord = async (
+  code: string,
+): Promise<ProxyAuthorizationCodeWithRelations | null> => {
+  return prisma.proxyAuthorizationCode.findUnique({
+    where: { codeHash: hashOpaqueToken(code) },
+    include: proxyAuthorizationCodeInclude,
+  });
+};
+
 export const deleteProxyAuthTransaction = async (id: string) => {
   await prisma.proxyAuthTransaction.delete({ where: { id } }).catch((error) => {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
