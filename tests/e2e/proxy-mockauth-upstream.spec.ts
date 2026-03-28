@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page, type TestInfo } from "
 import { calculatePKCECodeChallenge, randomNonce, randomPKCECodeVerifier, randomState } from "openid-client";
 
 import { authenticate, createTestSession, stubClipboard } from "./helpers/admin";
+import { cookieJar, withSessionCookies } from "./helpers/oidc";
 
 const DEFAULT_RESOURCE_ID = "tenant_qa_default_resource";
 const ISSUER_BASE = `http://127.0.0.1:3000/r/${DEFAULT_RESOURCE_ID}/oidc`;
@@ -51,33 +52,6 @@ type ProxyAuthorizeErrorResult = {
   errorDescription?: string | null;
   state: string;
   transactionId: string;
-};
-
-const cookieJar = () => {
-  const jar = new Map<string, string>();
-  return {
-    addFrom(response: Response) {
-      const cookies: string[] = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.() ?? [];
-      for (const cookie of cookies) {
-        const [pair] = cookie.split(";");
-        const [name, value] = pair.split("=");
-        jar.set(name, value);
-      }
-    },
-    header() {
-      return Array.from(jar.entries())
-        .map(([name, value]) => `${name}=${value}`)
-        .join("; ");
-    },
-    get(name: string) {
-      return jar.get(name);
-    },
-  };
-};
-
-const withSessionCookies = (jar: ReturnType<typeof cookieJar>) => {
-  const header = jar.header();
-  return header ? { cookie: header } : undefined;
 };
 
 const buildNameSuffix = (testInfo: TestInfo) => {

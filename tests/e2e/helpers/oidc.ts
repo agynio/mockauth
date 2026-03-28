@@ -20,6 +20,9 @@ export const cookieJar = () => {
         .map(([name, value]) => `${name}=${value}`)
         .join("; ");
     },
+    get(name: string) {
+      return jar.get(name);
+    },
   };
 };
 
