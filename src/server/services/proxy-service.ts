@@ -177,7 +177,7 @@ export const consumeProxyAuthorizationCode = async (code: string): Promise<Consu
     }
 
     if (!record.tokenExchange || record.tokenExchange.consumedAt || record.tokenExchange.expiresAt < now) {
-      throw new DomainError("Token exchange expired", { status: 400, code: "invalid_grant" });
+      throw new DomainError("Proxy provider tokens are no longer available", { status: 400, code: "invalid_grant" });
     }
 
     await tx.proxyAuthorizationCode.update({
