@@ -191,6 +191,10 @@ test.describe("admin console", () => {
       await dialog.getByLabel("Display name").fill(resourceName);
       await dialog.getByLabel("Description").fill("Playwright resource");
       await dialog.getByRole("button", { name: "Create" }).click();
+      await expect(page.getByText("API resource created", { exact: true })).toBeVisible();
+      await page.reload();
+      await selectTenant(page, tenantIdUnderTest);
+      await expect(page.getByRole("heading", { name: "API resources" })).toBeVisible();
       const row = page.getByRole("row", { name: new RegExp(escapeRegExp(resourceName), "i") }).last();
       await expect(row.getByText(resourceName)).toBeVisible();
       const resourceId = await row.getAttribute("data-resource-id");

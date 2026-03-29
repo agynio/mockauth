@@ -5,9 +5,11 @@ import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import {
-  isProxyAuthorizationCode,
   consumeProxyAuthorizationCode,
+  findProxyAuthorizationCodeRecord,
+  isProxyAuthorizationCode,
   requestProviderTokens,
+  type ProxyAuthorizationCodeWithRelations,
 } from "@/server/services/proxy-service";
 import { buildProxyTokenResponse, sanitizeProviderError, sanitizeProviderErrorDescription } from "@/server/services/proxy-utils";
 import { assertClientAuth, verifyPkce } from "@/server/services/token-service";
@@ -55,23 +57,47 @@ type ProxyTokenAuditContext = {
   request?: ProxyFlowRequestDetails | null;
 };
 
-export const isProxyCode = isProxyAuthorizationCode;
+type ProxyAuthCodeAuditContext = {
+  traceId: string | null;
+  requestDiagnostics?: ProxyFlowDiagnostics;
+  exchangeDiagnostics: ReturnType<typeof buildProviderTokenExchangeDiagnostics> | null;
+};
 
-export const completeProxyAuthorizationCodeGrant = async (
+const resolveErrorCode = (error: unknown, fallback: string | null = "server_error") => {
+  if (error instanceof DomainError && error.options.code) {
+    return error.options.code;
+  }
+  return fallback;
+};
+
+const resolveErrorDescription = (error: unknown) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return String(error);
+};
+
+const buildProxyAuthCodeAuditContext = (
+  record: ProxyAuthorizationCodeWithRelations,
   params: AuthorizationCodeGrantParams,
-): Promise<Record<string, unknown>> => {
-  const { record, providerResponse } = await consumeProxyAuthorizationCode(params.code);
+): ProxyAuthCodeAuditContext => {
   const traceId = record.tokenExchange.transactionId ?? record.tokenExchange.transaction?.id ?? null;
-  const violationContext = {
-    tenantId: record.tenantId,
-    clientId: record.clientId,
-    traceId,
-    severity: "ERROR" as const,
-    authMethod: params.authMethod,
-    clientSecretInBody: params.auditContext?.clientSecretInBody,
-    requestContext: params.auditContext?.requestContext ?? null,
-  };
-  const reportViolation = createSecurityViolationReporter(violationContext);
+  const requestDiagnostics = params.auditContext?.request
+    ? buildProxyFlowDiagnostics({
+        stage: "token",
+        request: params.auditContext.request,
+        response: null,
+        params: params.auditContext.requestParams ?? {},
+        meta: {
+          clientId: record.client.clientId,
+          traceId,
+        },
+      })
+    : undefined;
+
   const proxyConfig = record.client.proxyConfig;
   const callbackUrl = params.auditContext?.origin
     ? buildProxyCallbackUrl(params.auditContext.origin, record.apiResourceId)
@@ -89,23 +115,18 @@ export const completeProxyAuthorizationCodeGrant = async (
       })
     : null;
 
-  const requestDiagnostics = params.auditContext?.request
-    ? buildProxyFlowDiagnostics({
-        stage: "token",
-        request: params.auditContext.request,
-        response: null,
-        params: params.auditContext.requestParams ?? {},
-        meta: {
-          clientId: record.client.clientId,
-          traceId,
-        },
-      })
-    : undefined;
+  return { traceId, requestDiagnostics, exchangeDiagnostics };
+};
 
+const emitProxyAuthCodeReceivedAudit = async (
+  record: ProxyAuthorizationCodeWithRelations,
+  params: AuthorizationCodeGrantParams,
+  auditContext: ProxyAuthCodeAuditContext,
+) => {
   await emitAuditEvent({
     tenantId: record.tenantId,
     clientId: record.clientId,
-    traceId,
+    traceId: auditContext.traceId,
     actorId: null,
     eventType: "TOKEN_AUTHCODE_RECEIVED",
     severity: "INFO",
@@ -120,11 +141,84 @@ export const completeProxyAuthorizationCodeGrant = async (
       redirectUri: params.redirectUri,
       authorizationCode: params.code,
       includeAuthHeader: params.auditContext?.includeAuthHeader,
-      diagnostics: requestDiagnostics,
+      diagnostics: auditContext.requestDiagnostics,
       upstreamCall: false,
     }),
     requestContext: params.auditContext?.requestContext ?? null,
   });
+};
+
+const emitProxyAuthCodeErrorAudit = async (
+  record: ProxyAuthorizationCodeWithRelations,
+  params: AuthorizationCodeGrantParams,
+  auditContext: ProxyAuthCodeAuditContext,
+  error: unknown,
+) => {
+  if (!auditContext.exchangeDiagnostics) {
+    return;
+  }
+  const errorCode = resolveErrorCode(error);
+  if (!errorCode) {
+    return;
+  }
+  const description = resolveErrorDescription(error);
+  await emitAuditEvent({
+    tenantId: record.tenantId,
+    clientId: record.clientId,
+    traceId: auditContext.traceId,
+    actorId: null,
+    eventType: "TOKEN_AUTHCODE_COMPLETED",
+    severity: "ERROR",
+    message: "Token exchange failed",
+    details: buildTokenAuthCodeErrorDetails({
+      error: errorCode,
+      errorDescription: description,
+      exchangeDiagnostics: auditContext.exchangeDiagnostics,
+      diagnostics: auditContext.requestDiagnostics,
+      upstreamCall: false,
+    }),
+    requestContext: params.auditContext?.requestContext ?? null,
+  });
+};
+
+const emitInvalidGrantAudit = async (params: AuthorizationCodeGrantParams, error: unknown) => {
+  const errorCode = resolveErrorCode(error, null);
+  if (errorCode !== "invalid_grant") {
+    return;
+  }
+  const auditRecord = await findProxyAuthorizationCodeRecord(params.code);
+  if (!auditRecord?.client.proxyConfig) {
+    return;
+  }
+  const auditContext = buildProxyAuthCodeAuditContext(auditRecord, params);
+  await emitProxyAuthCodeReceivedAudit(auditRecord, params, auditContext);
+  await emitProxyAuthCodeErrorAudit(auditRecord, params, auditContext, error);
+};
+
+export const isProxyCode = isProxyAuthorizationCode;
+
+export const completeProxyAuthorizationCodeGrant = async (
+  params: AuthorizationCodeGrantParams,
+): Promise<Record<string, unknown>> => {
+  const { record, providerResponse } = await consumeProxyAuthorizationCode(params.code).catch(async (error) => {
+    await emitInvalidGrantAudit(params, error).catch(() => undefined);
+    throw error;
+  });
+  const authCodeAuditContext = buildProxyAuthCodeAuditContext(record, params);
+  await emitProxyAuthCodeReceivedAudit(record, params, authCodeAuditContext);
+
+  const traceId = authCodeAuditContext.traceId;
+  const violationContext = {
+    tenantId: record.tenantId,
+    clientId: record.clientId,
+    traceId,
+    severity: "ERROR" as const,
+    authMethod: params.authMethod,
+    clientSecretInBody: params.auditContext?.clientSecretInBody,
+    requestContext: params.auditContext?.requestContext ?? null,
+  };
+  const reportViolation = createSecurityViolationReporter(violationContext);
+  const proxyConfig = record.client.proxyConfig;
 
   try {
     if (record.apiResourceId !== params.apiResourceId) {
@@ -208,27 +302,7 @@ export const completeProxyAuthorizationCodeGrant = async (
 
     return response;
   } catch (error) {
-    if (exchangeDiagnostics) {
-      const errorCode = error instanceof DomainError && error.options.code ? error.options.code : "server_error";
-      const description =
-        error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
-      await emitAuditEvent({
-        tenantId: record.tenantId,
-        clientId: record.clientId,
-        traceId,
-        actorId: null,
-        eventType: "TOKEN_AUTHCODE_COMPLETED",
-        severity: "ERROR",
-        message: "Token exchange failed",
-        details: buildTokenAuthCodeErrorDetails({
-          error: errorCode,
-          errorDescription: description,
-          exchangeDiagnostics,
-          upstreamCall: false,
-        }),
-        requestContext: params.auditContext?.requestContext ?? null,
-      });
-    }
+    await emitProxyAuthCodeErrorAudit(record, params, authCodeAuditContext, error);
     throw error;
   }
 };
