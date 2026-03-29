@@ -445,7 +445,6 @@ test.describe("proxy mockauth upstream", () => {
         upstreamClientSecret: upstream.clientSecret,
       });
       await updateClientScopes(request, proxy.internalId, ["openid", "profile", "email", "offline_access"]);
-      await updateClientScopes(request, proxy.internalId, ["openid", "profile", "email", "offline_access"]);
 
       const authorization = await runProxyAuthorization({
         clientId: proxy.clientId,
