@@ -4,7 +4,7 @@ import { z } from "zod";
 import { toResponse } from "@/server/errors";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { preflightResponse, withCorsHeaders } from "@/server/http/cors";
-import { issueTokensFromCode, issueTokensFromPassword } from "@/server/services/token-service";
+import { issueTokensFromCode, issueTokensFromPassword, issueTokensFromRefresh } from "@/server/services/token-service";
 import { resolveOrigin, resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import {
@@ -16,6 +16,8 @@ import { createSecurityViolationReporter } from "@/server/services/security-viol
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
 import type { ProxyFlowRequestDetails } from "@/server/services/audit-event";
 import { collectHeaders, collectParams } from "@/server/utils/diagnostics";
+import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { getClientForTenant } from "@/server/services/client-service";
 
 const authorizationCodeSchema = z.object({
   grant_type: z.literal("authorization_code"),
@@ -196,21 +198,45 @@ const handleTokenRequest = async (request: NextRequest, context: ApiResourceRout
     if (!clientId) {
       return Response.json({ error: "invalid_client" }, { status: 401 });
     }
+    const { tenant } = await getApiResourceWithTenant(apiResourceId);
+    const client = await getClientForTenant(tenant.id, clientId);
 
-    const tokens = await completeProxyRefreshGrant({
+    if (client.oauthClientMode === "proxy") {
+      const tokens = await completeProxyRefreshGrant({
+        apiResourceId,
+        clientId,
+        refreshToken: validation.data.refresh_token,
+        scope: validation.data.scope,
+        authMethod,
+        clientSecret,
+        auditContext: {
+          requestContext,
+          clientSecretInBody,
+          clientIdProvided,
+          includeAuthHeader,
+          requestParams: params,
+          request: requestDetails,
+        },
+      });
+
+      return Response.json(tokens);
+    }
+
+    const tokens = await issueTokensFromRefresh({
       apiResourceId,
       clientId,
       refreshToken: validation.data.refresh_token,
       scope: validation.data.scope,
+      origin,
       authMethod,
       clientSecret,
       auditContext: {
         requestContext,
+        authMethod,
         clientSecretInBody,
         clientIdProvided,
+        clientId: clientId ?? undefined,
         includeAuthHeader,
-        requestParams: params,
-        request: requestDetails,
       },
     });
 
