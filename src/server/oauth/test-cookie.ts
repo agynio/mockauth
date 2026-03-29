@@ -17,7 +17,7 @@ export const setOauthTestSecretCookie = async (clientId: string, state: string, 
     value: secret,
     httpOnly: true,
     secure: shouldUseSecureCookie(),
-    sameSite: "strict",
+    sameSite: "lax",
     path: buildTestSecretCookiePath(clientId),
     maxAge: COOKIE_TTL_SECONDS,
   });
@@ -36,7 +36,7 @@ export const clearOauthTestSecretCookie = async (clientId: string, state: string
     value: "",
     httpOnly: true,
     secure: shouldUseSecureCookie(),
-    sameSite: "strict",
+    sameSite: "lax",
     path: buildTestSecretCookiePath(clientId),
     maxAge: 0,
   });

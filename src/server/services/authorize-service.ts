@@ -304,7 +304,7 @@ const handleProxyAuthorize = async (args: {
     loginHint: providerLoginHint,
   });
 
-  void emitAuditEvent({
+  await emitAuditEvent({
     tenantId,
     clientId: client.id,
     traceId: transaction.id,
