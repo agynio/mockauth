@@ -27,6 +27,7 @@ import {
   type TokenAuthCodeCompletedDetails,
   type ProxyFlowDiagnostics,
   type ProxyFlowRequestDetails,
+  type ProviderTokenExchangeDiagnostics,
   type TokenAuthMethod,
 } from "@/server/services/audit-event";
 import {
@@ -154,14 +155,36 @@ const emitProxyAuthCodeErrorAudit = async (
   auditContext: ProxyAuthCodeAuditContext,
   error: unknown,
 ) => {
-  if (!auditContext.exchangeDiagnostics) {
-    return;
-  }
   const errorCode = resolveErrorCode(error);
   if (!errorCode) {
     return;
   }
   const description = resolveErrorDescription(error);
+  const exchangeDiagnostics =
+    auditContext.exchangeDiagnostics ??
+    (() => {
+      const tokenEndpoint = params.auditContext?.request?.url ?? record.client.proxyConfig?.tokenEndpoint;
+      if (tokenEndpoint) {
+        return buildProviderTokenExchangeDiagnostics({
+          tokenEndpoint,
+          authMethod: params.authMethod,
+          clientId: params.clientIdFromRequest ?? record.client.clientId,
+          grantType: "authorization_code",
+          redirectUri: params.redirectUri,
+          codeVerifierPresent: params.codeVerifier ? true : undefined,
+        });
+      }
+      return {
+        tokenEndpointHost: "unknown",
+        authMethod: params.authMethod,
+        includeAuthHeader: params.authMethod === "client_secret_basic",
+        includeClientSecretInBody: params.authMethod === "client_secret_post",
+        client_id: params.clientIdFromRequest ?? record.client.clientId,
+        redirect_uri: params.redirectUri,
+        grant_type: "authorization_code",
+        code_verifier_present: params.codeVerifier ? true : undefined,
+      } satisfies ProviderTokenExchangeDiagnostics;
+    })();
   await emitAuditEvent({
     tenantId: record.tenantId,
     clientId: record.clientId,
@@ -173,7 +196,7 @@ const emitProxyAuthCodeErrorAudit = async (
     details: buildTokenAuthCodeErrorDetails({
       error: errorCode,
       errorDescription: description,
-      exchangeDiagnostics: auditContext.exchangeDiagnostics,
+      exchangeDiagnostics,
       diagnostics: auditContext.requestDiagnostics,
       upstreamCall: false,
     }),

@@ -400,6 +400,76 @@ const findAuditEvent = (logs: AuditLogEntry[], eventType: string, severity?: str
   return match!;
 };
 
+const addTestRedirectIfNeeded = async (page: Page) => {
+  const warning = page.getByTestId("test-oauth-warning");
+  if ((await warning.count()) === 0) {
+    return;
+  }
+  await expect(warning).toBeVisible();
+  await page.getByTestId("test-oauth-add-redirect").click();
+  await expect(warning).toHaveCount(0);
+};
+
+const completeProviderLogin = async (page: Page, clientId: string, username: string) => {
+  const loginPattern = /\/r\/.*\/oidc\/login/;
+  const redirectPattern = new RegExp(`/admin/clients/${clientId}/test/redirect`);
+
+  const initialUrl = page.url();
+
+  const waitForNextNavigation = async (fromUrl: string) => {
+    await page.waitForURL((url) => {
+      const href = url.toString();
+      if (href === fromUrl) {
+        return false;
+      }
+      return loginPattern.test(href) || redirectPattern.test(href);
+    });
+  };
+
+  let currentUrl = page.url();
+  if (!loginPattern.test(currentUrl) && !redirectPattern.test(currentUrl)) {
+    await waitForNextNavigation(initialUrl);
+    currentUrl = page.url();
+  }
+
+  if (loginPattern.test(currentUrl)) {
+    await page.getByRole("textbox", { name: /^Username/ }).fill(username);
+    await Promise.all([
+      page.waitForURL((url) => redirectPattern.test(url.toString())),
+      page.getByRole("button", { name: "Continue" }).click(),
+    ]);
+    currentUrl = page.url();
+  }
+
+  const waitForTestResult = () =>
+    Promise.race([
+      page.getByTestId("test-oauth-id-token").waitFor({ state: "visible", timeout: 60000 }),
+      page.getByTestId("test-oauth-error").waitFor({ state: "visible", timeout: 60000 }),
+    ]);
+
+  if (!redirectPattern.test(currentUrl)) {
+    await page.waitForURL((url) => redirectPattern.test(url.toString()));
+  }
+
+  await waitForTestResult();
+};
+
+const runStandardTestOauth = async (page: Page, params: { clientId: string; clientSecret: string; username: string }) => {
+  await page.goto(`/admin/clients/${params.clientId}/test`, { waitUntil: "domcontentloaded" });
+  const startButton = page.getByTestId("test-oauth-start");
+  await expect(startButton).toBeVisible();
+  await addTestRedirectIfNeeded(page);
+  const secretInput = page.getByTestId("test-oauth-secret-input");
+  await expect(secretInput).toBeVisible();
+  await secretInput.fill(params.clientSecret);
+  await startButton.click();
+
+  const textarea = page.getByTestId("test-oauth-authorization-textarea");
+  await expect(textarea).toBeVisible();
+  await page.getByTestId("test-oauth-authorization-open").click();
+  await completeProviderLogin(page, params.clientId, params.username);
+};
+
 test.describe("proxy mockauth upstream", () => {
   test.beforeEach(async ({ page }) => {
     const sessionToken = await createTestSession(page);
@@ -599,6 +669,72 @@ test.describe("proxy mockauth upstream", () => {
         redirectUri: APP_REDIRECT_URI,
       });
       expect(tokenResponse.response.ok).toBeTruthy();
+    } finally {
+      if (proxy) {
+        await deleteClient(page, proxy.detailUrl);
+      }
+      if (upstream) {
+        await deleteClient(page, upstream.detailUrl);
+      }
+    }
+  });
+
+  test("standard test OAuth flow recovers after upstream secret fix", async ({ page, request }, testInfo) => {
+    const suffix = buildNameSuffix(testInfo);
+    const upstreamName = `Proxy Test Upstream ${suffix}`;
+    const proxyName = `Proxy Test Client ${suffix}`;
+    let upstream: CreatedClient | null = null;
+    let proxy: CreatedClient | null = null;
+
+    try {
+      upstream = await createRegularClient(page, upstreamName, [PROXY_CALLBACK_URI]);
+      proxy = await createProxyClient(page, {
+        name: proxyName,
+        redirectUris: [APP_REDIRECT_URI],
+        upstreamClientId: upstream.clientId,
+        upstreamClientSecret: upstream.clientSecret,
+      });
+
+      await runStandardTestOauth(page, {
+        clientId: proxy.internalId,
+        clientSecret: proxy.clientSecret,
+        username: "proxy-user",
+      });
+      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+      await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
+
+      const successLogs = await fetchAuditLogs(request, {
+        clientId: proxy.internalId,
+        eventType: "TOKEN_AUTHCODE_COMPLETED",
+      });
+      const successEvent = findAuditEvent(successLogs, "TOKEN_AUTHCODE_COMPLETED", "INFO");
+      const successDetails = successEvent.details as Record<string, unknown>;
+      expect(successDetails?.upstreamCall).toBe(false);
+
+      await updateProxyClientSecret(page, proxy.detailUrl, "bad-secret");
+      await runStandardTestOauth(page, {
+        clientId: proxy.internalId,
+        clientSecret: proxy.clientSecret,
+        username: "proxy-user",
+      });
+      await expect(page.getByTestId("test-oauth-error")).toContainText("invalid_client");
+
+      const errorLogs = await fetchAuditLogs(request, {
+        clientId: proxy.internalId,
+        eventType: "PROXY_CALLBACK_ERROR",
+      });
+      const errorEvent = findAuditEvent(errorLogs, "PROXY_CALLBACK_ERROR", "ERROR");
+      const errorDetails = errorEvent.details as Record<string, unknown>;
+      expect(errorDetails?.error).toBe("invalid_client");
+
+      await updateProxyClientSecret(page, proxy.detailUrl, upstream.clientSecret);
+      await runStandardTestOauth(page, {
+        clientId: proxy.internalId,
+        clientSecret: proxy.clientSecret,
+        username: "proxy-user",
+      });
+      await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
+      await expect(page.getByTestId("test-oauth-access-token")).toBeVisible();
     } finally {
       if (proxy) {
         await deleteClient(page, proxy.detailUrl);

@@ -7,6 +7,12 @@ import { TestSecretCleanup } from "@/app/admin/clients/[clientId]/test/test-secr
 import { TestRunAgainButton } from "@/app/admin/clients/[clientId]/test/test-run-again-button";
 import { DEFAULT_TEST_SCOPES } from "@/app/admin/clients/[clientId]/test/constants";
 import { authOptions } from "@/server/auth/options";
+import { emitAuditEvent } from "@/server/services/audit-service";
+import {
+  buildProviderTokenExchangeDiagnostics,
+  buildTokenAuthCodeErrorDetails,
+  type TokenAuthMethod,
+} from "@/server/services/audit-event";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
@@ -14,6 +20,7 @@ import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { consumeOauthTestSession } from "@/server/services/oauth-test-service";
 import { readOauthTestSecretCookie } from "@/server/oauth/test-cookie";
 import { parseTokenAuthMethods, requiresClientSecret } from "@/server/oidc/token-auth-method";
+import { getRequestContext } from "@/server/utils/request-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -58,6 +65,45 @@ const formatJson = (value: unknown) => {
   }
 };
 
+const emitTestOauthPrecheckAudit = async (input: {
+  tenantId: string;
+  clientId: string;
+  traceId: string;
+  tokenEndpoint: string;
+  tokenAuthMethod: TokenAuthMethod;
+  oauthClientId: string;
+  redirectUri?: string | null;
+  codeVerifierPresent?: boolean | null;
+  error: string;
+  errorDescription: string;
+}) => {
+  const requestContext = await getRequestContext().catch(() => null);
+  const exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
+    tokenEndpoint: input.tokenEndpoint,
+    authMethod: input.tokenAuthMethod,
+    clientId: input.oauthClientId,
+    grantType: "authorization_code",
+    redirectUri: input.redirectUri ?? undefined,
+    codeVerifierPresent: input.codeVerifierPresent ?? undefined,
+  });
+  await emitAuditEvent({
+    tenantId: input.tenantId,
+    clientId: input.clientId,
+    traceId: input.traceId,
+    actorId: null,
+    eventType: "TOKEN_AUTHCODE_COMPLETED",
+    severity: "ERROR",
+    message: "Token exchange failed",
+    details: buildTokenAuthCodeErrorDetails({
+      error: input.error,
+      errorDescription: input.errorDescription,
+      exchangeDiagnostics,
+      upstreamCall: false,
+    }),
+    requestContext,
+  });
+};
+
 export default async function ClientTestRedirectPage({ params, searchParams }: { params: PageParams; searchParams?: SearchParams }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -93,6 +139,9 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
   const cookieSecret = state ? await readOauthTestSecretCookie(client.id, state) : null;
   const sessionRecord = state ? await consumeOauthTestSession(state) : null;
   const now = new Date();
+  const sessionMissingMessage = "Test session expired or already used.";
+  const sessionExpiredMessage = "Test session expired.";
+  const secretExpiredMessage = "Client secret expired.";
   let rerunScopes = DEFAULT_TEST_SCOPES;
   let rerunRedirectUri = testRedirectUri;
   if (sessionRecord?.scopes?.trim()) {
@@ -102,6 +151,7 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
     rerunRedirectUri = sessionRecord.redirectUri;
   }
   let result: TokenResult | ErrorResult;
+  let precheckAudit: { error: string; errorDescription: string } | null = null;
 
   if (error) {
     result = {
@@ -111,17 +161,20 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
   } else if (!state) {
     result = { status: "error", message: `Missing state parameter. ${RERUN_HINT}` };
   } else if (!sessionRecord) {
-    result = { status: "error", message: `Test session expired or already used. ${RERUN_HINT}` };
+    result = { status: "error", message: `${sessionMissingMessage} ${RERUN_HINT}` };
+    precheckAudit = { error: "invalid_grant", errorDescription: sessionMissingMessage };
   } else if (sessionRecord.clientId !== client.id) {
     result = { status: "error", message: "State does not belong to this client." };
   } else if (sessionRecord.tenantId !== activeTenant.id) {
     result = { status: "error", message: "State is scoped to a different tenant." };
   } else if (sessionRecord.expiresAt < now) {
-    result = { status: "error", message: `Test session expired. ${RERUN_HINT}` };
+    result = { status: "error", message: `${sessionExpiredMessage} ${RERUN_HINT}` };
+    precheckAudit = { error: "invalid_grant", errorDescription: sessionExpiredMessage };
   } else if (!code) {
     result = { status: "error", message: "Authorization code missing from redirect." };
   } else if (requiresSecret && !cookieSecret) {
-    result = { status: "error", message: `Client secret expired. ${RERUN_HINT}` };
+    result = { status: "error", message: `${secretExpiredMessage} ${RERUN_HINT}` };
+    precheckAudit = { error: "invalid_client", errorDescription: secretExpiredMessage };
   } else {
     const exchange = await exchangeAuthorizationCode({
       tokenUrl: urls.token,
@@ -134,6 +187,21 @@ export default async function ClientTestRedirectPage({ params, searchParams }: {
       requestedScope: sessionRecord.scopes,
     });
     result = exchange;
+  }
+
+  if (precheckAudit && state) {
+    await emitTestOauthPrecheckAudit({
+      tenantId: activeTenant.id,
+      clientId: client.id,
+      traceId: state,
+      tokenEndpoint: urls.token,
+      tokenAuthMethod,
+      oauthClientId: client.clientId,
+      redirectUri: sessionRecord?.redirectUri,
+      codeVerifierPresent: sessionRecord?.codeVerifier ? true : undefined,
+      error: precheckAudit.error,
+      errorDescription: precheckAudit.errorDescription,
+    });
   }
 
   const isError = result.status === "error";
