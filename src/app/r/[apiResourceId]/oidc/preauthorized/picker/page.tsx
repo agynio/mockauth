@@ -27,7 +27,7 @@ const renderError = (message: string) => (
 
 export default async function PreauthorizedPickerPage({ params }: PageProps) {
   const { apiResourceId } = await params;
-  const store = cookies();
+  const store = await cookies();
   const transactionId = store.get(PREAUTHORIZED_PICKER_COOKIE)?.value;
   if (!transactionId) {
     return renderError("The authorization request has expired. Please start again.");
