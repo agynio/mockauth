@@ -10,6 +10,10 @@ ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_ADMIN_REDIRECT_OUT';
 ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_ADMIN_CALLBACK_SUCCESS';
 ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_ADMIN_CALLBACK_ERROR';
 ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_CODE_ISSUED';
+ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_IDENTITY_SELECTED';
+ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_IDENTITY_DELETED';
+ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_TOKEN_REFRESH_SUCCESS';
+ALTER TYPE "AuditLogEventType" ADD VALUE 'PREAUTHORIZED_TOKEN_REFRESH_FAILED';
 
 -- AlterEnum
 ALTER TYPE "OAuthClientMode" ADD VALUE 'preauthorized';
@@ -23,7 +27,7 @@ CREATE TABLE "PreauthorizedIdentity" (
     "tenantId" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
     "label" TEXT,
-    "providerSubject" TEXT,
+    "providerSubject" TEXT NOT NULL,
     "providerEmail" TEXT,
     "providerScope" TEXT NOT NULL,
     "providerResponseEncrypted" TEXT NOT NULL,
@@ -74,6 +78,9 @@ CREATE TABLE "PickerTransaction" (
 
 -- CreateIndex
 CREATE INDEX "PreauthorizedIdentity_tenantId_clientId_idx" ON "PreauthorizedIdentity"("tenantId", "clientId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PreauthorizedIdentity_clientId_providerSubject_key" ON "PreauthorizedIdentity"("clientId", "providerSubject");
 
 -- CreateIndex
 CREATE INDEX "AdminAuthTransaction_tenantId_clientId_idx" ON "AdminAuthTransaction"("tenantId", "clientId");

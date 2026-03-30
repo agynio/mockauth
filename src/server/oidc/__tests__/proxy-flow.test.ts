@@ -1069,15 +1069,19 @@ describe("Proxy client OAuth flow", () => {
 
     expect(tokenResponse.status).toBe(400);
 
-    const requestLog = await prisma.auditLog.findFirst({
+    const requestLogs = await prisma.auditLog.findMany({
       where: {
         tenantId,
         eventType: "TOKEN_AUTHCODE_RECEIVED",
       },
       orderBy: { createdAt: "desc" },
     });
+    const requestLog = requestLogs.find((log) => {
+      const details = log.details as { diagnostics?: { request?: { body?: unknown } } };
+      return details.diagnostics?.request?.body === requestBody.toString();
+    });
 
-    expect(requestLog).not.toBeNull();
+    expect(requestLog).toBeDefined();
     const requestDetails = (requestLog?.details as { diagnostics?: Record<string, unknown> }).diagnostics;
     expect((requestLog?.details as { upstreamCall?: boolean }).upstreamCall).toBe(false);
     expect(requestDetails).toMatchObject({
