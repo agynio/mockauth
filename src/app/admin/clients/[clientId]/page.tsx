@@ -168,6 +168,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
       : client.oauthClientMode === "preauthorized"
         ? "preauthorized mode"
         : "regular mode";
+  const providerHeading = client.oauthClientMode === "preauthorized" ? "Upstream provider" : "Proxy provider";
   const testFlowHref = `/admin/clients/${client.id}/test`;
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
@@ -321,7 +322,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
       {client.oauthClientMode !== "regular" && proxyConfigInitial ? (
         <Card>
           <CardHeader>
-            <CardTitle>Upstream provider</CardTitle>
+            <CardTitle>{providerHeading}</CardTitle>
             <CardDescription>
               Configure the upstream identity provider used to broker OAuth flows.
             </CardDescription>
