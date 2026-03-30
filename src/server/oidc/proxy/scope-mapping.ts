@@ -1,16 +1,17 @@
 import type { ProxyProviderConfig } from "@/generated/prisma/client";
 import { DomainError } from "@/server/errors";
 
-const parseScopeMapping = (value: unknown): Map<string, string[]> => {
+/**
+ * Normalize stored scope mapping JSON into a map of app scopes
+ * to provider scopes, trimming and filtering invalid values.
+ */
+export const parseScopeMapping = (value: unknown): Map<string, string[]> => {
   if (!value || typeof value !== "object") {
     return new Map();
   }
 
   const entries: Array<[string, string[]]> = [];
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof key !== "string") {
-      continue;
-    }
     if (typeof raw === "string") {
       const scopes = raw
         .split(" ")

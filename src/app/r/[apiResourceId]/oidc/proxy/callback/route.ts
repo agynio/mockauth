@@ -6,7 +6,7 @@ import { handleProxyCallback } from "@/server/services/proxy-callback-service";
 import { resolveUrl } from "@/server/http/origin";
 import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
-import { buildRequestContext } from "@/server/utils/request-context";
+import { getRequestContextFromRequest } from "@/server/utils/request-context";
 import { searchParamsToRecord } from "@/server/utils/search-params";
 
 const callbackSchema = z.object({
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
         body: null,
       },
       callbackParams,
-      requestContext: buildRequestContext(request.headers, (request as { ip?: string | null }).ip ?? null),
+      requestContext: getRequestContextFromRequest(request),
     });
 
     const response = NextResponse.redirect(result.redirectTo, { status: 302 });

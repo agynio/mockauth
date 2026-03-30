@@ -36,7 +36,7 @@ import {
 } from "@/server/services/client-service";
 import type { ProxyProviderConfigInput } from "@/server/services/client-service";
 import { startPreauthorizedAdminAuth, ADMIN_AUTH_TTL_SECONDS } from "@/server/services/preauthorized-admin-auth-service";
-import { refreshPreauthorizedIdentity } from "@/server/services/preauthorized-identity-service";
+import { deletePreauthorizedIdentity, refreshPreauthorizedIdentity } from "@/server/services/preauthorized-identity-service";
 import { rotateKeyForAlg } from "@/server/services/key-service";
 import {
   ADMIN_ACTIVE_TENANT_COOKIE,
@@ -859,10 +859,13 @@ export const refreshPreauthorizedIdentityAction = async (
     const membership = await assertTenantMembership(adminId, identity.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
 
+    const requestContext = await getRequestContext();
     await refreshPreauthorizedIdentity({
       tenantId: identity.tenantId,
       clientId: identity.clientId,
       identityId: identity.id,
+      actorId: adminId,
+      requestContext,
     });
 
     revalidatePath(clientPath(identity.clientId));
@@ -884,7 +887,15 @@ export const deletePreauthorizedIdentityAction = async (
     const parsed = preauthorizedIdentitySchema.parse(input);
     const identity = await prisma.preauthorizedIdentity.findUnique({
       where: { id: parsed.identityId },
-      select: { id: true, tenantId: true, clientId: true, label: true },
+      select: {
+        id: true,
+        tenantId: true,
+        clientId: true,
+        label: true,
+        providerSubject: true,
+        providerEmail: true,
+        providerScope: true,
+      },
     });
     if (!identity) {
       return { error: "Identity not found" };
@@ -892,7 +903,12 @@ export const deletePreauthorizedIdentityAction = async (
     const membership = await assertTenantMembership(adminId, identity.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
 
-    await prisma.preauthorizedIdentity.delete({ where: { id: identity.id } });
+    const requestContext = await getRequestContext();
+    await deletePreauthorizedIdentity({
+      identity,
+      actorId: adminId,
+      requestContext,
+    });
     revalidatePath(clientPath(identity.clientId));
     return { success: identity.label ? `Identity "${identity.label}" deleted` : "Identity deleted" };
   } catch (error) {

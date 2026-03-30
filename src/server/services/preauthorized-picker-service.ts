@@ -70,11 +70,5 @@ export const requirePickerTransaction = async (id: string, now = new Date()) => 
 };
 
 export const markPickerTransactionConsumed = async (id: string) => {
-  await prisma.pickerTransaction.update({
-    where: { id },
-    data: {
-      consumedAt: new Date(),
-      expiresAt: new Date(),
-    },
-  });
+  await prisma.pickerTransaction.delete({ where: { id } });
 };

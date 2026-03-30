@@ -68,10 +68,7 @@ const getAdminAuthTransaction = async (id: string): Promise<AdminAuthTransaction
 };
 
 const markAdminAuthTransactionCompleted = async (id: string) => {
-  await prisma.adminAuthTransaction.update({
-    where: { id },
-    data: { expiresAt: new Date() },
-  });
+  await prisma.adminAuthTransaction.delete({ where: { id } });
 };
 
 export const startPreauthorizedAdminAuth = async (params: StartAdminAuthArgs) => {
@@ -187,57 +184,80 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
     throw new DomainError("Admin transaction does not match user", { status: 403, code: "access_denied" });
   }
 
-  if (transaction.expiresAt < new Date()) {
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
-      message: "Admin transaction expired",
-      details: buildProxyCallbackErrorDetails({
-        error: "transaction_expired",
-        providerType: transaction.client.proxyConfig?.providerType,
-        code: params.code ?? undefined,
-      }),
-      requestContext: params.requestContext ?? null,
-    });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError("Admin transaction expired", { status: 400, code: "invalid_request" });
-  }
-
   const proxyConfig = transaction.client.proxyConfig;
-  if (!proxyConfig) {
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
-      message: "Proxy configuration missing",
-      details: buildProxyCallbackErrorDetails({
-        error: "config_missing",
-        providerType: transaction.client.proxyConfig?.providerType,
-        code: params.code ?? undefined,
-      }),
-      requestContext: params.requestContext ?? null,
-    });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError("Proxy configuration missing", { status: 500 });
-  }
+  let exchangeDiagnostics: ReturnType<typeof buildProviderTokenExchangeDiagnostics> | null = null;
 
-  const buildCallbackDiagnostics = (options?: { request?: ProxyFlowRequestDetails; response?: { status?: number | null; headers?: Record<string, string>; body?: string | null } | null }) =>
+  const buildCallbackDiagnostics = (options: {
+    request?: ProxyFlowRequestDetails;
+    response?: { status?: number | null; headers?: Record<string, string>; body?: string | null } | null;
+  } = {}) =>
     buildProxyFlowDiagnostics({
       stage: "callback",
-      request: options?.request ?? params.callbackRequest,
-      response: options?.response ?? null,
+      request: options.request ?? params.callbackRequest,
+      response: options.response ?? null,
       params: params.callbackParams,
       meta: { clientId: transaction.client.clientId, traceId: transaction.id },
     });
 
-  const exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
+  const baseCallbackDiagnostics = buildCallbackDiagnostics();
+
+  const failCallback = async (options: {
+    message: string;
+    error: string;
+    errorDescription?: string | null;
+    status: number;
+    code?: string;
+    rawError?: string | null;
+    rawErrorDescription?: string | null;
+    diagnostics?: ReturnType<typeof buildProxyFlowDiagnostics> | null;
+  }): Promise<never> => {
+    await emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: params.adminUserId,
+      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
+      severity: "ERROR",
+      message: options.message,
+      details: buildProxyCallbackErrorDetails({
+        error: options.error,
+        errorDescription: options.errorDescription ?? undefined,
+        providerType: proxyConfig?.providerType,
+        code: params.code ?? undefined,
+        rawError: options.rawError ?? undefined,
+        rawErrorDescription: options.rawErrorDescription ?? undefined,
+        diagnostics: options.diagnostics ?? undefined,
+        ...(exchangeDiagnostics ?? {}),
+      }),
+      requestContext: params.requestContext ?? null,
+    });
+    await markAdminAuthTransactionCompleted(transaction.id);
+    throw new DomainError(options.errorDescription ?? options.message, {
+      status: options.status,
+      code: options.code,
+    });
+  };
+
+  if (transaction.expiresAt < new Date()) {
+    return failCallback({
+      message: "Admin transaction expired",
+      error: "transaction_expired",
+      status: 400,
+      code: "invalid_request",
+      diagnostics: baseCallbackDiagnostics,
+    });
+  }
+
+  if (!proxyConfig) {
+    return failCallback({
+      message: "Proxy configuration missing",
+      error: "config_missing",
+      status: 500,
+      diagnostics: baseCallbackDiagnostics,
+    });
+  }
+
+  exchangeDiagnostics = buildProviderTokenExchangeDiagnostics({
     tokenEndpoint: proxyConfig.tokenEndpoint,
     authMethod: resolveUpstreamAuthMethod(proxyConfig.upstreamTokenEndpointAuthMethod),
     clientId: proxyConfig.upstreamClientId,
@@ -249,47 +269,26 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
   if (params.providerError) {
     const error = sanitizeProviderError(params.providerError);
     const description = sanitizeProviderErrorDescription(params.providerErrorDescription ?? undefined);
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
+    return failCallback({
       message: "Provider returned error",
-      details: buildProxyCallbackErrorDetails({
-        error,
-        errorDescription: description,
-        providerType: proxyConfig.providerType,
-        code: params.code ?? undefined,
-        rawError: params.providerError ?? undefined,
-        rawErrorDescription: params.providerErrorDescription ?? undefined,
-        ...exchangeDiagnostics,
-      }),
-      requestContext: params.requestContext ?? null,
+      error,
+      errorDescription: description,
+      status: 400,
+      code: error,
+      rawError: params.providerError ?? undefined,
+      rawErrorDescription: params.providerErrorDescription ?? undefined,
+      diagnostics: baseCallbackDiagnostics,
     });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError(description ?? "Provider returned error", { status: 400, code: error });
   }
 
   if (!params.code) {
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
+    return failCallback({
       message: "Provider did not return a code",
-      details: buildProxyCallbackErrorDetails({
-        error: "missing_code",
-        providerType: proxyConfig.providerType,
-        ...exchangeDiagnostics,
-      }),
-      requestContext: params.requestContext ?? null,
+      error: "missing_code",
+      status: 400,
+      code: "invalid_request",
+      diagnostics: baseCallbackDiagnostics,
     });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError("Authorization code not provided", { status: 400, code: "invalid_request" });
   }
 
   const tokenRequest = new URLSearchParams();
@@ -309,28 +308,14 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
     const description = sanitizeProviderErrorDescription(
       error instanceof Error ? error.message : typeof error === "string" ? error : String(error),
     );
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
+    return failCallback({
       message: "Provider token exchange failed",
-      details: buildProxyCallbackErrorDetails({
-        error: sanitizeProviderError(errorCode),
-        errorDescription: description,
-        providerType: proxyConfig.providerType,
-        code: params.code ?? undefined,
-        ...exchangeDiagnostics,
-      }),
-      requestContext: params.requestContext ?? null,
+      error: sanitizeProviderError(errorCode),
+      errorDescription: description,
+      status: error instanceof DomainError ? error.options.status ?? 502 : 502,
+      code: error instanceof DomainError ? error.options.code : undefined,
+      diagnostics: baseCallbackDiagnostics,
     });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    if (error instanceof DomainError) {
-      throw error;
-    }
-    throw new DomainError("Failed to contact provider", { status: 502 });
   }
 
   const callbackDiagnostics = buildCallbackDiagnostics({
@@ -343,82 +328,64 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
   });
 
   if (response.jsonParseError) {
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
+    return failCallback({
       message: "Provider token response was not JSON",
-      details: buildProxyCallbackErrorDetails({
-        error: "invalid_token_response",
-        providerType: proxyConfig.providerType,
-        ...exchangeDiagnostics,
-      }),
-      requestContext: params.requestContext ?? null,
+      error: "invalid_token_response",
+      status: 502,
+      diagnostics: callbackDiagnostics,
     });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError("Provider token response was not JSON", { status: 502 });
   }
 
   if (!response.json) {
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
+    return failCallback({
       message: "Provider token response missing",
-      details: buildProxyCallbackErrorDetails({
-        error: "missing_token_response",
-        providerType: proxyConfig.providerType,
-        ...exchangeDiagnostics,
-      }),
-      requestContext: params.requestContext ?? null,
+      error: "missing_token_response",
+      status: 502,
+      diagnostics: callbackDiagnostics,
     });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError("Provider token response missing", { status: 502 });
   }
 
   if (!response.ok) {
     const rawError = typeof response.json.error === "string" ? response.json.error : undefined;
-    const rawDescription = typeof response.json.error_description === "string" ? response.json.error_description : undefined;
+    const rawDescription =
+      typeof response.json.error_description === "string" ? response.json.error_description : undefined;
     const providerError = sanitizeProviderError(rawError);
     const description = sanitizeProviderErrorDescription(rawDescription);
-    await emitAuditEvent({
-      tenantId: transaction.tenantId,
-      clientId: transaction.clientId,
-      traceId: transaction.id,
-      actorId: params.adminUserId,
-      eventType: "PREAUTHORIZED_ADMIN_CALLBACK_ERROR",
-      severity: "ERROR",
+    return failCallback({
       message: "Provider token exchange failed",
-      details: buildProxyCallbackErrorDetails({
-        error: providerError,
-        errorDescription: description,
-        providerType: proxyConfig.providerType,
-        rawError,
-        rawErrorDescription: rawDescription,
-        ...exchangeDiagnostics,
-      }),
-      requestContext: params.requestContext ?? null,
-    });
-    await markAdminAuthTransactionCompleted(transaction.id);
-    throw new DomainError(description ?? "Provider rejected authorization code", {
+      error: providerError,
+      errorDescription: description,
       status: 400,
       code: providerError,
+      rawError,
+      rawErrorDescription: rawDescription,
+      diagnostics: callbackDiagnostics,
     });
   }
 
-  const identity = await createPreauthorizedIdentity({
-    tenantId: transaction.tenantId,
-    clientId: transaction.clientId,
-    label: transaction.identityLabel,
-    providerScope: transaction.providerScope,
-    providerResponse: response.json,
-  });
+  let identity;
+  try {
+    identity = await createPreauthorizedIdentity({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      label: transaction.identityLabel,
+      providerScope: transaction.providerScope,
+      providerResponse: response.json,
+    });
+  } catch (error) {
+    const errorCode = error instanceof DomainError && error.options.code ? error.options.code : "server_error";
+    const description = sanitizeProviderErrorDescription(
+      error instanceof Error ? error.message : typeof error === "string" ? error : String(error),
+    );
+    return failCallback({
+      message: "Preauthorized identity capture failed",
+      error: sanitizeProviderError(errorCode),
+      errorDescription: description,
+      status: error instanceof DomainError ? error.options.status ?? 500 : 500,
+      code: error instanceof DomainError ? error.options.code : undefined,
+      diagnostics: callbackDiagnostics,
+    });
+  }
 
   await emitAuditEvent({
     tenantId: transaction.tenantId,

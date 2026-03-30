@@ -5,14 +5,14 @@ import { DomainError, toResponse } from "@/server/errors";
 import { PREAUTHORIZED_PICKER_COOKIE, buildPreauthorizedPickerCookiePath } from "@/server/oidc/preauthorized/constants";
 import { mapAppScopesToProvider } from "@/server/oidc/proxy/scope-mapping";
 import { emitAuditEvent } from "@/server/services/audit-service";
-import { buildProxyCodeIssuedDetails } from "@/server/services/audit-event";
+import { buildPreauthorizedIdentityDetails, buildProxyCodeIssuedDetails } from "@/server/services/audit-event";
 import {
   markPickerTransactionConsumed,
   requirePickerTransaction,
 } from "@/server/services/preauthorized-picker-service";
 import { resolvePreauthorizedIdentityTokens } from "@/server/services/preauthorized-identity-service";
 import { createProxyAuthorizationCode, storeProxyTokenExchange } from "@/server/services/proxy-service";
-import { buildRequestContext } from "@/server/utils/request-context";
+import { getRequestContextFromRequest } from "@/server/utils/request-context";
 
 const selectionSchema = z.object({
   identity_id: z.string().min(1),
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ap
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
 
+  const requestContext = getRequestContextFromRequest(request);
   let codeLogged = false;
   const recordCodeIssued = async (issued: boolean, authorizationCode?: string | null) => {
     if (codeLogged) {
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ap
         issued,
         authorizationCode,
       }),
-      requestContext: buildRequestContext(request.headers, (request as { ip?: string | null }).ip ?? null),
+      requestContext,
     });
   };
 
@@ -68,6 +69,25 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ap
       tenantId: transaction.tenantId,
       clientId: transaction.clientId,
       identityId: parsed.data.identity_id,
+      requestContext,
+    });
+
+    await emitAuditEvent({
+      tenantId: transaction.tenantId,
+      clientId: transaction.clientId,
+      traceId: transaction.id,
+      actorId: null,
+      eventType: "PREAUTHORIZED_IDENTITY_SELECTED",
+      severity: "INFO",
+      message: "Preauthorized identity selected",
+      details: buildPreauthorizedIdentityDetails({
+        identityId: identity.id,
+        label: identity.label,
+        providerSubject: identity.providerSubject,
+        providerEmail: identity.providerEmail,
+        providerScope: identity.providerScope,
+      }),
+      requestContext,
     });
 
     const proxyConfig = identity.client.proxyConfig;
@@ -75,6 +95,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ap
       throw new DomainError("Proxy configuration missing", { status: 500 });
     }
 
+    // Map scopes so token exchange metadata matches upstream config.
     const providerScope = mapAppScopesToProvider(transaction.appScope, proxyConfig);
     const exchange = await storeProxyTokenExchange({
       tenantId: transaction.tenantId,

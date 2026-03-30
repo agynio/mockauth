@@ -12,7 +12,7 @@ import {
   buildPreauthorizedAdminTransactionCookiePath,
 } from "@/server/oidc/preauthorized/constants";
 import { resolveUrl } from "@/server/http/origin";
-import { buildRequestContext } from "@/server/utils/request-context";
+import { getRequestContextFromRequest } from "@/server/utils/request-context";
 import { searchParamsToRecord } from "@/server/utils/search-params";
 
 const callbackSchema = z.object({
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         body: null,
       },
       callbackParams,
-      requestContext: buildRequestContext(request.headers, (request as { ip?: string | null }).ip ?? null),
+      requestContext: getRequestContextFromRequest(request),
     });
 
     const response = NextResponse.redirect(new URL(`/admin/clients/${client.id}`, normalizedUrl).toString(), {

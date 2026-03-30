@@ -64,6 +64,10 @@ enum AuditLogEventType {
   PREAUTHORIZED_ADMIN_CALLBACK_SUCCESS
   PREAUTHORIZED_ADMIN_CALLBACK_ERROR
   PREAUTHORIZED_CODE_ISSUED
+  PREAUTHORIZED_IDENTITY_SELECTED
+  PREAUTHORIZED_IDENTITY_DELETED
+  PREAUTHORIZED_TOKEN_REFRESH_SUCCESS
+  PREAUTHORIZED_TOKEN_REFRESH_FAILED
   TOKEN_AUTHCODE_RECEIVED
   TOKEN_AUTHCODE_COMPLETED
   TOKEN_REFRESH_RECEIVED
@@ -429,7 +433,7 @@ model PreauthorizedIdentity {
   client                 Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId               String
   label                  String?
-  providerSubject        String?
+  providerSubject        String
   providerEmail          String?
   providerScope          String
   providerResponseEncrypted String
@@ -439,6 +443,7 @@ model PreauthorizedIdentity {
   updatedAt              DateTime @updatedAt
 
   @@index([tenantId, clientId])
+  @@unique([clientId, providerSubject])
 }
 
 model AdminAuthTransaction {
