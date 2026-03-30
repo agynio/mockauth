@@ -62,11 +62,11 @@ const formSchema = z
       .array(z.enum(grantTypeOptions))
       .min(1, "Select at least one grant type"),
     redirects: z.string().optional(),
-    mode: z.enum(["regular", "proxy"] as const),
+    mode: z.enum(["regular", "proxy", "preauthorized"] as const),
     proxyConfig: proxyConfigSchema.optional(),
   })
   .superRefine((values, ctx) => {
-    if (values.mode !== "proxy") {
+    if (values.mode === "regular") {
       return;
     }
 
@@ -336,7 +336,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
   const { getValues, setValue } = form;
 
   useEffect(() => {
-    if (watchMode !== "proxy") {
+    if (watchMode === "regular") {
       return;
     }
     const currentConfig = getValues("proxyConfig");
@@ -384,7 +384,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0);
 
-      const proxyConfigInput = values.mode === "proxy" && values.proxyConfig
+      const proxyConfigInput = values.mode !== "regular" && values.proxyConfig
         ? {
             providerType: values.proxyConfig.providerType,
             authorizationEndpoint: values.proxyConfig.authorizationEndpoint?.trim() ?? "",
@@ -566,9 +566,10 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
             <FormItem className="space-y-3">
               <FormLabel>Client mode</FormLabel>
               <Tabs value={field.value} onValueChange={field.onChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="regular">Regular</TabsTrigger>
                   <TabsTrigger value="proxy">Proxy</TabsTrigger>
+                  <TabsTrigger value="preauthorized">Preauthorized</TabsTrigger>
                 </TabsList>
                 <TabsContent value="regular" className="rounded-md border p-4 text-sm text-muted-foreground">
                   MockAuth issues and validates tokens directly.
@@ -576,12 +577,15 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
                 <TabsContent value="proxy" className="rounded-md border p-4 text-sm text-muted-foreground">
                   Delegate authentication to an upstream identity provider while MockAuth brokers OAuth flows.
                 </TabsContent>
+                <TabsContent value="preauthorized" className="rounded-md border p-4 text-sm text-muted-foreground">
+                  Preauthorize upstream identities so end-users can choose from approved accounts at sign-in.
+                </TabsContent>
               </Tabs>
             </FormItem>
           )}
         />
 
-        {watchMode === "proxy" ? (
+        {watchMode !== "regular" ? (
           <div className="space-y-6 rounded-md border border-dashed p-6">
             <div>
               <h3 className="text-base font-semibold">Upstream provider configuration</h3>

@@ -141,6 +141,14 @@ export type ProxyCodeIssuedDetails = {
   authorizationCode?: string | null;
 };
 
+export type PreauthorizedIdentityDetails = {
+  identityId: string;
+  label?: string;
+  providerSubject: string;
+  providerEmail?: string;
+  providerScope?: string;
+};
+
 export type TokenAuthCodeReceivedDetails = {
   authMethod: TokenAuthMethod;
   clientSecretInBody?: boolean;
@@ -225,6 +233,14 @@ export type AuditEventDetailsMap = {
   PROXY_CALLBACK_SUCCESS: ProxyCallbackSuccessDetails;
   PROXY_CALLBACK_ERROR: ProxyCallbackErrorDetails;
   PROXY_CODE_ISSUED: ProxyCodeIssuedDetails;
+  PREAUTHORIZED_ADMIN_REDIRECT_OUT: ProxyRedirectOutDetails;
+  PREAUTHORIZED_ADMIN_CALLBACK_SUCCESS: ProxyCallbackSuccessDetails;
+  PREAUTHORIZED_ADMIN_CALLBACK_ERROR: ProxyCallbackErrorDetails;
+  PREAUTHORIZED_CODE_ISSUED: ProxyCodeIssuedDetails;
+  PREAUTHORIZED_IDENTITY_SELECTED: PreauthorizedIdentityDetails;
+  PREAUTHORIZED_IDENTITY_DELETED: PreauthorizedIdentityDetails;
+  PREAUTHORIZED_TOKEN_REFRESH_SUCCESS: ProxyCallbackSuccessDetails;
+  PREAUTHORIZED_TOKEN_REFRESH_FAILED: ProxyCallbackErrorDetails;
   TOKEN_AUTHCODE_RECEIVED: TokenAuthCodeReceivedDetails;
   TOKEN_AUTHCODE_COMPLETED: TokenAuthCodeCompletedDetails;
   TOKEN_REFRESH_RECEIVED: TokenRefreshReceivedDetails;
@@ -428,6 +444,20 @@ export const buildProxyCodeIssuedDetails = (params: {
   redirectUri: params.redirectUri,
   issued: params.issued,
   authorizationCode: params.authorizationCode ?? null,
+});
+
+export const buildPreauthorizedIdentityDetails = (params: {
+  identityId: string;
+  label?: string | null;
+  providerSubject: string;
+  providerEmail?: string | null;
+  providerScope?: string | null;
+}): PreauthorizedIdentityDetails => ({
+  identityId: params.identityId,
+  label: params.label ?? undefined,
+  providerSubject: params.providerSubject,
+  providerEmail: params.providerEmail ?? undefined,
+  providerScope: params.providerScope ?? undefined,
 });
 
 type TokenAuthCodeReceivedParams = {
