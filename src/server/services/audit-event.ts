@@ -225,6 +225,10 @@ export type AuditEventDetailsMap = {
   PROXY_CALLBACK_SUCCESS: ProxyCallbackSuccessDetails;
   PROXY_CALLBACK_ERROR: ProxyCallbackErrorDetails;
   PROXY_CODE_ISSUED: ProxyCodeIssuedDetails;
+  PREAUTHORIZED_ADMIN_REDIRECT_OUT: ProxyRedirectOutDetails;
+  PREAUTHORIZED_ADMIN_CALLBACK_SUCCESS: ProxyCallbackSuccessDetails;
+  PREAUTHORIZED_ADMIN_CALLBACK_ERROR: ProxyCallbackErrorDetails;
+  PREAUTHORIZED_CODE_ISSUED: ProxyCodeIssuedDetails;
   TOKEN_AUTHCODE_RECEIVED: TokenAuthCodeReceivedDetails;
   TOKEN_AUTHCODE_COMPLETED: TokenAuthCodeCompletedDetails;
   TOKEN_REFRESH_RECEIVED: TokenRefreshReceivedDetails;

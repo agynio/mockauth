@@ -34,6 +34,7 @@ enum KeyStatus {
 enum OAuthClientMode {
   regular
   proxy
+  preauthorized
 }
 
 enum ProxyProviderType {
@@ -59,6 +60,10 @@ enum AuditLogEventType {
   PROXY_CALLBACK_SUCCESS
   PROXY_CALLBACK_ERROR
   PROXY_CODE_ISSUED
+  PREAUTHORIZED_ADMIN_REDIRECT_OUT
+  PREAUTHORIZED_ADMIN_CALLBACK_SUCCESS
+  PREAUTHORIZED_ADMIN_CALLBACK_ERROR
+  PREAUTHORIZED_CODE_ISSUED
   TOKEN_AUTHCODE_RECEIVED
   TOKEN_AUTHCODE_COMPLETED
   TOKEN_REFRESH_RECEIVED
@@ -94,6 +99,9 @@ model Tenant {
   proxyAuthTransactions ProxyAuthTransaction[]
   proxyTokenExchanges   ProxyTokenExchange[]
   proxyAuthorizationCodes ProxyAuthorizationCode[]
+  preauthorizedIdentities PreauthorizedIdentity[]
+  preauthorizedAdminAuthTransactions AdminAuthTransaction[]
+  preauthorizedPickerTransactions PickerTransaction[]
   auditLogs        AuditLog[]
 }
 
@@ -112,6 +120,7 @@ model ApiResource {
   proxyAuthTransactions ProxyAuthTransaction[]
   proxyTokenExchanges   ProxyTokenExchange[]
   proxyAuthorizationCodes ProxyAuthorizationCode[]
+  preauthorizedPickerTransactions PickerTransaction[]
 
   @@unique([tenantId, name])
 }
@@ -130,6 +139,7 @@ model AdminUser {
   accounts    Account[]
   sessions    Session[]
   oauthTestSessions OAuthTestSession[]
+  preauthorizedAdminAuthTransactions AdminAuthTransaction[]
   @@map("User")
 }
 
@@ -190,6 +200,9 @@ model Client {
   proxyAuthTransactions    ProxyAuthTransaction[]
   proxyTokenExchanges      ProxyTokenExchange[]
   proxyAuthorizationCodes  ProxyAuthorizationCode[]
+  preauthorizedIdentities  PreauthorizedIdentity[]
+  preauthorizedAdminAuthTransactions AdminAuthTransaction[]
+  preauthorizedPickerTransactions PickerTransaction[]
   auditLogs                AuditLog[]
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
@@ -373,6 +386,7 @@ model ProxyTokenExchange {
   clientId               String
   transaction            ProxyAuthTransaction? @relation("AuthTransactionExchange", fields: [transactionId], references: [id])
   transactionId          String?  @unique
+  providerScope           String?
   providerResponseEncrypted String
   createdAt              DateTime @default(now())
   expiresAt              DateTime
@@ -403,6 +417,68 @@ model ProxyAuthorizationCode {
   createdAt              DateTime @default(now())
   tokenExchange          ProxyTokenExchange @relation("ExchangeAuthorizationCode", fields: [tokenExchangeId], references: [id], onDelete: Cascade)
   tokenExchangeId        String   @unique
+
+  @@index([tenantId, clientId])
+  @@index([expiresAt])
+}
+
+model PreauthorizedIdentity {
+  id                     String   @id @default(uuid())
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId               String
+  client                 Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId               String
+  label                  String?
+  providerSubject        String?
+  providerEmail          String?
+  providerScope          String
+  providerResponseEncrypted String
+  accessTokenExpiresAt   DateTime?
+  refreshTokenExpiresAt  DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([tenantId, clientId])
+}
+
+model AdminAuthTransaction {
+  id                    String   @id @default(uuid())
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId              String
+  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId              String
+  adminUser             AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUserId           String
+  redirectUri           String
+  providerScope         String
+  providerCodeVerifier  String?
+  providerPkceEnabled   Boolean  @default(false)
+  identityLabel         String?
+  createdAt             DateTime @default(now())
+  expiresAt             DateTime
+
+  @@index([tenantId, clientId])
+  @@index([expiresAt])
+}
+
+model PickerTransaction {
+  id                     String   @id @default(uuid())
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId               String
+  apiResource            ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId          String
+  client                 Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId               String
+  redirectUri            String
+  appState               String?
+  appNonce               String?
+  appScope               String
+  appCodeChallenge       String
+  appCodeChallengeMethod String   @default("S256")
+  loginHint              String?
+  createdAt              DateTime @default(now())
+  expiresAt              DateTime
+  consumedAt             DateTime?
 
   @@index([tenantId, clientId])
   @@index([expiresAt])

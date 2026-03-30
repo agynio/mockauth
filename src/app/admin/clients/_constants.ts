@@ -30,6 +30,6 @@ export const GRANT_TYPE_LABELS: Record<GrantTypeOption, { title: string; descrip
   },
   refresh_token: {
     title: "Refresh token",
-    description: "Allow refresh_token grants for proxy clients.",
+    description: "Allow refresh_token grants for proxy or preauthorized clients.",
   },
 };

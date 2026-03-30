@@ -295,7 +295,7 @@ export const completeProxyAuthorizationCodeGrant = async (
       throw new DomainError("Proxy configuration missing", { status: 500 });
     }
 
-    const providerScope = record.tokenExchange.transaction?.providerScope;
+    const providerScope = record.tokenExchange.providerScope ?? record.tokenExchange.transaction?.providerScope;
     if (typeof providerScope !== "string" || providerScope.trim().length === 0) {
       throw new DomainError("Proxy transaction is missing provider scope", { status: 500 });
     }
@@ -365,8 +365,8 @@ export const completeProxyRefreshGrant = async (
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
-  if (client.oauthClientMode !== "proxy") {
-    throw new DomainError("Client does not support proxy refresh", { status: 400, code: "unsupported_grant_type" });
+  if (client.oauthClientMode !== "proxy" && client.oauthClientMode !== "preauthorized") {
+    throw new DomainError("Client does not support refresh", { status: 400, code: "unsupported_grant_type" });
   }
 
   const requestDiagnostics = params.auditContext?.request

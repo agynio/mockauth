@@ -19,11 +19,16 @@ import {
   deleteProxyAuthTransaction,
 } from "@/server/services/proxy-service";
 import { PROXY_TRANSACTION_COOKIE, buildProxyTransactionCookiePath } from "@/server/oidc/proxy/constants";
+import { mapAppScopesToProvider } from "@/server/oidc/proxy/scope-mapping";
+import { PREAUTHORIZED_PICKER_COOKIE, buildPreauthorizedPickerCookiePath } from "@/server/oidc/preauthorized/constants";
+import {
+  PREAUTHORIZED_PICKER_TTL_SECONDS,
+  startPickerTransaction,
+} from "@/server/services/preauthorized-picker-service";
+import { searchParamsToRecord } from "@/server/utils/search-params";
 import type { RequestContext } from "@/server/utils/request-context";
 
 type LoadedClient = Awaited<ReturnType<typeof getClientForTenant>>;
-type ProxyProviderConfigRecord = NonNullable<LoadedClient["proxyConfig"]>;
-
 type AuthorizeParams = {
   apiResourceId: string;
   clientId: string;
@@ -75,25 +80,6 @@ const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
   }
 };
 
-const toSearchParamsRecord = (searchParams: URLSearchParams): Record<string, string | string[]> => {
-  const record: Record<string, string | string[]> = {};
-
-  for (const [key, value] of searchParams.entries()) {
-    const existing = record[key];
-    if (!existing) {
-      record[key] = value;
-      continue;
-    }
-    if (Array.isArray(existing)) {
-      existing.push(value);
-      continue;
-    }
-    record[key] = [existing, value];
-  }
-
-  return record;
-};
-
 export const handleAuthorize = async (
   params: AuthorizeParams,
   origin: string,
@@ -134,6 +120,16 @@ export const handleAuthorize = async (
 
   if (client.oauthClientMode === "proxy") {
     return handleProxyAuthorize({
+      params: resolvedParams,
+      origin,
+      tenantId: tenant.id,
+      resourceId: resource.id,
+      client,
+      requestContext,
+    });
+  }
+  if (client.oauthClientMode === "preauthorized") {
+    return handlePreauthorizedAuthorize({
       params: resolvedParams,
       origin,
       tenantId: tenant.id,
@@ -353,7 +349,7 @@ const handleProxyAuthorize = async (args: {
     }
 
     const providerAuthorizationUrl = authorizeUrl.toString();
-    const providerAuthorizationParams = toSearchParamsRecord(authorizeUrl.searchParams);
+    const providerAuthorizationParams = searchParamsToRecord(authorizeUrl.searchParams);
 
     await emitAuditEvent({
       tenantId,
@@ -402,65 +398,74 @@ const handleProxyAuthorize = async (args: {
   }
 };
 
-const mapAppScopesToProvider = (scopeString: string, config: ProxyProviderConfigRecord): string => {
-  const requestedScopes = scopeString.split(" ").map((scope) => scope.trim()).filter(Boolean);
-  const mapping = parseScopeMapping(config.scopeMapping);
-  const providerScopes = new Set<string>();
+const handlePreauthorizedAuthorize = async (args: {
+  params: AuthorizeParams;
+  origin: string;
+  tenantId: string;
+  resourceId: string;
+  client: Awaited<ReturnType<typeof getClientForTenant>>;
+  requestContext?: RequestContext;
+}): Promise<AuthorizeResult> => {
+  const { params, origin, tenantId, resourceId, client, requestContext } = args;
+  const codeChallenge = params.codeChallenge ?? "";
+  const codeChallengeMethod = params.codeChallengeMethod ?? "S256";
 
-  for (const scope of requestedScopes) {
-    const value = mapping.get(scope);
-    if (!value || value.length === 0) {
-      providerScopes.add(scope);
-      continue;
-    }
+  const redirect = resolveRedirectUri(params.redirectUri, client.redirectUris ?? []);
+  ensureScopes(params.scope.split(" ").filter(Boolean), client.allowedScopes);
 
-    for (const mapped of value) {
-      if (mapped) {
-        providerScopes.add(mapped);
-      }
-    }
+  if (!client.proxyConfig) {
+    throw new DomainError("Preauthorized client is missing provider configuration", { status: 500 });
   }
 
-  if (providerScopes.size === 0) {
-    for (const fallback of config.defaultScopes ?? []) {
-      if (fallback) {
-        providerScopes.add(fallback);
-      }
-    }
-  }
+  const transaction = await startPickerTransaction({
+    tenantId,
+    apiResourceId: resourceId,
+    clientId: client.id,
+    redirectUri: redirect,
+    appState: params.state,
+    appNonce: params.nonce,
+    appScope: params.scope,
+    appCodeChallenge: codeChallenge,
+    appCodeChallengeMethod: codeChallengeMethod,
+    loginHint: params.loginHint,
+  });
 
-  if (providerScopes.size === 0) {
-    throw new DomainError("Proxy provider scopes configuration is empty", { status: 500 });
-  }
+  await emitAuditEvent({
+    tenantId,
+    clientId: client.id,
+    traceId: transaction.id,
+    actorId: null,
+    eventType: "AUTHORIZE_RECEIVED",
+    severity: "INFO",
+    message: "Preauthorized authorization request received",
+    details: buildAuthorizeReceivedDetails({
+      responseType: params.responseType,
+      scope: params.scope,
+      prompt: params.prompt,
+      redirectUri: redirect,
+      state: params.state,
+      nonce: params.nonce,
+      codeChallenge: codeChallenge,
+      codeChallengeMethod: codeChallengeMethod,
+      loginHint: params.loginHint,
+      freshLoginRequested: params.freshLoginRequested,
+    }),
+    requestContext: requestContext ?? null,
+  });
 
-  return Array.from(providerScopes).join(" ");
-};
+  const cookies: CookieInstruction[] = [
+    {
+      name: PREAUTHORIZED_PICKER_COOKIE,
+      value: transaction.id,
+      options: {
+        path: buildPreauthorizedPickerCookiePath(resourceId),
+        httpOnly: true,
+        sameSite: "lax",
+        secure: origin.startsWith("https:"),
+        maxAge: PREAUTHORIZED_PICKER_TTL_SECONDS,
+      },
+    },
+  ];
 
-const parseScopeMapping = (value: unknown): Map<string, string[]> => {
-  if (!value || typeof value !== "object") {
-    return new Map();
-  }
-
-  const entries: Array<[string, string[]]> = [];
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof key !== "string") {
-      continue;
-    }
-    if (typeof raw === "string") {
-      const scopes = raw
-        .split(" ")
-        .map((scope) => scope.trim())
-        .filter(Boolean);
-      entries.push([key, scopes]);
-      continue;
-    }
-    if (Array.isArray(raw)) {
-      const scopes = raw
-        .map((item) => (typeof item === "string" ? item.trim() : ""))
-        .filter((item) => item.length > 0);
-      entries.push([key, scopes]);
-    }
-  }
-
-  return new Map(entries);
+  return { type: "redirect", redirectTo: `/r/${resourceId}/oidc/preauthorized/picker`, cookies };
 };

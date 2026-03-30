@@ -41,7 +41,7 @@ const createPasswordClient = async (input: {
   tenantId: string;
   allowedGrantTypes?: string[];
   allowedScopes?: string[];
-  oauthClientMode?: "regular" | "proxy";
+  oauthClientMode?: "regular" | "proxy" | "preauthorized";
   proxyConfig?: {
     providerType: "oidc" | "oauth2";
     authorizationEndpoint: string;
@@ -189,6 +189,34 @@ describe("token service password grant", () => {
       allowedGrantTypes: ["password"],
       allowedScopes: ["openid", "profile"],
       oauthClientMode: "proxy",
+      proxyConfig: {
+        providerType: "oidc",
+        authorizationEndpoint: "https://proxy.example/auth",
+        tokenEndpoint: "https://proxy.example/token",
+        upstreamClientId: "proxy-client",
+      },
+    });
+
+    await expect(
+      issueTokensFromPassword({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        username: "demo-user",
+        scope: "openid profile",
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Client does not support password grant");
+  });
+
+  it("rejects password grants for preauthorized clients", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "profile"],
+      oauthClientMode: "preauthorized",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",

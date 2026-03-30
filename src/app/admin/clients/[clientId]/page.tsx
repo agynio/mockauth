@@ -18,6 +18,7 @@ import {
   UpdateProxyProviderConfigForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
 import { ClientDangerZone } from "@/app/admin/clients/[clientId]/client-danger-zone";
+import { PreauthorizedIdentitySection } from "@/app/admin/clients/[clientId]/preauthorized-identities";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,12 +28,14 @@ import { authOptions } from "@/server/auth/options";
 import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { getClientByIdForTenant } from "@/server/services/client-service";
 import { listApiResources } from "@/server/services/api-resource-service";
+import { listPreauthorizedIdentities } from "@/server/services/preauthorized-identity-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { parseTokenAuthMethods, requiresClientSecret, resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import { decrypt } from "@/server/crypto/key-vault";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
+import { buildPreauthorizedAdminCallbackUrl } from "@/server/oidc/preauthorized/constants";
 
 type PageParams = Promise<{ clientId: string }>;
 const grantTypeOptions = ["authorization_code", "password", "refresh_token"] as const;
@@ -104,7 +107,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   })();
 
   const proxyConfigInitial = (() => {
-    if (client.oauthClientMode !== "proxy" || !client.proxyConfig) {
+    if (client.oauthClientMode === "regular" || !client.proxyConfig) {
       return null;
     }
     const normalizedUpstreamAuthMethod = resolveUpstreamAuthMethod(
@@ -155,8 +158,16 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const providerRedirectUri =
     client.oauthClientMode === "proxy"
       ? buildProxyCallbackUrl(origin, currentResourceId)
-      : null;
-  const showLocalClientSettings = client.oauthClientMode !== "proxy";
+      : client.oauthClientMode === "preauthorized"
+        ? buildPreauthorizedAdminCallbackUrl(origin, client.id)
+        : null;
+  const showLocalClientSettings = client.oauthClientMode === "regular";
+  const modeLabel =
+    client.oauthClientMode === "proxy"
+      ? "proxy mode"
+      : client.oauthClientMode === "preauthorized"
+        ? "preauthorized mode"
+        : "regular mode";
   const testFlowHref = `/admin/clients/${client.id}/test`;
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
@@ -178,6 +189,18 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     ({ label, value }) => ({ label, value }),
   );
 
+  const preauthorizedIdentitySummaries = client.oauthClientMode === "preauthorized"
+    ? (await listPreauthorizedIdentities(activeTenant.id, client.id)).map((identity) => ({
+        id: identity.id,
+        label: identity.label ?? identity.providerEmail ?? identity.providerSubject ?? identity.id,
+        metadata: [identity.providerEmail, identity.providerSubject].filter(Boolean).join(" · ") || null,
+        updatedAtLabel: format(identity.updatedAt, "PPPp"),
+        providerScope: identity.providerScope,
+        accessTokenExpiresAtLabel: identity.accessTokenExpiresAt ? format(identity.accessTokenExpiresAt, "PPPp") : null,
+        refreshTokenExpiresAtLabel: identity.refreshTokenExpiresAt ? format(identity.refreshTokenExpiresAt, "PPPp") : null,
+      }))
+    : [];
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -192,9 +215,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             <Badge variant={client.pkceRequired ? "default" : "outline"}>
               {client.pkceRequired ? "PKCE required" : "PKCE optional"}
             </Badge>
-            <Badge variant={client.oauthClientMode === "proxy" ? "default" : "outline"}>
-              {client.oauthClientMode === "proxy" ? "proxy mode" : "regular mode"}
-            </Badge>
+            <Badge variant={client.oauthClientMode === "regular" ? "outline" : "default"}>{modeLabel}</Badge>
           </div>
         </div>
         <div className="text-sm text-muted-foreground">
@@ -297,10 +318,10 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </CardContent>
       </Card>
 
-      {client.oauthClientMode === "proxy" && proxyConfigInitial ? (
+      {client.oauthClientMode !== "regular" && proxyConfigInitial ? (
         <Card>
           <CardHeader>
-            <CardTitle>Proxy provider</CardTitle>
+            <CardTitle>Upstream provider</CardTitle>
             <CardDescription>
               Configure the upstream identity provider used to broker OAuth flows.
             </CardDescription>
@@ -313,7 +334,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               <AlertTitle>Scopes and claims come from upstream</AlertTitle>
               <AlertDescription>
                 MockAuth will forward tokens from the provider as-is. Local scope toggles and token settings are disabled in
-                proxy mode.
+                proxy and preauthorized modes.
               </AlertDescription>
             </Alert>
             <UpdateProxyProviderConfigForm
@@ -324,6 +345,14 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             />
           </CardContent>
         </Card>
+      ) : null}
+
+      {client.oauthClientMode === "preauthorized" ? (
+        <PreauthorizedIdentitySection
+          clientId={client.id}
+          canManage={canManageClients}
+          identities={preauthorizedIdentitySummaries}
+        />
       ) : null}
 
       {showLocalClientSettings ? (
