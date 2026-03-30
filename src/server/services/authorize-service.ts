@@ -13,6 +13,7 @@ import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-tok
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import { buildAuthorizeReceivedDetails, buildProxyRedirectOutDetails } from "@/server/services/audit-event";
+import { collectParams } from "@/server/utils/diagnostics";
 import {
   PROXY_TRANSACTION_TTL_SECONDS,
   startProxyAuthTransaction,
@@ -75,24 +76,6 @@ const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
   }
 };
 
-const toSearchParamsRecord = (searchParams: URLSearchParams): Record<string, string | string[]> => {
-  const record: Record<string, string | string[]> = {};
-
-  for (const [key, value] of searchParams.entries()) {
-    const existing = record[key];
-    if (!existing) {
-      record[key] = value;
-      continue;
-    }
-    if (Array.isArray(existing)) {
-      existing.push(value);
-      continue;
-    }
-    record[key] = [existing, value];
-  }
-
-  return record;
-};
 
 export const handleAuthorize = async (
   params: AuthorizeParams,
@@ -353,7 +336,7 @@ const handleProxyAuthorize = async (args: {
     }
 
     const providerAuthorizationUrl = authorizeUrl.toString();
-    const providerAuthorizationParams = toSearchParamsRecord(authorizeUrl.searchParams);
+    const providerAuthorizationParams = collectParams(authorizeUrl.searchParams.entries());
 
     await emitAuditEvent({
       tenantId,
