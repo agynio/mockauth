@@ -159,7 +159,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     client.oauthClientMode === "proxy"
       ? buildProxyCallbackUrl(origin, currentResourceId)
       : client.oauthClientMode === "preauthorized"
-        ? buildPreauthorizedAdminCallbackUrl(origin, client.id)
+        ? buildPreauthorizedAdminCallbackUrl(origin, currentResourceId)
         : null;
   const showLocalClientSettings = client.oauthClientMode === "regular";
   const modeLabel =

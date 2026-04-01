@@ -7,9 +7,17 @@ import { createClient } from "@/server/services/client-service";
 import { completePreauthorizedAdminAuth } from "@/server/services/preauthorized-admin-auth-service";
 
 const createTenant = async () => {
-  return prisma.tenant.create({
+  const tenant = await prisma.tenant.create({
     data: { name: `Preauth Admin ${randomUUID()}` },
   });
+  const apiResource = await prisma.apiResource.create({
+    data: {
+      tenantId: tenant.id,
+      name: "Default",
+    },
+  });
+  await prisma.tenant.update({ where: { id: tenant.id }, data: { defaultApiResourceId: apiResource.id } });
+  return { tenant, apiResource };
 };
 
 const createAdminUser = async () => {
@@ -49,6 +57,7 @@ const createBarePreauthorizedClient = async (tenantId: string) => {
 
 const createTransaction = async (input: {
   tenantId: string;
+  apiResourceId: string;
   clientId: string;
   adminUserId: string;
   expiresAt: Date;
@@ -56,6 +65,7 @@ const createTransaction = async (input: {
   return prisma.adminAuthTransaction.create({
     data: {
       tenantId: input.tenantId,
+      apiResourceId: input.apiResourceId,
       clientId: input.clientId,
       adminUserId: input.adminUserId,
       redirectUri: "https://mockauth.test/callback",
@@ -69,13 +79,13 @@ const createTransaction = async (input: {
 
 const buildCallbackArgs = (input: {
   tenantId: string;
-  clientId: string;
+  apiResourceId: string;
   adminUserId: string;
   state: string;
   transactionCookie: string | null;
 }) => ({
   tenantId: input.tenantId,
-  clientId: input.clientId,
+  apiResourceId: input.apiResourceId,
   adminUserId: input.adminUserId,
   state: input.state,
   code: "provider-code",
@@ -94,11 +104,12 @@ const buildCallbackArgs = (input: {
 
 describe("preauthorized admin auth", () => {
   it("records security violations for state mismatches", async () => {
-    const tenant = await createTenant();
+    const { tenant, apiResource } = await createTenant();
     const admin = await createAdminUser();
     const { client } = await createPreauthorizedClient(tenant.id);
     const transaction = await createTransaction({
       tenantId: tenant.id,
+      apiResourceId: apiResource.id,
       clientId: client.id,
       adminUserId: admin.id,
       expiresAt: new Date(Date.now() + 60 * 1000),
@@ -108,7 +119,7 @@ describe("preauthorized admin auth", () => {
       completePreauthorizedAdminAuth(
         buildCallbackArgs({
           tenantId: tenant.id,
-          clientId: client.id,
+          apiResourceId: apiResource.id,
           adminUserId: admin.id,
           state: transaction.id,
           transactionCookie: "invalid",
@@ -126,11 +137,12 @@ describe("preauthorized admin auth", () => {
   });
 
   it("deletes expired transactions", async () => {
-    const tenant = await createTenant();
+    const { tenant, apiResource } = await createTenant();
     const admin = await createAdminUser();
     const { client } = await createPreauthorizedClient(tenant.id);
     const transaction = await createTransaction({
       tenantId: tenant.id,
+      apiResourceId: apiResource.id,
       clientId: client.id,
       adminUserId: admin.id,
       expiresAt: new Date(Date.now() - 60 * 1000),
@@ -140,7 +152,7 @@ describe("preauthorized admin auth", () => {
       completePreauthorizedAdminAuth(
         buildCallbackArgs({
           tenantId: tenant.id,
-          clientId: client.id,
+          apiResourceId: apiResource.id,
           adminUserId: admin.id,
           state: transaction.id,
           transactionCookie: transaction.id,
@@ -153,11 +165,12 @@ describe("preauthorized admin auth", () => {
   });
 
   it("deletes transactions when proxy config is missing", async () => {
-    const tenant = await createTenant();
+    const { tenant, apiResource } = await createTenant();
     const admin = await createAdminUser();
     const client = await createBarePreauthorizedClient(tenant.id);
     const transaction = await createTransaction({
       tenantId: tenant.id,
+      apiResourceId: apiResource.id,
       clientId: client.id,
       adminUserId: admin.id,
       expiresAt: new Date(Date.now() + 60 * 1000),
@@ -167,7 +180,7 @@ describe("preauthorized admin auth", () => {
       completePreauthorizedAdminAuth(
         buildCallbackArgs({
           tenantId: tenant.id,
-          clientId: client.id,
+          apiResourceId: apiResource.id,
           adminUserId: admin.id,
           state: transaction.id,
           transactionCookie: transaction.id,

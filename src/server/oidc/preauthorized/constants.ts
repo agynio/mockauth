@@ -3,7 +3,7 @@ export const PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE = "mockauth_preauth_admin_tx
 
 export const buildPreauthorizedPickerCookiePath = (apiResourceId: string) => `/r/${apiResourceId}/oidc`;
 
-export const buildPreauthorizedAdminTransactionCookiePath = (clientId: string) => `/admin/clients/${clientId}`;
+export const buildPreauthorizedAdminTransactionCookiePath = (apiResourceId: string) => `/r/${apiResourceId}/oidc`;
 
-export const buildPreauthorizedAdminCallbackUrl = (origin: string, clientId: string) =>
-  new URL(`/admin/clients/${clientId}/preauthorized/callback`, origin).toString();
+export const buildPreauthorizedAdminCallbackUrl = (origin: string, apiResourceId: string) =>
+  new URL(`/r/${apiResourceId}/oidc/preauthorized/callback`, origin).toString();

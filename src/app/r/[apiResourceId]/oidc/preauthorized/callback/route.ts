@@ -4,14 +4,13 @@ import { z } from "zod";
 
 import { authOptions } from "@/server/auth/options";
 import { toResponse } from "@/server/errors";
-import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
-import { getClientByIdForTenant } from "@/server/services/client-service";
-import { completePreauthorizedAdminAuth } from "@/server/services/preauthorized-admin-auth-service";
+import { resolveUrl } from "@/server/http/origin";
 import {
   PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE,
   buildPreauthorizedAdminTransactionCookiePath,
 } from "@/server/oidc/preauthorized/constants";
-import { resolveUrl } from "@/server/http/origin";
+import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
+import { completePreauthorizedAdminAuth } from "@/server/services/preauthorized-admin-auth-service";
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
 import { searchParamsToRecord } from "@/server/utils/search-params";
 
@@ -22,7 +21,9 @@ const callbackSchema = z.object({
   error_description: z.string().optional(),
 });
 
-type RouteParams = { params: Promise<{ clientId: string }> };
+const routeParamsSchema = z.object({ apiResourceId: z.string().min(1) });
+
+type RouteParams = { params: Promise<{ apiResourceId: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions);
@@ -30,7 +31,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { clientId } = await params;
+  const parsedParams = routeParamsSchema.safeParse(await params);
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+
+  const { apiResourceId } = parsedParams.data;
   const normalizedUrl = resolveUrl(request);
   const query = callbackSchema.safeParse(Object.fromEntries(normalizedUrl.searchParams.entries()));
   if (!query.success) {
@@ -45,18 +51,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const client = await getClientByIdForTenant(activeTenant.id, clientId).catch(() => null);
-  if (!client || client.oauthClientMode !== "preauthorized") {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-
   try {
     const transactionCookie = request.cookies.get(PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE)?.value;
     const callbackParams = searchParamsToRecord(normalizedUrl.searchParams);
     const requestHeaders = Object.fromEntries(request.headers.entries());
-    await completePreauthorizedAdminAuth({
+    const { clientId } = await completePreauthorizedAdminAuth({
       tenantId: activeTenant.id,
-      clientId: client.id,
+      apiResourceId,
       adminUserId: session.user.id,
       state: query.data.state,
       code: query.data.code,
@@ -73,13 +74,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       requestContext: getRequestContextFromRequest(request),
     });
 
-    const response = NextResponse.redirect(new URL(`/admin/clients/${client.id}`, normalizedUrl).toString(), {
+    const response = NextResponse.redirect(new URL(`/admin/clients/${clientId}`, normalizedUrl).toString(), {
       status: 302,
     });
     response.cookies.set({
       name: PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE,
       value: "",
-      path: buildPreauthorizedAdminTransactionCookiePath(client.id),
+      path: buildPreauthorizedAdminTransactionCookiePath(apiResourceId),
       httpOnly: true,
       sameSite: "lax",
       secure: normalizedUrl.protocol === "https:",
