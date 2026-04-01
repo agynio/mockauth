@@ -81,6 +81,7 @@ type StoreProxyTokenExchangeArgs = {
   apiResourceId: string;
   clientId: string;
   transactionId: string | null;
+  providerScope?: string | null;
   providerResponse: Record<string, unknown>;
   now?: Date;
 };
@@ -100,6 +101,7 @@ export const storeProxyTokenExchange = async (args: StoreProxyTokenExchangeArgs)
       apiResourceId: args.apiResourceId,
       clientId: args.clientId,
       transactionId: args.transactionId,
+      providerScope: args.providerScope ?? null,
       providerResponseEncrypted: payload,
       expiresAt: addMinutes(now, PROXY_TOKEN_EXCHANGE_TTL_MINUTES),
     },

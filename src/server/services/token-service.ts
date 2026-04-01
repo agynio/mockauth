@@ -386,7 +386,7 @@ export const issueTokensFromPassword = async (params: {
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
-  if (client.oauthClientMode === "proxy") {
+  if (client.oauthClientMode !== "regular") {
     throw new DomainError("Client does not support password grant", { status: 400, code: "unsupported_grant_type" });
   }
 

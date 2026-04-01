@@ -14,6 +14,11 @@ import { prisma } from "@/server/db/client";
 import { authOptions } from "@/server/auth/options";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import {
+  PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE,
+  buildPreauthorizedAdminCallbackUrl,
+  buildPreauthorizedAdminTransactionCookiePath,
+} from "@/server/oidc/preauthorized/constants";
+import {
   addRedirectUri,
   createClient,
   deleteClient,
@@ -30,6 +35,8 @@ import {
   upsertProxyProviderConfig,
 } from "@/server/services/client-service";
 import type { ProxyProviderConfigInput } from "@/server/services/client-service";
+import { startPreauthorizedAdminAuth, ADMIN_AUTH_TTL_SECONDS } from "@/server/services/preauthorized-admin-auth-service";
+import { deletePreauthorizedIdentity, refreshPreauthorizedIdentity } from "@/server/services/preauthorized-identity-service";
 import { rotateKeyForAlg } from "@/server/services/key-service";
 import {
   ADMIN_ACTIVE_TENANT_COOKIE,
@@ -87,7 +94,7 @@ const clientSchema = z.object({
   allowedGrantTypes: z.array(z.enum(grantTypeOptions)).min(1).default(["authorization_code"]),
   redirects: z.array(z.string().min(1)).optional(),
   scopes: z.array(z.string().min(1)).optional(),
-  mode: z.enum(["regular", "proxy"]).default("regular"),
+  mode: z.enum(["regular", "proxy", "preauthorized"]).default("regular"),
   proxyConfig: proxyProviderConfigSchema.optional(),
 });
 
@@ -320,6 +327,11 @@ const updateClientTokenConfigSchema = z.object({
 const deleteClientSchema = z.object({ clientId: z.string().min(1) });
 
 const updateProxyConfigSchema = proxyProviderConfigSchema.extend({ clientId: z.string().min(1) });
+const preauthorizedAdminAuthSchema = z.object({
+  clientId: z.string().min(1),
+  identityLabel: z.string().optional(),
+});
+const preauthorizedIdentitySchema = z.object({ identityId: z.string().min(1) });
 
 const requireSession = async () => {
   const session = await getServerSession(authOptions);
@@ -450,7 +462,7 @@ export const createClientAction = async (
     const parsed = clientSchema.parse(input);
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
-    if (parsed.mode === "proxy") {
+    if (parsed.mode === "proxy" || parsed.mode === "preauthorized") {
       const proxyValidationError = validateProxyConfigInput(parsed.proxyConfig);
       if (proxyValidationError) {
         return { error: proxyValidationError };
@@ -466,7 +478,7 @@ export const createClientAction = async (
       return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
     const canonicalScopes = ["openid", ...normalizedScopes.filter((scope) => scope !== "openid")];
-    const proxyConfigResult = parsed.mode === "proxy"
+    const proxyConfigResult = parsed.mode === "proxy" || parsed.mode === "preauthorized"
       ? normalizeProxyConfigInput(parsed.proxyConfig)
       : { normalized: undefined, keepExistingSecret: false };
 
@@ -491,6 +503,10 @@ export const createClientAction = async (
       if (resourceId) {
         providerRedirectUri = buildProxyCallbackUrl(origin, resourceId);
       }
+    }
+    if (parsed.mode === "preauthorized") {
+      const origin = await getRequestOrigin();
+      providerRedirectUri = buildPreauthorizedAdminCallbackUrl(origin, client.id);
     }
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
@@ -704,8 +720,8 @@ export const updateProxyClientConfigAction = async (
     if (!client) {
       return { error: "Client not found" };
     }
-    if (client.oauthClientMode !== "proxy") {
-      return { error: "Client is not configured for proxy mode" };
+    if (client.oauthClientMode !== "proxy" && client.oauthClientMode !== "preauthorized") {
+      return { error: "Client is not configured for upstream mode" };
     }
     const { clientId, ...rawConfig } = parsed;
     const validationError = validateProxyConfigInput(rawConfig);
@@ -781,6 +797,123 @@ export const updateProxyClientConfigAction = async (
   } catch (error) {
     console.error(error);
     return { error: "Failed to update proxy configuration" };
+  }
+};
+
+export const startPreauthorizedAdminAuthAction = async (
+  input: z.infer<typeof preauthorizedAdminAuthSchema>,
+): Promise<ActionState<{ authorizationUrl: string }>> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = preauthorizedAdminAuthSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    if (client.oauthClientMode !== "preauthorized") {
+      return { error: "Client is not preauthorized" };
+    }
+
+    const origin = await getRequestOrigin();
+    const requestContext = await getRequestContext();
+    const { transactionId, authorizationUrl } = await startPreauthorizedAdminAuth({
+      tenantId: client.tenantId,
+      clientId: client.id,
+      adminUserId: adminId,
+      origin,
+      identityLabel: parsed.identityLabel,
+      requestContext,
+    });
+
+    const store = await cookies();
+    store.set({
+      name: PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE,
+      value: transactionId,
+      path: buildPreauthorizedAdminTransactionCookiePath(client.id),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: origin.startsWith("https:"),
+      maxAge: ADMIN_AUTH_TTL_SECONDS,
+    });
+
+    return { success: "Redirecting to provider", data: { authorizationUrl } };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to start preauthorized authorization" };
+  }
+};
+
+export const refreshPreauthorizedIdentityAction = async (
+  input: z.infer<typeof preauthorizedIdentitySchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = preauthorizedIdentitySchema.parse(input);
+    const identity = await prisma.preauthorizedIdentity.findUnique({
+      where: { id: parsed.identityId },
+      select: { id: true, tenantId: true, clientId: true },
+    });
+    if (!identity) {
+      return { error: "Identity not found" };
+    }
+    const membership = await assertTenantMembership(adminId, identity.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+
+    const requestContext = await getRequestContext();
+    await refreshPreauthorizedIdentity({
+      tenantId: identity.tenantId,
+      clientId: identity.clientId,
+      identityId: identity.id,
+      actorId: adminId,
+      requestContext,
+    });
+
+    revalidatePath(clientPath(identity.clientId));
+    return { success: "Tokens refreshed" };
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return { error: error.message };
+    }
+    console.error(error);
+    return { error: "Unable to refresh identity" };
+  }
+};
+
+export const deletePreauthorizedIdentityAction = async (
+  input: z.infer<typeof preauthorizedIdentitySchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = preauthorizedIdentitySchema.parse(input);
+    const identity = await prisma.preauthorizedIdentity.findUnique({
+      where: { id: parsed.identityId },
+      select: {
+        id: true,
+        tenantId: true,
+        clientId: true,
+        label: true,
+        providerSubject: true,
+        providerEmail: true,
+        providerScope: true,
+      },
+    });
+    if (!identity) {
+      return { error: "Identity not found" };
+    }
+    const membership = await assertTenantMembership(adminId, identity.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+
+    const requestContext = await getRequestContext();
+    await deletePreauthorizedIdentity({
+      identity,
+      actorId: adminId,
+      requestContext,
+    });
+    revalidatePath(clientPath(identity.clientId));
+    return { success: identity.label ? `Identity "${identity.label}" deleted` : "Identity deleted" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to delete identity" };
   }
 };
 

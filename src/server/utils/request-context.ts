@@ -94,7 +94,10 @@ export const getRequestContext = async (): Promise<RequestContext> => {
   }
 };
 
+export const getRequestIp = (request: Request | NextRequest): string | null => {
+  return (request as { ip?: string | null }).ip ?? null;
+};
+
 export const getRequestContextFromRequest = (request: Request | NextRequest): RequestContext => {
-  const ipOverride = (request as { ip?: string | null }).ip ?? null;
-  return buildFromHeaders(request.headers, ipOverride);
+  return buildFromHeaders(request.headers, getRequestIp(request));
 };

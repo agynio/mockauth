@@ -124,7 +124,7 @@ export const createClient = async (
     allowedGrantTypes?: string[];
     redirectUris?: string[];
     allowedScopes?: string[];
-    oauthClientMode?: "regular" | "proxy";
+    oauthClientMode?: "regular" | "proxy" | "preauthorized";
     proxyConfig?: ProxyProviderConfigInput;
   },
 ) => {
@@ -137,8 +137,8 @@ export const createClient = async (
   const allowedGrantTypes = data.allowedGrantTypes ? normalizeAllowedGrantTypes(data.allowedGrantTypes) : undefined;
   const mode = data.oauthClientMode ?? "regular";
 
-  if (mode === "proxy" && !data.proxyConfig) {
-    throw new DomainError("Proxy clients require provider configuration", { status: 400 });
+  if ((mode === "proxy" || mode === "preauthorized") && !data.proxyConfig) {
+    throw new DomainError("Upstream clients require provider configuration", { status: 400 });
   }
 
   const validatedProxyConfig = data.proxyConfig ? proxyProviderConfigSchema.parse(data.proxyConfig) : null;
@@ -173,7 +173,7 @@ export const createClient = async (
       }
     }
 
-    if (mode === "proxy" && validatedProxyConfig) {
+    if ((mode === "proxy" || mode === "preauthorized") && validatedProxyConfig) {
       const trimmedUpstreamClientId = validatedProxyConfig.upstreamClientId.trim();
       const normalizedSecret = validatedProxyConfig.upstreamClientSecret?.trim();
       await tx.proxyProviderConfig.create({
