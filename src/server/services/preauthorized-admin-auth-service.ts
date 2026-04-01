@@ -32,6 +32,7 @@ export const ADMIN_AUTH_TTL_SECONDS = ADMIN_AUTH_TTL_MINUTES * 60;
 
 type StartAdminAuthArgs = {
   tenantId: string;
+  apiResourceId: string;
   clientId: string;
   adminUserId: string;
   origin: string;
@@ -41,7 +42,7 @@ type StartAdminAuthArgs = {
 
 type AdminCallbackArgs = {
   tenantId: string;
-  clientId: string;
+  apiResourceId: string;
   adminUserId: string;
   state: string;
   code?: string | null;
@@ -82,7 +83,7 @@ export const startPreauthorizedAdminAuth = async (params: StartAdminAuthArgs) =>
   }
 
   const providerScope = mapAppScopesToProvider(client.allowedScopes.join(" "), proxyConfig);
-  const callbackUrl = buildPreauthorizedAdminCallbackUrl(params.origin, client.id);
+  const callbackUrl = buildPreauthorizedAdminCallbackUrl(params.origin, params.apiResourceId);
   let providerCodeVerifier: string | null = null;
   let providerCodeChallenge: string | null = null;
   if (proxyConfig.pkceSupported) {
@@ -93,6 +94,7 @@ export const startPreauthorizedAdminAuth = async (params: StartAdminAuthArgs) =>
   const transaction = await prisma.adminAuthTransaction.create({
     data: {
       tenantId: client.tenantId,
+      apiResourceId: params.apiResourceId,
       clientId: client.id,
       adminUserId: params.adminUserId,
       redirectUri: callbackUrl,
@@ -149,12 +151,13 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
   if (!params.transactionCookie || params.transactionCookie !== params.state) {
     await recordSecurityViolation({
       tenantId: params.tenantId,
-      clientId: params.clientId,
+      clientId: null,
       traceId: params.state,
       reason: "state_mismatch",
       severity: "ERROR",
       expectedState: params.transactionCookie ?? null,
       receivedState: params.state,
+      receivedApiResourceId: params.apiResourceId,
       requestContext: params.requestContext ?? null,
       message: "Preauthorized admin state mismatch",
     });
@@ -165,19 +168,20 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
   if (!transaction) {
     await recordSecurityViolation({
       tenantId: params.tenantId,
-      clientId: params.clientId,
+      clientId: null,
       traceId: params.state,
       reason: "state_not_found",
       severity: "ERROR",
       receivedState: params.state,
+      receivedApiResourceId: params.apiResourceId,
       requestContext: params.requestContext ?? null,
       message: "Preauthorized admin transaction not found",
     });
     throw new DomainError("Admin transaction not found", { status: 400, code: "invalid_request" });
   }
 
-  if (transaction.clientId !== params.clientId) {
-    throw new DomainError("Admin transaction client mismatch", { status: 400, code: "invalid_request" });
+  if (transaction.apiResourceId !== params.apiResourceId) {
+    throw new DomainError("Admin transaction resource mismatch", { status: 400, code: "invalid_request" });
   }
 
   if (transaction.adminUserId !== params.adminUserId) {
@@ -405,5 +409,5 @@ export const completePreauthorizedAdminAuth = async (params: AdminCallbackArgs) 
 
   await markAdminAuthTransactionCompleted(transaction.id);
 
-  return identity;
+  return { identity, clientId: transaction.clientId };
 };

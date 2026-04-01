@@ -391,6 +391,7 @@ const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles
       id: true,
       tenantId: true,
       name: true,
+      apiResourceId: true,
       oauthClientMode: true,
       tokenEndpointAuthMethods: true,
       pkceRequired: true,
@@ -493,7 +494,7 @@ export const createClientAction = async (
       proxyConfig: proxyConfigResult.normalized,
     });
     let providerRedirectUri: string | undefined;
-    if (parsed.mode === "proxy") {
+    if (parsed.mode === "proxy" || parsed.mode === "preauthorized") {
       const origin = await getRequestOrigin();
       const tenant = await prisma.tenant.findUnique({
         where: { id: parsed.tenantId },
@@ -501,12 +502,11 @@ export const createClientAction = async (
       });
       const resourceId = client.apiResourceId ?? tenant?.defaultApiResourceId;
       if (resourceId) {
-        providerRedirectUri = buildProxyCallbackUrl(origin, resourceId);
+        providerRedirectUri =
+          parsed.mode === "proxy"
+            ? buildProxyCallbackUrl(origin, resourceId)
+            : buildPreauthorizedAdminCallbackUrl(origin, resourceId);
       }
-    }
-    if (parsed.mode === "preauthorized") {
-      const origin = await getRequestOrigin();
-      providerRedirectUri = buildPreauthorizedAdminCallbackUrl(origin, client.id);
     }
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/clients");
@@ -815,9 +815,18 @@ export const startPreauthorizedAdminAuthAction = async (
     }
 
     const origin = await getRequestOrigin();
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: client.tenantId },
+      select: { defaultApiResourceId: true },
+    });
+    const apiResourceId = client.apiResourceId ?? tenant?.defaultApiResourceId;
+    if (!apiResourceId) {
+      return { error: "Client is missing a default API resource" };
+    }
     const requestContext = await getRequestContext();
     const { transactionId, authorizationUrl } = await startPreauthorizedAdminAuth({
       tenantId: client.tenantId,
+      apiResourceId,
       clientId: client.id,
       adminUserId: adminId,
       origin,
@@ -829,7 +838,7 @@ export const startPreauthorizedAdminAuthAction = async (
     store.set({
       name: PREAUTHORIZED_ADMIN_TRANSACTION_COOKIE,
       value: transactionId,
-      path: buildPreauthorizedAdminTransactionCookiePath(client.id),
+      path: buildPreauthorizedAdminTransactionCookiePath(apiResourceId),
       httpOnly: true,
       sameSite: "lax",
       secure: origin.startsWith("https:"),

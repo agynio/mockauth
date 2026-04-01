@@ -125,6 +125,7 @@ model ApiResource {
   proxyTokenExchanges   ProxyTokenExchange[]
   proxyAuthorizationCodes ProxyAuthorizationCode[]
   preauthorizedPickerTransactions PickerTransaction[]
+  preauthorizedAdminAuthTransactions AdminAuthTransaction[]
 
   @@unique([tenantId, name])
 }
@@ -450,6 +451,8 @@ model AdminAuthTransaction {
   id                    String   @id @default(uuid())
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId              String
+  apiResource           ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId         String
   client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId              String
   adminUser             AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
