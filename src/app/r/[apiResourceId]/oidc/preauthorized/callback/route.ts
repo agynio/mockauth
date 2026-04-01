@@ -13,6 +13,7 @@ import { getAdminTenantContext } from "@/server/services/admin-tenant-context";
 import { completePreauthorizedAdminAuth } from "@/server/services/preauthorized-admin-auth-service";
 import { getRequestContextFromRequest } from "@/server/utils/request-context";
 import { searchParamsToRecord } from "@/server/utils/search-params";
+import type { ApiResourceRouteContext } from "@/types/api-resource-route";
 
 const callbackSchema = z.object({
   state: z.string().min(1),
@@ -21,22 +22,13 @@ const callbackSchema = z.object({
   error_description: z.string().optional(),
 });
 
-const routeParamsSchema = z.object({ apiResourceId: z.string().min(1) });
-
-type RouteParams = { params: Promise<{ apiResourceId: string }> };
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsedParams = routeParamsSchema.safeParse(await params);
-  if (!parsedParams.success) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-  }
-
-  const { apiResourceId } = parsedParams.data;
+  const { apiResourceId } = await context.params;
   const normalizedUrl = resolveUrl(request);
   const query = callbackSchema.safeParse(Object.fromEntries(normalizedUrl.searchParams.entries()));
   if (!query.success) {

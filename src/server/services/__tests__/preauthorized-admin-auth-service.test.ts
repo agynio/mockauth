@@ -136,6 +136,37 @@ describe("preauthorized admin auth", () => {
     expect(audit).not.toBeNull();
   });
 
+  it("rejects api resource mismatches", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const admin = await createAdminUser();
+    const { client } = await createPreauthorizedClient(tenant.id);
+    const transaction = await createTransaction({
+      tenantId: tenant.id,
+      apiResourceId: apiResource.id,
+      clientId: client.id,
+      adminUserId: admin.id,
+      expiresAt: new Date(Date.now() + 60 * 1000),
+    });
+    const otherResource = await prisma.apiResource.create({
+      data: {
+        tenantId: tenant.id,
+        name: `Alt ${randomUUID()}`,
+      },
+    });
+
+    await expect(
+      completePreauthorizedAdminAuth(
+        buildCallbackArgs({
+          tenantId: tenant.id,
+          apiResourceId: otherResource.id,
+          adminUserId: admin.id,
+          state: transaction.id,
+          transactionCookie: transaction.id,
+        }),
+      ),
+    ).rejects.toThrow("Admin transaction resource mismatch");
+  });
+
   it("deletes expired transactions", async () => {
     const { tenant, apiResource } = await createTenant();
     const admin = await createAdminUser();
