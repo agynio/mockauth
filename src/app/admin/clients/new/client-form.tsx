@@ -62,7 +62,8 @@ const formSchema = z
       .array(z.enum(grantTypeOptions))
       .min(1, "Select at least one grant type"),
     redirects: z.string().optional(),
-    mode: z.enum(["regular", "proxy", "preauthorized"] as const),
+    mode: z.enum(["regular", "proxy"] as const),
+    proxyAuthStrategy: z.enum(["redirect", "preauthorized"]).default("redirect"),
     proxyConfig: proxyConfigSchema.optional(),
   })
   .superRefine((values, ctx) => {
@@ -316,6 +317,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       allowedGrantTypes: ["authorization_code"],
       redirects: "",
       mode: "regular",
+      proxyAuthStrategy: "redirect",
       proxyConfig: createDefaultProxyConfig(),
     },
   });
@@ -384,7 +386,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0);
 
-      const proxyConfigInput = values.mode !== "regular" && values.proxyConfig
+      const proxyConfigInput = values.mode === "proxy" && values.proxyConfig
         ? {
             providerType: values.proxyConfig.providerType,
             authorizationEndpoint: values.proxyConfig.authorizationEndpoint?.trim() ?? "",
@@ -412,6 +414,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         allowedGrantTypes: values.allowedGrantTypes,
         redirects: redirectEntries,
         mode: values.mode,
+        proxyAuthStrategy: values.mode === "proxy" ? values.proxyAuthStrategy : undefined,
         proxyConfig: proxyConfigInput,
       });
 
@@ -429,6 +432,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         allowedGrantTypes: values.allowedGrantTypes,
         redirects: "",
         mode: values.mode,
+        proxyAuthStrategy: values.proxyAuthStrategy,
         proxyConfig: createDefaultProxyConfig(),
       });
     });
@@ -566,19 +570,15 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
             <FormItem className="space-y-3">
               <FormLabel>Client mode</FormLabel>
               <Tabs value={field.value} onValueChange={field.onChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="regular">Regular</TabsTrigger>
                   <TabsTrigger value="proxy">Proxy</TabsTrigger>
-                  <TabsTrigger value="preauthorized">Preauthorized</TabsTrigger>
                 </TabsList>
                 <TabsContent value="regular" className="rounded-md border p-4 text-sm text-muted-foreground">
                   MockAuth issues and validates tokens directly.
                 </TabsContent>
                 <TabsContent value="proxy" className="rounded-md border p-4 text-sm text-muted-foreground">
                   Delegate authentication to an upstream identity provider while MockAuth brokers OAuth flows.
-                </TabsContent>
-                <TabsContent value="preauthorized" className="rounded-md border p-4 text-sm text-muted-foreground">
-                  Preauthorize upstream identities so end-users can choose from approved accounts at sign-in.
                 </TabsContent>
               </Tabs>
             </FormItem>
@@ -593,6 +593,19 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
                 Provide discovery details and client credentials for the external IdP.
               </p>
             </div>
+
+            <RHFSelectField
+              control={form.control}
+              name="proxyAuthStrategy"
+              label="Proxy auth strategy"
+              placeholder="Select auth strategy"
+              options={[
+                { value: "redirect", label: "Redirect (standard proxy)" },
+                { value: "preauthorized", label: "Preauthorized identities" },
+              ]}
+              disabled={pending}
+              description="Choose how upstream identities are selected during authorization."
+            />
 
             <div className="grid gap-4 md:grid-cols-2">
               <RHFSelectField

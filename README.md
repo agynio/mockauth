@@ -164,7 +164,7 @@ updates). CI runs this script automatically before executing E2E specs.
   - **Passthrough prompt/login_hint** forwards those request parameters when present.
   - **Passthrough token payload** returns the upstream JSON verbatim; otherwise Mockauth emits a minimal compliant
     access token response derived from the provider payload.
-- Proxy clients display a “proxy mode” badge on the detail page. The new **Proxy provider** card lets you rotate
+- Proxy clients display a “proxy mode” badge on the detail page. The new **Upstream provider** card lets you rotate
   upstream secrets, edit endpoints, and adjust mappings without recreating the client. Leaving the secret blank keeps
   the existing encrypted value.
 - Callback handling lives at `/r/<apiResourceId>/oidc/proxy/callback`. Authorization requests set a short-lived

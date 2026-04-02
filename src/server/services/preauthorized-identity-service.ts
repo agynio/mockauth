@@ -271,7 +271,10 @@ export const refreshPreauthorizedIdentity = async (params: {
     });
   };
 
-  if (identity.client.oauthClientMode !== "preauthorized") {
+  if (
+    identity.client.oauthClientMode !== "proxy" ||
+    identity.client.proxyAuthStrategy !== "preauthorized"
+  ) {
     return failRefresh({
       message: "Client is not preauthorized",
       error: "client_not_preauthorized",

@@ -39,6 +39,7 @@ vi.mock("@/server/services/client-service", async () => {
     updateClientTokenConfig: vi.fn(),
     updateClientSigningAlgorithms: vi.fn(),
     upsertProxyProviderConfig: vi.fn(),
+    updateProxyAuthStrategy: vi.fn(),
   };
 });
 
@@ -64,10 +65,10 @@ vi.mock("@/server/utils/request-origin", () => ({
   getRequestOrigin: vi.fn(),
 }));
 
-import { createClientAction, updateProxyClientConfigAction } from "../actions";
+import { createClientAction, updateProxyAuthStrategyAction, updateProxyClientConfigAction } from "../actions";
 import { getServerSession } from "next-auth";
 import { assertTenantMembership, ensureMembershipRole } from "@/server/services/tenant-service";
-import { createClient, upsertProxyProviderConfig } from "@/server/services/client-service";
+import { createClient, updateProxyAuthStrategy, upsertProxyProviderConfig } from "@/server/services/client-service";
 import { prisma } from "@/server/db/client";
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { encrypt } from "@/server/crypto/key-vault";
@@ -76,6 +77,7 @@ const mockGetServerSession = vi.mocked(getServerSession);
 const mockAssertTenantMembership = vi.mocked(assertTenantMembership);
 const mockEnsureMembershipRole = vi.mocked(ensureMembershipRole);
 const mockCreateClient = vi.mocked(createClient);
+const mockUpdateProxyAuthStrategy = vi.mocked(updateProxyAuthStrategy);
 const mockUpsertProxyConfig = vi.mocked(upsertProxyProviderConfig);
 const mockFindClient = vi.mocked(prisma.client.findUnique);
 const mockGetRequestOrigin = vi.mocked(getRequestOrigin);
@@ -97,7 +99,9 @@ describe("proxy client server actions", () => {
       tenantId: "tenant_123",
       tokenEndpointAuthMethods: ["client_secret_basic"],
       oauthClientMode: "proxy",
+      proxyAuthStrategy: "redirect",
     } as never);
+    mockUpdateProxyAuthStrategy.mockResolvedValue({ id: "client_internal" } as never);
     mockUpsertProxyConfig.mockResolvedValue(undefined);
     mockGetRequestOrigin.mockResolvedValue("https://mockauth.test");
     mockFindTenant.mockResolvedValue({ defaultApiResourceId: "api-default" } as never);
@@ -132,6 +136,7 @@ describe("proxy client server actions", () => {
       redirects: ["https://client.example.test/callback"],
       scopes: ["openid", "profile"],
       mode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: " https://idp.example.test/oauth2/authorize ",
@@ -160,6 +165,7 @@ describe("proxy client server actions", () => {
         redirectUris: ["https://client.example.test/callback"],
         allowedScopes: ["openid", "profile"],
         oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
         proxyConfig: expect.objectContaining({
           providerType: "oidc",
           authorizationEndpoint: "https://idp.example.test/oauth2/authorize",
@@ -199,11 +205,73 @@ describe("proxy client server actions", () => {
       allowedGrantTypes: ["authorization_code"],
       scopes: ["openid"],
       mode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: undefined,
     });
 
     expect(result).toEqual({ error: "Proxy configuration is required" });
     expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+
+  it("updates proxy auth strategy from redirect to preauthorized", async () => {
+    const result = await updateProxyAuthStrategyAction({
+      clientId: "client_internal",
+      proxyAuthStrategy: "preauthorized",
+    });
+
+    expect(result).toEqual({ success: "Proxy auth strategy updated" });
+    expect(mockUpdateProxyAuthStrategy).toHaveBeenCalledWith("client_internal", "preauthorized");
+  });
+
+  it("updates proxy auth strategy from preauthorized to redirect", async () => {
+    mockFindClient.mockResolvedValueOnce({
+      id: "client_internal",
+      tenantId: "tenant_123",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      oauthClientMode: "proxy",
+      proxyAuthStrategy: "preauthorized",
+    } as never);
+
+    const result = await updateProxyAuthStrategyAction({
+      clientId: "client_internal",
+      proxyAuthStrategy: "redirect",
+    });
+
+    expect(result).toEqual({ success: "Proxy auth strategy updated" });
+    expect(mockUpdateProxyAuthStrategy).toHaveBeenCalledWith("client_internal", "redirect");
+  });
+
+  it("rejects proxy auth strategy updates for regular clients", async () => {
+    mockFindClient.mockResolvedValueOnce({
+      id: "client_internal",
+      tenantId: "tenant_123",
+      tokenEndpointAuthMethods: ["client_secret_basic"],
+      oauthClientMode: "regular",
+      proxyAuthStrategy: null,
+    } as never);
+
+    const result = await updateProxyAuthStrategyAction({
+      clientId: "client_internal",
+      proxyAuthStrategy: "redirect",
+    });
+
+    expect(result).toEqual({ error: "Client is not configured for upstream mode" });
+    expect(mockUpdateProxyAuthStrategy).not.toHaveBeenCalled();
+  });
+
+  it("rejects proxy auth strategy updates for unauthorized roles", async () => {
+    mockAssertTenantMembership.mockResolvedValueOnce({ tenantId: "tenant_123", role: "READER" } as never);
+    mockEnsureMembershipRole.mockImplementationOnce(() => {
+      throw new Error("Unauthorized");
+    });
+
+    const result = await updateProxyAuthStrategyAction({
+      clientId: "client_internal",
+      proxyAuthStrategy: "redirect",
+    });
+
+    expect(result).toEqual({ error: "Unable to update proxy auth strategy" });
+    expect(mockUpdateProxyAuthStrategy).not.toHaveBeenCalled();
   });
 
   it("updates proxy configuration and keeps existing secret when not provided", async () => {

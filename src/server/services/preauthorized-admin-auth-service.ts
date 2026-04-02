@@ -74,7 +74,7 @@ const markAdminAuthTransactionCompleted = async (id: string) => {
 
 export const startPreauthorizedAdminAuth = async (params: StartAdminAuthArgs) => {
   const client = await getClientByIdForTenant(params.tenantId, params.clientId);
-  if (client.oauthClientMode !== "preauthorized") {
+  if (client.oauthClientMode !== "proxy" || client.proxyAuthStrategy !== "preauthorized") {
     throw new DomainError("Client is not preauthorized", { status: 400 });
   }
   const proxyConfig = client.proxyConfig;

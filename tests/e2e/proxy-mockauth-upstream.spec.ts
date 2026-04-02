@@ -145,7 +145,7 @@ const createProxyClient = async (
   await page.getByRole("link", { name: "Back to list" }).click();
 
   const detailUrl = await openClientDetail(page, params.name);
-  await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
   const clientId = await getCopyFieldValue(page, "oauth-field-client-id");
   const clientSecret = await getCopyFieldValue(page, "oauth-field-client-secret");
   const internalId = extractClientIdFromUrl(detailUrl);
@@ -154,7 +154,7 @@ const createProxyClient = async (
 
 const updateProxyClientSecret = async (page: Page, detailUrl: string, secret: string) => {
   await page.goto(detailUrl, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
   await page.getByLabel("Provider client secret").fill(secret);
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Proxy configuration updated", { exact: true })).toBeVisible();

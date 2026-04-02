@@ -119,17 +119,17 @@ export const handleAuthorize = async (
   const auditCodeChallenge = client.pkceRequired ? resolvedCodeChallenge : undefined;
 
   if (client.oauthClientMode === "proxy") {
+    if (client.proxyAuthStrategy === "preauthorized") {
+      return handlePreauthorizedAuthorize({
+        params: resolvedParams,
+        origin,
+        tenantId: tenant.id,
+        resourceId: resource.id,
+        client,
+        requestContext,
+      });
+    }
     return handleProxyAuthorize({
-      params: resolvedParams,
-      origin,
-      tenantId: tenant.id,
-      resourceId: resource.id,
-      client,
-      requestContext,
-    });
-  }
-  if (client.oauthClientMode === "preauthorized") {
-    return handlePreauthorizedAuthorize({
       params: resolvedParams,
       origin,
       tenantId: tenant.id,
