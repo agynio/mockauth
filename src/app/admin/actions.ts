@@ -493,7 +493,7 @@ export const createClientAction = async (
     const proxyConfigResult = parsed.mode === "proxy"
       ? normalizeProxyConfigInput(parsed.proxyConfig)
       : { normalized: undefined, keepExistingSecret: false };
-    const proxyAuthStrategy = parsed.mode === "proxy" ? parsed.proxyAuthStrategy ?? null : null;
+    const proxyAuthStrategy = parsed.mode === "proxy" ? parsed.proxyAuthStrategy : undefined;
 
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
@@ -503,7 +503,7 @@ export const createClientAction = async (
       redirectUris: redirectEntries,
       allowedScopes: canonicalScopes,
       oauthClientMode: parsed.mode,
-      proxyAuthStrategy: proxyAuthStrategy ?? undefined,
+      proxyAuthStrategy,
       proxyConfig: proxyConfigResult.normalized,
     });
     let providerRedirectUri: string | undefined;

@@ -156,19 +156,22 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
-  const proxyAuthStrategy = client.oauthClientMode === "proxy"
-    ? client.proxyAuthStrategy ?? "redirect"
-    : null;
+  const proxyAuthStrategy = client.oauthClientMode === "proxy" ? client.proxyAuthStrategy : null;
+  if (client.oauthClientMode === "proxy" && !proxyAuthStrategy) {
+    console.warn("Proxy client missing proxy auth strategy", { clientId: client.id });
+  }
+  const resolvedProxyAuthStrategy =
+    client.oauthClientMode === "proxy" ? proxyAuthStrategy ?? "redirect" : null;
   const providerRedirectUri =
     client.oauthClientMode === "proxy"
-      ? proxyAuthStrategy === "preauthorized"
+      ? resolvedProxyAuthStrategy === "preauthorized"
         ? buildPreauthorizedAdminCallbackUrl(origin, currentResourceId)
         : buildProxyCallbackUrl(origin, currentResourceId)
       : null;
   const showLocalClientSettings = client.oauthClientMode === "regular";
   const modeLabel =
     client.oauthClientMode === "proxy"
-      ? `proxy mode (${proxyAuthStrategy === "preauthorized" ? "preauthorized" : "redirect"})`
+      ? `proxy mode (${resolvedProxyAuthStrategy === "preauthorized" ? "preauthorized" : "redirect"})`
       : "regular mode";
   const providerHeading = "Upstream provider";
   const testFlowHref = `/admin/clients/${client.id}/test`;
@@ -193,7 +196,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   );
 
   const usesPreauthorizedStrategy =
-    client.oauthClientMode === "proxy" && proxyAuthStrategy === "preauthorized";
+    client.oauthClientMode === "proxy" && resolvedProxyAuthStrategy === "preauthorized";
   const preauthorizedIdentitySummaries = usesPreauthorizedStrategy
     ? (await listPreauthorizedIdentities(activeTenant.id, client.id)).map((identity) => ({
         id: identity.id,
@@ -338,7 +341,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             <UpdateProxyAuthStrategyForm
               clientId={client.id}
               canEdit={canManageClients}
-              initialStrategy={proxyAuthStrategy ?? "redirect"}
+              initialStrategy={resolvedProxyAuthStrategy ?? "redirect"}
             />
             <Alert data-testid="proxy-mode-note">
               <AlertTitle>Scopes and claims come from upstream</AlertTitle>
