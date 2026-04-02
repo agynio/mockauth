@@ -16,6 +16,7 @@ import {
   UpdateClientNameForm,
   UpdateTokenConfigForm,
   UpdateProxyProviderConfigForm,
+  UpdateProxyAuthStrategyForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
 import { ClientDangerZone } from "@/app/admin/clients/[clientId]/client-danger-zone";
 import { PreauthorizedIdentitySection } from "@/app/admin/clients/[clientId]/preauthorized-identities";
@@ -155,20 +156,21 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
+  const proxyAuthStrategy = client.oauthClientMode === "proxy"
+    ? client.proxyAuthStrategy ?? "redirect"
+    : null;
   const providerRedirectUri =
     client.oauthClientMode === "proxy"
-      ? buildProxyCallbackUrl(origin, currentResourceId)
-      : client.oauthClientMode === "preauthorized"
+      ? proxyAuthStrategy === "preauthorized"
         ? buildPreauthorizedAdminCallbackUrl(origin, currentResourceId)
-        : null;
+        : buildProxyCallbackUrl(origin, currentResourceId)
+      : null;
   const showLocalClientSettings = client.oauthClientMode === "regular";
   const modeLabel =
     client.oauthClientMode === "proxy"
-      ? "proxy mode"
-      : client.oauthClientMode === "preauthorized"
-        ? "preauthorized mode"
-        : "regular mode";
-  const providerHeading = client.oauthClientMode === "preauthorized" ? "Upstream provider" : "Proxy provider";
+      ? `proxy mode (${proxyAuthStrategy === "preauthorized" ? "preauthorized" : "redirect"})`
+      : "regular mode";
+  const providerHeading = "Upstream provider";
   const testFlowHref = `/admin/clients/${client.id}/test`;
   type FieldDefinition = { label: string; value: string; testId?: string };
   const tenantField: FieldDefinition = { label: "Tenant ID", value: activeTenant.id, testId: "oauth-field-tenant-id" };
@@ -190,7 +192,9 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
     ({ label, value }) => ({ label, value }),
   );
 
-  const preauthorizedIdentitySummaries = client.oauthClientMode === "preauthorized"
+  const usesPreauthorizedStrategy =
+    client.oauthClientMode === "proxy" && proxyAuthStrategy === "preauthorized";
+  const preauthorizedIdentitySummaries = usesPreauthorizedStrategy
     ? (await listPreauthorizedIdentities(activeTenant.id, client.id)).map((identity) => ({
         id: identity.id,
         label: identity.label ?? identity.providerEmail ?? identity.providerSubject ?? identity.id,
@@ -331,11 +335,16 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             {providerRedirectUri ? (
               <CopyField label="Provider redirect URI" value={providerRedirectUri} testId="provider-redirect-uri" />
             ) : null}
+            <UpdateProxyAuthStrategyForm
+              clientId={client.id}
+              canEdit={canManageClients}
+              initialStrategy={proxyAuthStrategy ?? "redirect"}
+            />
             <Alert data-testid="proxy-mode-note">
               <AlertTitle>Scopes and claims come from upstream</AlertTitle>
               <AlertDescription>
                 MockAuth will forward tokens from the provider as-is. Local scope toggles and token settings are disabled in
-                proxy and preauthorized modes.
+                proxy mode.
               </AlertDescription>
             </Alert>
             <UpdateProxyProviderConfigForm
@@ -348,7 +357,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </Card>
       ) : null}
 
-      {client.oauthClientMode === "preauthorized" ? (
+      {usesPreauthorizedStrategy ? (
         <PreauthorizedIdentitySection
           clientId={client.id}
           canManage={canManageClients}

@@ -19,6 +19,7 @@ import {
   updateClientReauthTtlAction,
   updateClientSigningAlgsAction,
   updateProxyClientConfigAction,
+  updateProxyAuthStrategyAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import {
@@ -120,6 +121,10 @@ const proxyConfigFormSchema = z.object({
   promptPassthroughEnabled: z.boolean(),
   loginHintPassthroughEnabled: z.boolean(),
   passthroughTokenResponse: z.boolean(),
+});
+
+const proxyAuthStrategySchema = z.object({
+  proxyAuthStrategy: z.enum(["redirect", "preauthorized"]),
 });
 
 const splitProxyScopes = (value?: string) => {
@@ -1392,6 +1397,68 @@ function StoredProxySecretField({ value }: { value: string }) {
         {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
       </Button>
     </div>
+  );
+}
+
+export function UpdateProxyAuthStrategyForm({
+  clientId,
+  canEdit,
+  initialStrategy,
+}: {
+  clientId: string;
+  canEdit: boolean;
+  initialStrategy: "redirect" | "preauthorized";
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const disableForm = !canEdit || pending;
+
+  const form = useForm<z.infer<typeof proxyAuthStrategySchema>>({
+    resolver: zodResolver(proxyAuthStrategySchema),
+    defaultValues: { proxyAuthStrategy: initialStrategy },
+  });
+
+  useEffect(() => {
+    form.reset({ proxyAuthStrategy: initialStrategy });
+  }, [form, initialStrategy]);
+
+  const onSubmit = form.handleSubmit((values) => {
+    startTransition(async () => {
+      const result = await updateProxyAuthStrategyAction({
+        clientId,
+        proxyAuthStrategy: values.proxyAuthStrategy,
+      });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Proxy auth strategy updated", description: result.success ?? "Saved" });
+    });
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <RHFSelectField
+          control={form.control}
+          name="proxyAuthStrategy"
+          label="Proxy auth strategy"
+          placeholder="Select strategy"
+          options={[
+            { value: "redirect", label: "Redirect (standard proxy)" },
+            { value: "preauthorized", label: "Preauthorized identities" },
+          ]}
+          disabled={disableForm}
+          description="Switch between standard redirect flow and preauthorized identity selection."
+          className="flex-1"
+        />
+        <Button type="submit" disabled={disableForm} className="w-full sm:w-auto">
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save strategy"}
+        </Button>
+      </form>
+    </Form>
   );
 }
 

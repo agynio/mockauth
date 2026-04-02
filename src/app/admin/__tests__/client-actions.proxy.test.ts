@@ -97,6 +97,7 @@ describe("proxy client server actions", () => {
       tenantId: "tenant_123",
       tokenEndpointAuthMethods: ["client_secret_basic"],
       oauthClientMode: "proxy",
+      proxyAuthStrategy: "redirect",
     } as never);
     mockUpsertProxyConfig.mockResolvedValue(undefined);
     mockGetRequestOrigin.mockResolvedValue("https://mockauth.test");
@@ -132,6 +133,7 @@ describe("proxy client server actions", () => {
       redirects: ["https://client.example.test/callback"],
       scopes: ["openid", "profile"],
       mode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: " https://idp.example.test/oauth2/authorize ",
@@ -160,6 +162,7 @@ describe("proxy client server actions", () => {
         redirectUris: ["https://client.example.test/callback"],
         allowedScopes: ["openid", "profile"],
         oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
         proxyConfig: expect.objectContaining({
           providerType: "oidc",
           authorizationEndpoint: "https://idp.example.test/oauth2/authorize",
@@ -199,6 +202,7 @@ describe("proxy client server actions", () => {
       allowedGrantTypes: ["authorization_code"],
       scopes: ["openid"],
       mode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: undefined,
     });
 

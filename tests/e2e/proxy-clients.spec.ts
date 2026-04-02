@@ -102,7 +102,7 @@ test.describe("proxy clients", () => {
       expect(detailsHref).toBeTruthy();
       await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
       await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
-      await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
       await expect(page.getByTestId("provider-redirect-uri")).toContainText("/oidc/proxy/callback");
       await expect(page.getByTestId("proxy-mode-note")).toBeVisible();
       await expect(page.locator('[data-testid="client-scopes-card"]')).toHaveCount(0);
@@ -269,7 +269,7 @@ test.describe("proxy clients", () => {
     expect(detailsHref).toBeTruthy();
     await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
-    await expect(page.getByRole("heading", { name: "Proxy provider" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
     const persistedSelect = page.getByRole("combobox", { name: "Provider type" });
     await persistedSelect.click();
     await expect(page.getByRole("option", { name: "OAuth 2.0" })).toHaveAttribute("data-state", "checked");

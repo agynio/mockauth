@@ -101,6 +101,7 @@ describe("NewClientForm proxy mode", () => {
     expect(mockCreateClientAction).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant_123",
+        proxyAuthStrategy: "redirect",
         proxyConfig: expect.objectContaining({ providerType: "oauth2" }),
       }),
     );
@@ -162,6 +163,7 @@ describe("NewClientForm proxy mode", () => {
       allowedGrantTypes: ["authorization_code"],
       redirects: ["https://client.example.test/callback"],
       mode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://idp.example.test/oauth2/authorize",
@@ -226,6 +228,7 @@ describe("NewClientForm proxy mode", () => {
     expect(mockCreateClientAction).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "proxy",
+        proxyAuthStrategy: "redirect",
         proxyConfig: expect.objectContaining({
           upstreamTokenEndpointAuthMethod: "client_secret_post",
         }),

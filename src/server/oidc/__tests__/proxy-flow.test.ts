@@ -117,6 +117,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy QA Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -213,6 +214,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy No PKCE Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -867,6 +869,7 @@ describe("Proxy client OAuth flow", () => {
         clientSecretHash: await hashSecret(localSecret),
         clientSecretEncrypted: encrypt(localSecret),
         oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -1208,6 +1211,7 @@ describe("Proxy client OAuth flow", () => {
         clientSecretHash: await hashSecret(localSecret),
         clientSecretEncrypted: encrypt(localSecret),
         oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {

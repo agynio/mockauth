@@ -208,6 +208,7 @@ describe("client service", () => {
       tokenEndpointAuthMethods: ["client_secret_basic"],
       redirectUris: ["https://cascade.example/callback"],
       oauthClientMode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",

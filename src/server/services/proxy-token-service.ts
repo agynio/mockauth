@@ -365,7 +365,7 @@ export const completeProxyRefreshGrant = async (
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
-  if (client.oauthClientMode !== "proxy" && client.oauthClientMode !== "preauthorized") {
+  if (client.oauthClientMode !== "proxy") {
     throw new DomainError("Client does not support refresh", { status: 400, code: "unsupported_grant_type" });
   }
 

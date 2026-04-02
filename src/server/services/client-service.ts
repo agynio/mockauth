@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 
-import type { Prisma, JwtSigningAlg } from "@/generated/prisma/client";
+import type { Prisma, JwtSigningAlg, ProxyAuthStrategy } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { hashSecret } from "@/server/crypto/hash";
 import { encrypt, decrypt } from "@/server/crypto/key-vault";
@@ -124,7 +124,8 @@ export const createClient = async (
     allowedGrantTypes?: string[];
     redirectUris?: string[];
     allowedScopes?: string[];
-    oauthClientMode?: "regular" | "proxy" | "preauthorized";
+    oauthClientMode?: "regular" | "proxy";
+    proxyAuthStrategy?: ProxyAuthStrategy;
     proxyConfig?: ProxyProviderConfigInput;
   },
 ) => {
@@ -136,9 +137,14 @@ export const createClient = async (
   const tokenEndpointAuthMethods = parseTokenAuthMethods(data.tokenEndpointAuthMethods);
   const allowedGrantTypes = data.allowedGrantTypes ? normalizeAllowedGrantTypes(data.allowedGrantTypes) : undefined;
   const mode = data.oauthClientMode ?? "regular";
+  const proxyAuthStrategy = mode === "proxy" ? data.proxyAuthStrategy : null;
 
-  if ((mode === "proxy" || mode === "preauthorized") && !data.proxyConfig) {
+  if (mode === "proxy" && !data.proxyConfig) {
     throw new DomainError("Upstream clients require provider configuration", { status: 400 });
+  }
+
+  if (mode === "proxy" && !proxyAuthStrategy) {
+    throw new DomainError("Proxy auth strategy is required", { status: 400 });
   }
 
   const validatedProxyConfig = data.proxyConfig ? proxyProviderConfigSchema.parse(data.proxyConfig) : null;
@@ -163,6 +169,7 @@ export const createClient = async (
         allowedScopes,
         ...(allowedGrantTypes ? { allowedGrantTypes } : {}),
         oauthClientMode: mode,
+        proxyAuthStrategy,
       },
     });
 
@@ -173,7 +180,7 @@ export const createClient = async (
       }
     }
 
-    if ((mode === "proxy" || mode === "preauthorized") && validatedProxyConfig) {
+    if (mode === "proxy" && validatedProxyConfig) {
       const trimmedUpstreamClientId = validatedProxyConfig.upstreamClientId.trim();
       const normalizedSecret = validatedProxyConfig.upstreamClientSecret?.trim();
       await tx.proxyProviderConfig.create({
@@ -423,6 +430,10 @@ export const updateClientAuthStrategies = async (clientId: string, strategies: C
 export const updateClientAllowedScopes = async (clientId: string, scopes: string[]) => {
   const canonical = canonicalizeAllowedScopes(scopes);
   return prisma.client.update({ where: { id: clientId }, data: { allowedScopes: canonical } });
+};
+
+export const updateProxyAuthStrategy = async (clientId: string, proxyAuthStrategy: ProxyAuthStrategy) => {
+  return prisma.client.update({ where: { id: clientId }, data: { proxyAuthStrategy } });
 };
 
 export const updateClientReauthTtl = async (clientId: string, reauthTtlSeconds: number) => {

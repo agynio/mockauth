@@ -48,6 +48,7 @@ vi.mock("../[clientId]/client-forms", () => ({
   UpdateClientNameForm: () => <div data-testid="client-name-form" />,
   UpdateTokenConfigForm: () => <div data-testid="client-token-form" />,
   UpdateClientIssuerForm: () => <div data-testid="client-issuer-form" />,
+  UpdateProxyAuthStrategyForm: () => <div data-testid="proxy-auth-strategy-form" />,
   UpdateProxyProviderConfigForm: ({
     initialConfig,
     storedSecret,
@@ -92,6 +93,7 @@ describe("ClientDetailPage proxy mode", () => {
       tokenEndpointAuthMethods: ["none"],
       pkceRequired: true,
       oauthClientMode: "proxy",
+      proxyAuthStrategy: "redirect",
       allowedScopes: ["openid", "profile"],
       allowedGrantTypes: ["authorization_code", "refresh_token"],
       allowedResponseTypes: ["code"],

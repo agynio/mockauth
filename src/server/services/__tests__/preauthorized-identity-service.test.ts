@@ -27,7 +27,8 @@ const createPreauthorizedClient = async (tenantId: string) => {
   return createClient(tenantId, {
     name: "Preauth Client",
     tokenEndpointAuthMethods: ["client_secret_basic"],
-    oauthClientMode: "preauthorized",
+    oauthClientMode: "proxy",
+    proxyAuthStrategy: "preauthorized",
     proxyConfig: {
       providerType: "oidc",
       authorizationEndpoint: "https://provider.example/authorize",

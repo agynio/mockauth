@@ -41,7 +41,8 @@ const createPasswordClient = async (input: {
   tenantId: string;
   allowedGrantTypes?: string[];
   allowedScopes?: string[];
-  oauthClientMode?: "regular" | "proxy" | "preauthorized";
+  oauthClientMode?: "regular" | "proxy";
+  proxyAuthStrategy?: "redirect" | "preauthorized";
   proxyConfig?: {
     providerType: "oidc" | "oauth2";
     authorizationEndpoint: string;
@@ -49,13 +50,17 @@ const createPasswordClient = async (input: {
     upstreamClientId: string;
   };
 }) => {
-  const { tenantId, allowedGrantTypes, allowedScopes, oauthClientMode, proxyConfig } = input;
+  const { tenantId, allowedGrantTypes, allowedScopes, oauthClientMode, proxyAuthStrategy, proxyConfig } = input;
+  if (oauthClientMode === "proxy" && !proxyAuthStrategy) {
+    throw new Error("proxyAuthStrategy is required for proxy clients");
+  }
   const created = await createClient(tenantId, {
     name: `Password Client ${randomUUID()}`,
     tokenEndpointAuthMethods: ["client_secret_post"],
     allowedGrantTypes,
     allowedScopes,
     oauthClientMode,
+    proxyAuthStrategy,
     proxyConfig,
   });
   if (!created.clientSecret) {
@@ -189,6 +194,7 @@ describe("token service password grant", () => {
       allowedGrantTypes: ["password"],
       allowedScopes: ["openid", "profile"],
       oauthClientMode: "proxy",
+      proxyAuthStrategy: "redirect",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",
@@ -210,13 +216,14 @@ describe("token service password grant", () => {
     ).rejects.toThrowError("Client does not support password grant");
   });
 
-  it("rejects password grants for preauthorized clients", async () => {
+  it("rejects password grants for preauthorized proxy clients", async () => {
     const { tenant, apiResource } = await createTenant();
     const { client, clientSecret } = await createPasswordClient({
       tenantId: tenant.id,
       allowedGrantTypes: ["password"],
       allowedScopes: ["openid", "profile"],
-      oauthClientMode: "preauthorized",
+      oauthClientMode: "proxy",
+      proxyAuthStrategy: "preauthorized",
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",
