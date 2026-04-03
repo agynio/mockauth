@@ -34,7 +34,7 @@ const resolveFailedMigrations = async () => {
     const tableCheck = await pool.query<{ exists: boolean }>(
       "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_prisma_migrations') AS \"exists\"",
     );
-    const hasMigrationsTable = tableCheck.rows[0]?.exists ?? false;
+    const hasMigrationsTable = tableCheck.rows[0].exists;
     if (!hasMigrationsTable) {
       log("No _prisma_migrations table found; skipping resolve step.");
       return;
@@ -50,6 +50,8 @@ const resolveFailedMigrations = async () => {
       return;
     }
 
+    log(`Found ${failedMigrations.rows.length} failed migration(s).`);
+
     for (const { migration_name: migrationName } of failedMigrations.rows) {
       prismaResolveCommand(migrationName);
     }
@@ -64,10 +66,9 @@ async function main() {
   prismaDeployCommand();
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  logError(message);
+main().catch((error: unknown) => {
+  console.error("[migrate]", error);
   const exitCode =
-    typeof (error as { status?: number }).status === "number" ? (error as { status?: number }).status : 1;
+    error instanceof Error && "status" in error && typeof error.status === "number" ? error.status : 1;
   process.exit(exitCode);
 });

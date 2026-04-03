@@ -9,6 +9,13 @@ FROM "Client" AS c
 JOIN "Tenant" AS t ON t."id" = c."tenantId"
 WHERE c."id" = aat."clientId";
 
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "AdminAuthTransaction" WHERE "apiResourceId" IS NULL) THEN
+    RAISE EXCEPTION 'Backfill incomplete: AdminAuthTransaction rows with NULL apiResourceId';
+  END IF;
+END $$;
+
 -- Step 3: Set NOT NULL constraint (safe now that all rows have a value)
 ALTER TABLE "AdminAuthTransaction" ALTER COLUMN "apiResourceId" SET NOT NULL;
 
