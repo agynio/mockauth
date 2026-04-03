@@ -17,7 +17,7 @@
     "test:e2e:ci": "pnpm test:prepare && pnpm test:e2e:serial",
     "test:e2e:dev": "pnpm test:prepare && dotenv -e .env.test -o -- playwright test --headed",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "tsx scripts/migrate-deploy.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx -r tsconfig-paths/register prisma/seed.ts",

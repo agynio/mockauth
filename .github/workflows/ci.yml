@@ -57,7 +57,7 @@ jobs:
       - name: Prisma generate
         run: pnpm prisma:generate
       - name: Apply migrations
-        run: pnpm prisma migrate deploy
+        run: pnpm db:migrate
       - name: Seed data
         run: pnpm prisma:seed
       - name: Lint

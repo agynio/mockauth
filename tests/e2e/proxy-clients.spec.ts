@@ -227,6 +227,66 @@ test.describe("proxy clients", () => {
     }
   });
 
+  test("updates proxy auth strategy from the detail page", async ({ page }) => {
+    const sessionToken = await createTestSession(page);
+    await authenticate(page, sessionToken);
+    await stubClipboard(page);
+
+    await page.goto("/admin/clients");
+    await expect(page.getByRole("heading", { name: "OAuth clients" })).toBeVisible();
+
+    const clientName = `Proxy Strategy ${Date.now()}`;
+
+    await page.getByRole("link", { name: "Add client" }).click();
+    await expect(page.getByRole("heading", { name: "New client" })).toBeVisible();
+
+    await page.getByLabel("Client name").fill(clientName);
+    await page.getByRole("tab", { name: "Proxy" }).click();
+    await page.getByLabel("Provider client ID").fill("proxy-strategy-client");
+    await page.getByLabel("Provider client secret").fill("proxy-strategy-secret");
+    await page.getByLabel("Authorization endpoint").fill("https://strategy.example.test/oauth2/authorize");
+    await page.getByLabel("Token endpoint", { exact: true }).fill("https://strategy.example.test/oauth2/token");
+
+    await page.getByRole("button", { name: "Create client" }).click();
+
+    await expect(page.getByText("Client created").first()).toBeVisible();
+    await page.getByRole("link", { name: "Back to list" }).click();
+    await expect(page).toHaveURL(/\/admin\/clients$/);
+
+    await page.getByTestId("clients-search-input").fill(clientName);
+    const clientRow = page.getByRole("row", { name: new RegExp(clientName, "i") });
+    await expect(clientRow).toBeVisible();
+    const detailsHref = await clientRow.getByRole("link", { name: "Details →" }).getAttribute("href");
+    expect(detailsHref).toBeTruthy();
+    await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
+    await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
+
+    await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
+
+    const strategySelect = page.getByRole("combobox", { name: "Proxy auth strategy" });
+    await expect(strategySelect).toHaveAttribute("data-selected-value", "redirect");
+
+    await strategySelect.click();
+    await page.getByRole("option", { name: "Preauthorized identities" }).click();
+    await page.getByRole("button", { name: "Save strategy" }).click();
+
+    await expect(page.getByText("Proxy auth strategy updated").first()).toBeVisible();
+    await expect(strategySelect).toHaveAttribute("data-selected-value", "preauthorized");
+    await expect(page.getByTestId("preauthorized-identities")).toBeVisible();
+
+    await strategySelect.click();
+    await page.getByRole("option", { name: "Redirect (standard proxy)" }).click();
+    await page.getByRole("button", { name: "Save strategy" }).click();
+
+    await expect(page.getByText("Proxy auth strategy updated").first()).toBeVisible();
+    await expect(strategySelect).toHaveAttribute("data-selected-value", "redirect");
+    await expect(page.locator('[data-testid="preauthorized-identities"]')).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
+    await expect(strategySelect).toHaveAttribute("data-selected-value", "redirect");
+  });
+
   test("honors provider type selection when creating proxy clients", async ({ page }) => {
     const sessionToken = await createTestSession(page);
     await authenticate(page, sessionToken);
