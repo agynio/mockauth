@@ -7,6 +7,47 @@ import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 
 import ClientDetailPage from "../[clientId]/page";
 
+const proxyClientBase = {
+  id: "client_internal",
+  tenantId: "tenant_1",
+  name: "Proxy Client",
+  clientId: "client_proxy",
+  clientSecretEncrypted: null,
+  tokenEndpointAuthMethods: ["none"],
+  pkceRequired: true,
+  oauthClientMode: "proxy",
+  proxyAuthStrategy: "redirect",
+  allowedScopes: ["openid", "profile"],
+  allowedGrantTypes: ["authorization_code", "refresh_token"],
+  allowedResponseTypes: ["code"],
+  authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
+  redirectUris: [{ id: "redirect_1", uri: "https://app.example.test/callback", type: "EXACT" }],
+  tenant: { id: "tenant_1", defaultApiResourceId: "api-default", defaultApiResource: { id: "api-default", name: "Default" } },
+  apiResource: null,
+  proxyConfig: {
+    providerType: "oidc",
+    authorizationEndpoint: "https://upstream.example.com/oauth2/authorize",
+    tokenEndpoint: "https://upstream.example.com/oauth2/token",
+    userinfoEndpoint: null,
+    jwksUri: null,
+    upstreamClientId: "up-client",
+    upstreamClientSecretEncrypted: null,
+    defaultScopes: ["openid"],
+    scopeMapping: { profile: ["profile.read"] },
+    pkceSupported: true,
+    oidcEnabled: true,
+    promptPassthroughEnabled: true,
+    loginHintPassthroughEnabled: false,
+    passthroughTokenResponse: false,
+    upstreamTokenEndpointAuthMethod: "client_secret_post",
+  },
+  reauthTtlSeconds: 0,
+  idTokenSignedResponseAlg: null,
+  accessTokenSigningAlg: null,
+  createdAt: new Date("2024-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2024-01-02T00:00:00.000Z"),
+};
+
 const mockGetServerSession = vi.hoisted(() => vi.fn());
 const mockGetAdminTenantContext = vi.hoisted(() => vi.fn());
 const mockGetClientByIdForTenant = vi.hoisted(() => vi.fn());
@@ -84,46 +125,7 @@ describe("ClientDetailPage proxy mode", () => {
     ]);
     mockGetRequestOrigin.mockResolvedValue("https://mockauth.test");
 
-    mockGetClientByIdForTenant.mockResolvedValue({
-      id: "client_internal",
-      tenantId: "tenant_1",
-      name: "Proxy Client",
-      clientId: "client_proxy",
-      clientSecretEncrypted: null,
-      tokenEndpointAuthMethods: ["none"],
-      pkceRequired: true,
-      oauthClientMode: "proxy",
-      proxyAuthStrategy: "redirect",
-      allowedScopes: ["openid", "profile"],
-      allowedGrantTypes: ["authorization_code", "refresh_token"],
-      allowedResponseTypes: ["code"],
-      authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
-      redirectUris: [{ id: "redirect_1", uri: "https://app.example.test/callback", type: "EXACT" }],
-      tenant: { id: "tenant_1", defaultApiResourceId: "api-default", defaultApiResource: { id: "api-default", name: "Default" } },
-      apiResource: null,
-      proxyConfig: {
-        providerType: "oidc",
-        authorizationEndpoint: "https://upstream.example.com/oauth2/authorize",
-        tokenEndpoint: "https://upstream.example.com/oauth2/token",
-        userinfoEndpoint: null,
-        jwksUri: null,
-        upstreamClientId: "up-client",
-        upstreamClientSecretEncrypted: null,
-        defaultScopes: ["openid"],
-        scopeMapping: { profile: ["profile.read"] },
-        pkceSupported: true,
-        oidcEnabled: true,
-        promptPassthroughEnabled: true,
-        loginHintPassthroughEnabled: false,
-        passthroughTokenResponse: false,
-        upstreamTokenEndpointAuthMethod: "client_secret_post",
-      },
-      reauthTtlSeconds: 0,
-      idTokenSignedResponseAlg: null,
-      accessTokenSigningAlg: null,
-      createdAt: new Date("2024-01-01T00:00:00.000Z"),
-      updatedAt: new Date("2024-01-02T00:00:00.000Z"),
-    });
+    mockGetClientByIdForTenant.mockResolvedValue({ ...proxyClientBase });
   });
 
   it("shows upstream configuration details and hides local settings", async () => {
@@ -138,5 +140,18 @@ describe("ClientDetailPage proxy mode", () => {
     expect(screen.queryByTestId("client-auth-strategies-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-signing-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-reauth-card")).not.toBeInTheDocument();
+  });
+
+  it("shows a diagnostic warning when proxy config is missing", async () => {
+    mockGetClientByIdForTenant.mockResolvedValueOnce({
+      ...proxyClientBase,
+      proxyConfig: null,
+    });
+
+    const page = await ClientDetailPage({ params: Promise.resolve({ clientId: "client_proxy" }) });
+    render(page);
+
+    expect(screen.getByTestId("proxy-config-missing")).toBeInTheDocument();
+    expect(screen.queryByTestId("proxy-config-form")).not.toBeInTheDocument();
   });
 });
