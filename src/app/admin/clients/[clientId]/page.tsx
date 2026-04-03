@@ -169,6 +169,8 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         : buildProxyCallbackUrl(origin, currentResourceId)
       : null;
   const showLocalClientSettings = client.oauthClientMode === "regular";
+  const showProxyProviderSection = client.oauthClientMode !== "regular";
+  const proxyConfigMissing = showProxyProviderSection && !proxyConfigInitial;
   const modeLabel =
     client.oauthClientMode === "proxy"
       ? `proxy mode (${resolvedProxyAuthStrategy === "preauthorized" ? "preauthorized" : "redirect"})`
@@ -326,7 +328,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         </CardContent>
       </Card>
 
-      {client.oauthClientMode !== "regular" && proxyConfigInitial ? (
+      {showProxyProviderSection ? (
         <Card>
           <CardHeader>
             <CardTitle>{providerHeading}</CardTitle>
@@ -343,6 +345,15 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               canEdit={canManageClients}
               initialStrategy={resolvedProxyAuthStrategy ?? "redirect"}
             />
+            {proxyConfigMissing ? (
+              <Alert variant="warning" data-testid="proxy-config-missing">
+                <AlertTitle>Missing upstream configuration</AlertTitle>
+                <AlertDescription>
+                  This proxy-mode client does not have an upstream provider configuration recorded. Re-run the proxy setup
+                  flow or verify the ProxyProviderConfig record for this client.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <Alert data-testid="proxy-mode-note">
               <AlertTitle>Scopes and claims come from upstream</AlertTitle>
               <AlertDescription>
@@ -350,12 +361,14 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                 proxy mode.
               </AlertDescription>
             </Alert>
-            <UpdateProxyProviderConfigForm
-              clientId={client.id}
-              canEdit={canManageClients}
-              initialConfig={proxyConfigInitial}
-              storedSecret={upstreamClientSecretValue}
-            />
+            {proxyConfigInitial ? (
+              <UpdateProxyProviderConfigForm
+                clientId={client.id}
+                canEdit={canManageClients}
+                initialConfig={proxyConfigInitial}
+                storedSecret={upstreamClientSecretValue}
+              />
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

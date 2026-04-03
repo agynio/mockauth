@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Check, Copy, Eye, EyeOff, Loader2, Trash2, X } from "lucide-react";
@@ -31,6 +40,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -1413,6 +1423,11 @@ export function UpdateProxyAuthStrategyForm({
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const disableForm = !canEdit || pending;
+  const isHydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   const form = useForm<z.infer<typeof proxyAuthStrategySchema>>({
     resolver: zodResolver(proxyAuthStrategySchema),
@@ -1422,6 +1437,19 @@ export function UpdateProxyAuthStrategyForm({
   useEffect(() => {
     form.reset({ proxyAuthStrategy: initialStrategy });
   }, [form, initialStrategy]);
+
+  if (!isHydrated) {
+    return (
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end" aria-hidden>
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-10 w-full sm:w-36" />
+      </div>
+    );
+  }
 
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
