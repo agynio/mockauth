@@ -38,7 +38,11 @@ import {
 import type { ProxyProviderConfigInput } from "@/server/services/client-service";
 import { startPreauthorizedAdminAuth, ADMIN_AUTH_TTL_SECONDS } from "@/server/services/preauthorized-admin-auth-service";
 import { deletePreauthorizedIdentity, refreshPreauthorizedIdentity } from "@/server/services/preauthorized-identity-service";
-import { hasEnabledProxyStrategy, parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
+import {
+  hasEnabledProxyStrategy,
+  parseProxyAuthStrategies,
+  proxyAuthStrategiesZodSchema,
+} from "@/server/oidc/proxy-auth-strategy";
 import { rotateKeyForAlg } from "@/server/services/key-service";
 import {
   ADMIN_ACTIVE_TENANT_COOKIE,
@@ -87,6 +91,10 @@ const tenantSchema = z.object({
 });
 
 const grantTypeOptions = ["authorization_code", "refresh_token", "password"] as const;
+const proxyAuthStrategiesSchema = proxyAuthStrategiesZodSchema.refine(hasEnabledProxyStrategy, {
+  message: "Enable at least one proxy auth strategy",
+  path: ["root"],
+});
 const clientSchema = z.object({
   tenantId: z.string().min(1),
   name: z.string().min(2),
@@ -96,13 +104,7 @@ const clientSchema = z.object({
   redirects: z.array(z.string().min(1)).optional(),
   scopes: z.array(z.string().min(1)).optional(),
   mode: z.enum(["regular", "proxy"]).default("regular"),
-  proxyAuthStrategies: z
-    .object({
-      redirect: z.object({ enabled: z.boolean() }),
-      preauthorized: z.object({ enabled: z.boolean() }),
-    })
-    .refine(hasEnabledProxyStrategy, { message: "Enable at least one proxy auth strategy", path: ["root"] })
-    .optional(),
+  proxyAuthStrategies: proxyAuthStrategiesSchema.optional(),
   proxyConfig: proxyProviderConfigSchema.optional(),
 });
 
@@ -337,12 +339,7 @@ const deleteClientSchema = z.object({ clientId: z.string().min(1) });
 const updateProxyConfigSchema = proxyProviderConfigSchema.extend({ clientId: z.string().min(1) });
 const updateProxyAuthStrategiesSchema = z.object({
   clientId: z.string().min(1),
-  proxyAuthStrategies: z
-    .object({
-      redirect: z.object({ enabled: z.boolean() }),
-      preauthorized: z.object({ enabled: z.boolean() }),
-    })
-    .refine(hasEnabledProxyStrategy, { message: "Enable at least one proxy auth strategy", path: ["root"] }),
+  proxyAuthStrategies: proxyAuthStrategiesSchema,
 });
 const preauthorizedAdminAuthSchema = z.object({
   clientId: z.string().min(1),

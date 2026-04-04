@@ -51,8 +51,12 @@ import {
 } from "@/app/admin/clients/proxy-auth-options";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
-import type { ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
-import { hasEnabledProxyStrategy } from "@/server/oidc/proxy-auth-strategy";
+import {
+  hasEnabledProxyStrategy,
+  PROXY_AUTH_STRATEGY_METADATA,
+  proxyAuthStrategiesZodSchema,
+  type ProxyAuthStrategies,
+} from "@/server/oidc/proxy-auth-strategy";
 import { cn } from "@/lib/utils";
 import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
@@ -133,10 +137,7 @@ const proxyConfigFormSchema = z.object({
   passthroughTokenResponse: z.boolean(),
 });
 
-const proxyAuthStrategiesSchema = z.object({
-  redirect: z.object({ enabled: z.boolean() }),
-  preauthorized: z.object({ enabled: z.boolean() }),
-});
+const proxyAuthStrategiesSchema = proxyAuthStrategiesZodSchema;
 
 const splitProxyScopes = (value?: string) => {
   if (!value) {
@@ -1411,17 +1412,6 @@ function StoredProxySecretField({ value }: { value: string }) {
   );
 }
 
-const proxyStrategyMetadata: Record<keyof ProxyAuthStrategies, { title: string; description: string }> = {
-  redirect: {
-    title: "Redirect (standard proxy)",
-    description: "Use the upstream provider redirect flow.",
-  },
-  preauthorized: {
-    title: "Preauthorized identities",
-    description: "Allow admin-managed identities to skip the redirect flow.",
-  },
-};
-
 export function UpdateProxyAuthStrategiesForm({
   clientId,
   canEdit,
@@ -1470,8 +1460,8 @@ export function UpdateProxyAuthStrategiesForm({
       <div key={key} className="rounded-md border p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h4 className="text-sm font-semibold text-foreground">{proxyStrategyMetadata[key].title}</h4>
-            <p className="text-xs text-muted-foreground">{proxyStrategyMetadata[key].description}</p>
+            <h4 className="text-sm font-semibold text-foreground">{PROXY_AUTH_STRATEGY_METADATA[key].title}</h4>
+            <p className="text-xs text-muted-foreground">{PROXY_AUTH_STRATEGY_METADATA[key].description}</p>
           </div>
           <FormField
             control={form.control}
@@ -1501,7 +1491,7 @@ export function UpdateProxyAuthStrategiesForm({
     <Form {...form}>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid gap-4 lg:grid-cols-2">
-          {(Object.keys(proxyStrategyMetadata) as (keyof ProxyAuthStrategies)[]).map(renderStrategySection)}
+          {(Object.keys(PROXY_AUTH_STRATEGY_METADATA) as (keyof ProxyAuthStrategies)[]).map(renderStrategySection)}
         </div>
         {form.formState.errors.root?.message ? (
           <p className="text-sm text-destructive">{form.formState.errors.root.message}</p>

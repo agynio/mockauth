@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type ProxyAuthStrategy = "redirect" | "preauthorized";
 
 type ProxyAuthStrategyConfig = {
@@ -7,6 +9,22 @@ type ProxyAuthStrategyConfig = {
 export type ProxyAuthStrategies = {
   redirect: ProxyAuthStrategyConfig;
   preauthorized: ProxyAuthStrategyConfig;
+};
+
+export const proxyAuthStrategiesZodSchema = z.object({
+  redirect: z.object({ enabled: z.boolean() }),
+  preauthorized: z.object({ enabled: z.boolean() }),
+});
+
+export const PROXY_AUTH_STRATEGY_METADATA: Record<ProxyAuthStrategy, { title: string; description: string }> = {
+  redirect: {
+    title: "Redirect (standard proxy)",
+    description: "Use the upstream provider redirect flow.",
+  },
+  preauthorized: {
+    title: "Preauthorized identities",
+    description: "Allow admin-managed identities to skip the redirect flow.",
+  },
 };
 
 export const DEFAULT_PROXY_AUTH_STRATEGIES: ProxyAuthStrategies = {

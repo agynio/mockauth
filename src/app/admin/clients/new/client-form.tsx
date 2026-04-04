@@ -27,8 +27,13 @@ import {
   PROXY_TOKEN_AUTH_OPTIONS,
   getProxyTokenAuthDescription,
 } from "@/app/admin/clients/proxy-auth-options";
-import type { ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
-import { DEFAULT_PROXY_AUTH_STRATEGIES, hasEnabledProxyStrategy } from "@/server/oidc/proxy-auth-strategy";
+import {
+  DEFAULT_PROXY_AUTH_STRATEGIES,
+  hasEnabledProxyStrategy,
+  PROXY_AUTH_STRATEGY_METADATA,
+  proxyAuthStrategiesZodSchema,
+  type ProxyAuthStrategies,
+} from "@/server/oidc/proxy-auth-strategy";
 
 const scopeMappingSchema = z.object({
   appScope: z.string().optional(),
@@ -53,11 +58,6 @@ const proxyConfigSchema = z.object({
   passthroughTokenResponse: z.boolean().default(false),
 });
 
-const proxyAuthStrategiesSchema = z.object({
-  redirect: z.object({ enabled: z.boolean() }),
-  preauthorized: z.object({ enabled: z.boolean() }),
-});
-
 const formSchema = z
   .object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -70,7 +70,7 @@ const formSchema = z
       .min(1, "Select at least one grant type"),
     redirects: z.string().optional(),
     mode: z.enum(["regular", "proxy"] as const),
-    proxyAuthStrategies: proxyAuthStrategiesSchema,
+    proxyAuthStrategies: proxyAuthStrategiesZodSchema,
     proxyConfig: proxyConfigSchema.optional(),
   })
   .superRefine((values, ctx) => {
@@ -233,20 +233,8 @@ const createDefaultProxyConfig = (): NonNullable<FormValues["proxyConfig"]> => (
 });
 
 const createDefaultProxyAuthStrategies = (): ProxyAuthStrategies => ({
-  redirect: { enabled: DEFAULT_PROXY_AUTH_STRATEGIES.redirect.enabled },
-  preauthorized: { enabled: DEFAULT_PROXY_AUTH_STRATEGIES.preauthorized.enabled },
+  ...DEFAULT_PROXY_AUTH_STRATEGIES,
 });
-
-const proxyStrategyMetadata: Record<keyof ProxyAuthStrategies, { title: string; description: string }> = {
-  redirect: {
-    title: "Redirect (standard proxy)",
-    description: "Use the upstream provider redirect flow.",
-  },
-  preauthorized: {
-    title: "Preauthorized identities",
-    description: "Allow admin-managed identities to skip the redirect flow.",
-  },
-};
 
 const splitScopes = (value?: string | null) => {
   if (!value) {
@@ -633,14 +621,16 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
                 </p>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
-                {(Object.keys(proxyStrategyMetadata) as (keyof ProxyAuthStrategies)[]).map((key) => (
+                {(Object.keys(PROXY_AUTH_STRATEGY_METADATA) as (keyof ProxyAuthStrategies)[]).map((key) => (
                   <div key={key} className="rounded-md border p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <h5 className="text-sm font-semibold text-foreground">
-                          {proxyStrategyMetadata[key].title}
+                          {PROXY_AUTH_STRATEGY_METADATA[key].title}
                         </h5>
-                        <p className="text-xs text-muted-foreground">{proxyStrategyMetadata[key].description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {PROXY_AUTH_STRATEGY_METADATA[key].description}
+                        </p>
                       </div>
                       <FormField
                         control={form.control}
