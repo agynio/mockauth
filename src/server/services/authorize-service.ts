@@ -324,7 +324,18 @@ const handleProxyAuthorize = async (args: {
   });
 
   try {
-    const authorizeUrl = new URL(proxyConfig.authorizationEndpoint);
+    let authorizeUrl: URL;
+    try {
+      authorizeUrl = new URL(proxyConfig.authorizationEndpoint);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new DomainError(`authorizationEndpoint is not a valid URL: ${proxyConfig.authorizationEndpoint}`, {
+          status: 500,
+          code: "server_error",
+        });
+      }
+      throw error;
+    }
     authorizeUrl.searchParams.set("client_id", proxyConfig.upstreamClientId);
     authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
     authorizeUrl.searchParams.set("response_type", "code");
