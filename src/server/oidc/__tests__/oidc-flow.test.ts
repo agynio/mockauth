@@ -227,6 +227,28 @@ describe("OIDC flow", () => {
     expect(decodeURIComponent(authorize.redirectTo.split("return_to=")[1]!)).toBe(returnTo);
   });
 
+  it("rejects invalid redirect_uri values", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    await expect(
+      handleAuthorize(
+        {
+          apiResourceId,
+          clientId: CLIENT_ID,
+          redirectUri: "${E2E_OIDC_REDIRECT_URI}",
+          responseType: "code",
+          scope: "openid profile",
+          codeChallenge: challenge,
+          codeChallengeMethod: "S256",
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+      ),
+    ).rejects.toMatchObject({
+      message: "redirect_uri is not a valid URL: ${E2E_OIDC_REDIRECT_URI}",
+      options: { code: "invalid_redirect_uri", status: 400 },
+    });
+  });
+
   it("rejects authorize requests that omit openid", async () => {
     const challenge = computeS256Challenge(codeVerifier);
     await expect(

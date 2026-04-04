@@ -1,10 +1,23 @@
 import { RedirectUriType } from "@/generated/prisma/client";
+import { DomainError } from "@/server/errors";
 import { setAllowAnyRedirectOverride } from "@/server/oidc/redirect-policy";
 import { classifyRedirect, resolveRedirectUri } from "@/server/oidc/redirect-uri";
 
 afterEach(() => {
   setAllowAnyRedirectOverride(null);
 });
+
+const expectInvalidRedirectUri = (value: string, action: () => void) => {
+  try {
+    action();
+    throw new Error("Expected invalid redirect_uri error");
+  } catch (error) {
+    expect(error).toBeInstanceOf(DomainError);
+    const domainError = error as DomainError;
+    expect(domainError.message).toBe(`redirect_uri is not a valid URL: ${value}`);
+    expect(domainError.options).toMatchObject({ status: 400, code: "invalid_redirect_uri" });
+  }
+};
 
 describe("redirect uri handling", () => {
   it("classifies host wildcards", () => {
@@ -53,6 +66,25 @@ describe("redirect uri handling", () => {
 
   it("rejects fragments in redirect entries", () => {
     expect(() => classifyRedirect("https://example.test/callback#frag")).toThrow("fragment");
+  });
+
+  it("throws for invalid resolveRedirectUri inputs", () => {
+    expectInvalidRedirectUri("${E2E_OIDC_REDIRECT_URI}", () =>
+      resolveRedirectUri("${E2E_OIDC_REDIRECT_URI}", []),
+    );
+    expectInvalidRedirectUri("not-a-url", () => resolveRedirectUri("not-a-url", []));
+  });
+
+  it("throws for whitespace-only redirect_uri", () => {
+    expectInvalidRedirectUri("   ", () => resolveRedirectUri("   ", []));
+  });
+
+  it("throws for invalid classifyRedirect inputs", () => {
+    expectInvalidRedirectUri("not-a-url", () => classifyRedirect("not-a-url"));
+  });
+
+  it("throws for invalid path wildcard bases", () => {
+    expectInvalidRedirectUri("not-a-url/", () => classifyRedirect("not-a-url/*"));
   });
 
   it("gates * redirects behind the env flag", () => {

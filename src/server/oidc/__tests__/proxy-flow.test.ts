@@ -289,6 +289,65 @@ describe("Proxy client OAuth flow", () => {
     expect(authorizationParams).not.toHaveProperty("code_challenge_method");
   });
 
+  it("rejects proxy authorize when the authorization endpoint is invalid", async () => {
+    const invalidEndpoint = "not-a-url";
+    const invalidClient = await prisma.client.create({
+      data: {
+        tenantId,
+        clientId: `proxy_invalid_${randomUUID().slice(0, 8)}`,
+        name: "Proxy Invalid Endpoint Client",
+        tokenEndpointAuthMethods: ["none"],
+        oauthClientMode: "proxy",
+        proxyAuthStrategy: "redirect",
+        allowedScopes: ["openid", "profile"],
+        authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
+        redirectUris: {
+          create: [{ uri: "https://proxy-invalid.test/callback", type: "EXACT" }],
+        },
+        proxyConfig: {
+          create: {
+            providerType: "oidc",
+            authorizationEndpoint: invalidEndpoint,
+            tokenEndpoint: "https://upstream-invalid.example.com/oauth2/token",
+            upstreamClientId: "up-invalid-client",
+            defaultScopes: ["openid", "email"],
+            scopeMapping: { profile: ["profile.read"] },
+            pkceSupported: true,
+            oidcEnabled: true,
+            promptPassthroughEnabled: true,
+            loginHintPassthroughEnabled: true,
+            passthroughTokenResponse: false,
+            upstreamTokenEndpointAuthMethod: "none",
+          },
+        },
+      },
+    });
+
+    cleanupClientIds.push(invalidClient.id);
+
+    const codeChallenge = computeS256Challenge("verifier-invalid-endpoint-ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+
+    await expect(
+      handleAuthorize(
+        {
+          apiResourceId,
+          clientId: invalidClient.clientId,
+          redirectUri: "https://proxy-invalid.test/callback",
+          responseType: "code",
+          scope: "openid profile",
+          state: "invalid-endpoint",
+          codeChallenge,
+          codeChallengeMethod: "S256",
+        },
+        "https://mockauth.test",
+        `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${invalidClient.clientId}`,
+      ),
+    ).rejects.toMatchObject({
+      message: `authorizationEndpoint is not a valid URL: ${invalidEndpoint}`,
+      options: { code: "server_error", status: 500 },
+    });
+  });
+
   it("brokers authorization_code and refresh_token flows", async () => {
     const codeVerifier = "verifier-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
     const codeChallenge = computeS256Challenge(codeVerifier);

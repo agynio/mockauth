@@ -7,6 +7,20 @@ const HOST_WILDCARD_REGEX = /^https:\/\/\*\.([a-zA-Z0-9.-]+)(?<path>\/[a-zA-Z0-9
 const ANY_REDIRECT_VALUE = "*";
 const PATH_WILDCARD_SUFFIX = "/*";
 
+const parseUrl = (value: string): URL => {
+  try {
+    return new URL(value);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new DomainError(`redirect_uri is not a valid URL: ${value}`, {
+        status: 400,
+        code: "invalid_redirect_uri",
+      });
+    }
+    throw error;
+  }
+};
+
 const ensureSchemeAllowed = (url: URL) => {
   const host = url.hostname.toLowerCase();
   if (url.protocol === "https:") {
@@ -73,7 +87,7 @@ export const classifyRedirect = (value: string): { type: RedirectUriType; normal
 
   if (trimmed.endsWith(PATH_WILDCARD_SUFFIX)) {
     const withoutSuffix = trimmed.slice(0, -1);
-    const url = normalizeUrl(new URL(withoutSuffix));
+    const url = normalizeUrl(parseUrl(withoutSuffix));
     ensureSchemeAllowed(url);
     if (url.search) {
       throw new DomainError("Path wildcards cannot include query parameters", { code: "invalid_redirect_uri" });
@@ -81,7 +95,7 @@ export const classifyRedirect = (value: string): { type: RedirectUriType; normal
     return { type: RedirectUriType.PATH_SUFFIX, normalized: `${url.origin}${url.pathname}*` };
   }
 
-  const url = normalizeUrl(new URL(trimmed));
+  const url = normalizeUrl(parseUrl(trimmed));
   ensureSchemeAllowed(url);
   return { type: RedirectUriType.EXACT, normalized: `${url.origin}${url.pathname}${url.search}` };
 };
@@ -131,7 +145,7 @@ const matchExact = (record: RedirectRecord, candidate: URL): boolean => {
 };
 
 export const resolveRedirectUri = (candidate: string, redirects: RedirectRecord[]): string => {
-  const url = normalizeUrl(new URL(candidate));
+  const url = normalizeUrl(parseUrl(candidate));
   ensureSchemeAllowed(url);
 
   const match = redirects.some((redirect) => {
