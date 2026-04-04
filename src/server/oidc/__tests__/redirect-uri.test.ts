@@ -8,14 +8,14 @@ afterEach(() => {
 });
 
 const expectInvalidRedirectUri = (value: string, action: () => void) => {
+  expect(action).toThrow(DomainError);
   try {
     action();
-    throw new Error("Expected invalid redirect_uri error");
   } catch (error) {
-    expect(error).toBeInstanceOf(DomainError);
-    const domainError = error as DomainError;
-    expect(domainError.message).toBe(`redirect_uri is not a valid URL: ${value}`);
-    expect(domainError.options).toMatchObject({ status: 400, code: "invalid_redirect_uri" });
+    expect(error).toMatchObject({
+      message: `redirect_uri is not a valid URL: ${value}`,
+      options: { status: 400, code: "invalid_redirect_uri" },
+    });
   }
 };
 
