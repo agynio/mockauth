@@ -133,12 +133,10 @@ const proxyConfigFormSchema = z.object({
   passthroughTokenResponse: z.boolean(),
 });
 
-const proxyAuthStrategiesSchema = z
-  .object({
-    redirect: z.object({ enabled: z.boolean() }),
-    preauthorized: z.object({ enabled: z.boolean() }),
-  })
-  .refine(hasEnabledProxyStrategy, { message: "Enable at least one strategy", path: ["root"] });
+const proxyAuthStrategiesSchema = z.object({
+  redirect: z.object({ enabled: z.boolean() }),
+  preauthorized: z.object({ enabled: z.boolean() }),
+});
 
 const splitProxyScopes = (value?: string) => {
   if (!value) {
