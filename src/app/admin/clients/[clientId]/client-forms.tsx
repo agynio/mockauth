@@ -1447,6 +1447,10 @@ export function UpdateProxyAuthStrategiesForm({
 
   const handleSubmit = form.handleSubmit(
     (values) => {
+      if (!hasEnabledProxyStrategy(values)) {
+        form.setError("root", { message: "Enable at least one strategy" });
+        return;
+      }
       startTransition(async () => {
         const result = await updateProxyAuthStrategiesAction({
           clientId,
