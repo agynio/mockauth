@@ -103,7 +103,7 @@ test.describe("proxy clients", () => {
       await page.goto(detailsHref!, { waitUntil: "domcontentloaded" });
       await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
       await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
-      await expect(page.getByTestId("provider-redirect-uri")).toContainText("/oidc/proxy/callback");
+      await expect(page.getByTestId("provider-redirect-uri-redirect")).toContainText("/oidc/proxy/callback");
       await expect(page.getByTestId("proxy-mode-note")).toBeVisible();
       await expect(page.locator('[data-testid="client-scopes-card"]')).toHaveCount(0);
       await expect(page.locator('[data-testid="client-auth-strategies-card"]')).toHaveCount(0);
@@ -263,28 +263,47 @@ test.describe("proxy clients", () => {
 
     await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
 
-    const strategySelect = page.getByRole("combobox", { name: "Proxy auth strategy" });
-    await expect(strategySelect).toHaveAttribute("data-selected-value", "redirect");
+    const redirectCheckbox = page.getByTestId("proxy-strategy-redirect-enabled");
+    const preauthorizedCheckbox = page.getByTestId("proxy-strategy-preauthorized-enabled");
 
-    await strategySelect.click();
-    await page.getByRole("option", { name: "Preauthorized identities" }).click();
-    await page.getByRole("button", { name: "Save strategy" }).click();
+    await expect(redirectCheckbox).toBeChecked();
+    await expect(preauthorizedCheckbox).not.toBeChecked();
 
-    await expect(page.getByText("Proxy auth strategy updated").first()).toBeVisible();
-    await expect(strategySelect).toHaveAttribute("data-selected-value", "preauthorized");
+    await preauthorizedCheckbox.check();
+    await page.getByRole("button", { name: "Save strategies" }).click();
+
+    await expect(page.getByText("Proxy auth strategies updated").first()).toBeVisible();
     await expect(page.getByTestId("preauthorized-identities")).toBeVisible();
+    await expect(redirectCheckbox).toBeChecked();
+    await expect(preauthorizedCheckbox).toBeChecked();
 
-    await strategySelect.click();
-    await page.getByRole("option", { name: "Redirect (standard proxy)" }).click();
-    await page.getByRole("button", { name: "Save strategy" }).click();
+    await redirectCheckbox.uncheck();
+    await page.getByRole("button", { name: "Save strategies" }).click();
 
-    await expect(page.getByText("Proxy auth strategy updated").first()).toBeVisible();
-    await expect(strategySelect).toHaveAttribute("data-selected-value", "redirect");
+    await expect(page.getByText("Proxy auth strategies updated").first()).toBeVisible();
+    await expect(redirectCheckbox).not.toBeChecked();
+    await expect(preauthorizedCheckbox).toBeChecked();
+
+    await preauthorizedCheckbox.uncheck();
+    await page.getByRole("button", { name: "Save strategies" }).click();
+
+    await expect(page.getByText("Enable at least one strategy")).toBeVisible();
+    await expect(redirectCheckbox).not.toBeChecked();
+    await expect(preauthorizedCheckbox).not.toBeChecked();
+
+    await redirectCheckbox.check();
+    await page.getByRole("button", { name: "Save strategies" }).click();
+
+    await expect(page.getByText("Proxy auth strategies updated").first()).toBeVisible();
+    await expect(redirectCheckbox).toBeChecked();
+    await expect(preauthorizedCheckbox).not.toBeChecked();
     await expect(page.locator('[data-testid="preauthorized-identities"]')).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
-    await expect(strategySelect).toHaveAttribute("data-selected-value", "redirect");
+    await expect(redirectCheckbox).toBeChecked();
+    await expect(preauthorizedCheckbox).not.toBeChecked();
+    await expect(page.locator('[data-testid="preauthorized-identities"]')).toHaveCount(0);
   });
 
   test("honors provider type selection when creating proxy clients", async ({ page }) => {
