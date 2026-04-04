@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES, type ClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { DEFAULT_PROXY_AUTH_STRATEGIES, type ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { createClient } from "@/server/services/client-service";
 import { issueTokensFromPassword } from "@/server/services/token-service";
 
@@ -42,7 +43,7 @@ const createPasswordClient = async (input: {
   allowedGrantTypes?: string[];
   allowedScopes?: string[];
   oauthClientMode?: "regular" | "proxy";
-  proxyAuthStrategy?: "redirect" | "preauthorized";
+  proxyAuthStrategies?: ProxyAuthStrategies;
   proxyConfig?: {
     providerType: "oidc" | "oauth2";
     authorizationEndpoint: string;
@@ -50,17 +51,16 @@ const createPasswordClient = async (input: {
     upstreamClientId: string;
   };
 }) => {
-  const { tenantId, allowedGrantTypes, allowedScopes, oauthClientMode, proxyAuthStrategy, proxyConfig } = input;
-  if (oauthClientMode === "proxy" && !proxyAuthStrategy) {
-    throw new Error("proxyAuthStrategy is required for proxy clients");
-  }
+  const { tenantId, allowedGrantTypes, allowedScopes, oauthClientMode, proxyAuthStrategies, proxyConfig } = input;
+  const resolvedProxyAuthStrategies =
+    oauthClientMode === "proxy" ? (proxyAuthStrategies ?? DEFAULT_PROXY_AUTH_STRATEGIES) : undefined;
   const created = await createClient(tenantId, {
     name: `Password Client ${randomUUID()}`,
     tokenEndpointAuthMethods: ["client_secret_post"],
     allowedGrantTypes,
     allowedScopes,
     oauthClientMode,
-    proxyAuthStrategy,
+    proxyAuthStrategies: resolvedProxyAuthStrategies,
     proxyConfig,
   });
   if (!created.clientSecret) {
@@ -194,7 +194,7 @@ describe("token service password grant", () => {
       allowedGrantTypes: ["password"],
       allowedScopes: ["openid", "profile"],
       oauthClientMode: "proxy",
-      proxyAuthStrategy: "redirect",
+      proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",
@@ -223,7 +223,10 @@ describe("token service password grant", () => {
       allowedGrantTypes: ["password"],
       allowedScopes: ["openid", "profile"],
       oauthClientMode: "proxy",
-      proxyAuthStrategy: "preauthorized",
+      proxyAuthStrategies: {
+        redirect: { enabled: false },
+        preauthorized: { enabled: true },
+      },
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",

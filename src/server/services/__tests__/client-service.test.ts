@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { decrypt } from "@/server/crypto/key-vault";
+import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 import {
   createClient,
   deleteClient,
@@ -208,7 +209,7 @@ describe("client service", () => {
       tokenEndpointAuthMethods: ["client_secret_basic"],
       redirectUris: ["https://cascade.example/callback"],
       oauthClientMode: "proxy",
-      proxyAuthStrategy: "redirect",
+      proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://proxy.example/auth",

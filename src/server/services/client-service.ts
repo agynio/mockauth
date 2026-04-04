@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 
-import type { Prisma, JwtSigningAlg, ProxyAuthStrategy } from "@/generated/prisma/client";
+import type { Prisma, JwtSigningAlg } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { hashSecret } from "@/server/crypto/hash";
 import { encrypt, decrypt } from "@/server/crypto/key-vault";
@@ -9,6 +9,8 @@ import { DomainError } from "@/server/errors";
 import { classifyRedirect } from "@/server/oidc/redirect-uri";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
+import type { ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
+import { DEFAULT_PROXY_AUTH_STRATEGIES, hasEnabledProxyStrategy } from "@/server/oidc/proxy-auth-strategy";
 import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
 import {
   TOKEN_AUTH_METHODS,
@@ -125,7 +127,7 @@ export const createClient = async (
     redirectUris?: string[];
     allowedScopes?: string[];
     oauthClientMode?: "regular" | "proxy";
-    proxyAuthStrategy?: ProxyAuthStrategy;
+    proxyAuthStrategies?: ProxyAuthStrategies;
     proxyConfig?: ProxyProviderConfigInput;
   },
 ) => {
@@ -137,14 +139,16 @@ export const createClient = async (
   const tokenEndpointAuthMethods = parseTokenAuthMethods(data.tokenEndpointAuthMethods);
   const allowedGrantTypes = data.allowedGrantTypes ? normalizeAllowedGrantTypes(data.allowedGrantTypes) : undefined;
   const mode = data.oauthClientMode ?? "regular";
-  const proxyAuthStrategy = mode === "proxy" ? data.proxyAuthStrategy : null;
+  const proxyAuthStrategies = mode === "proxy" ? (data.proxyAuthStrategies ?? DEFAULT_PROXY_AUTH_STRATEGIES) : undefined;
 
   if (mode === "proxy" && !data.proxyConfig) {
     throw new DomainError("Upstream clients require provider configuration", { status: 400 });
   }
 
-  if (mode === "proxy" && !proxyAuthStrategy) {
-    throw new DomainError("Proxy auth strategy is required", { status: 400 });
+  if (mode === "proxy") {
+    if (!proxyAuthStrategies || !hasEnabledProxyStrategy(proxyAuthStrategies)) {
+      throw new DomainError("At least one proxy auth strategy must be enabled", { status: 400 });
+    }
   }
 
   const validatedProxyConfig = data.proxyConfig ? proxyProviderConfigSchema.parse(data.proxyConfig) : null;
@@ -169,7 +173,7 @@ export const createClient = async (
         allowedScopes,
         ...(allowedGrantTypes ? { allowedGrantTypes } : {}),
         oauthClientMode: mode,
-        proxyAuthStrategy,
+        proxyAuthStrategies,
       },
     });
 
@@ -432,8 +436,11 @@ export const updateClientAllowedScopes = async (clientId: string, scopes: string
   return prisma.client.update({ where: { id: clientId }, data: { allowedScopes: canonical } });
 };
 
-export const updateProxyAuthStrategy = async (clientId: string, proxyAuthStrategy: ProxyAuthStrategy) => {
-  return prisma.client.update({ where: { id: clientId }, data: { proxyAuthStrategy } });
+export const updateProxyAuthStrategies = async (clientId: string, proxyAuthStrategies: ProxyAuthStrategies) => {
+  if (!hasEnabledProxyStrategy(proxyAuthStrategies)) {
+    throw new DomainError("At least one proxy auth strategy must be enabled", { status: 400 });
+  }
+  return prisma.client.update({ where: { id: clientId }, data: { proxyAuthStrategies } });
 };
 
 export const updateClientReauthTtl = async (clientId: string, reauthTtlSeconds: number) => {

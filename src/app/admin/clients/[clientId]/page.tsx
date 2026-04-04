@@ -16,7 +16,7 @@ import {
   UpdateClientNameForm,
   UpdateTokenConfigForm,
   UpdateProxyProviderConfigForm,
-  UpdateProxyAuthStrategyForm,
+  UpdateProxyAuthStrategiesForm,
 } from "@/app/admin/clients/[clientId]/client-forms";
 import { ClientDangerZone } from "@/app/admin/clients/[clientId]/client-danger-zone";
 import { PreauthorizedIdentitySection } from "@/app/admin/clients/[clientId]/preauthorized-identities";
@@ -33,6 +33,7 @@ import { listPreauthorizedIdentities } from "@/server/services/preauthorized-ide
 import { getRequestOrigin } from "@/server/utils/request-origin";
 import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { enabledProxyStrategies, parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { parseTokenAuthMethods, requiresClientSecret, resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import { decrypt } from "@/server/crypto/key-vault";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
@@ -156,24 +157,28 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
 
   const origin = await getRequestOrigin();
   const urls = buildOidcUrls(origin, currentResourceId);
-  const proxyAuthStrategy = client.oauthClientMode === "proxy" ? client.proxyAuthStrategy : null;
-  if (client.oauthClientMode === "proxy" && !proxyAuthStrategy) {
-    console.warn("Proxy client missing proxy auth strategy", { clientId: client.id });
+  const proxyAuthStrategies = parseProxyAuthStrategies(client.proxyAuthStrategies);
+  const enabledProxyStrategyList =
+    client.oauthClientMode === "proxy" ? enabledProxyStrategies(proxyAuthStrategies) : [];
+  if (client.oauthClientMode === "proxy" && enabledProxyStrategyList.length === 0) {
+    console.warn("Proxy client missing enabled auth strategies", { clientId: client.id });
   }
-  const resolvedProxyAuthStrategy =
-    client.oauthClientMode === "proxy" ? proxyAuthStrategy ?? "redirect" : null;
-  const providerRedirectUri =
+  const providerRedirectUris =
     client.oauthClientMode === "proxy"
-      ? resolvedProxyAuthStrategy === "preauthorized"
-        ? buildPreauthorizedAdminCallbackUrl(origin, currentResourceId)
-        : buildProxyCallbackUrl(origin, currentResourceId)
-      : null;
+      ? enabledProxyStrategyList.map((strategy) => ({
+          strategy,
+          value:
+            strategy === "preauthorized"
+              ? buildPreauthorizedAdminCallbackUrl(origin, currentResourceId)
+              : buildProxyCallbackUrl(origin, currentResourceId),
+        }))
+      : [];
   const showLocalClientSettings = client.oauthClientMode === "regular";
   const showProxyProviderSection = client.oauthClientMode !== "regular";
   const proxyConfigMissing = showProxyProviderSection && !proxyConfigInitial;
   const modeLabel =
     client.oauthClientMode === "proxy"
-      ? `proxy mode (${resolvedProxyAuthStrategy === "preauthorized" ? "preauthorized" : "redirect"})`
+      ? `proxy mode (${enabledProxyStrategyList.length > 0 ? enabledProxyStrategyList.join(" + ") : "none"})`
       : "regular mode";
   const providerHeading = "Upstream provider";
   const testFlowHref = `/admin/clients/${client.id}/test`;
@@ -198,7 +203,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   );
 
   const usesPreauthorizedStrategy =
-    client.oauthClientMode === "proxy" && resolvedProxyAuthStrategy === "preauthorized";
+    client.oauthClientMode === "proxy" && proxyAuthStrategies.preauthorized.enabled;
   const preauthorizedIdentitySummaries = usesPreauthorizedStrategy
     ? (await listPreauthorizedIdentities(activeTenant.id, client.id)).map((identity) => ({
         id: identity.id,
@@ -337,13 +342,25 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {providerRedirectUri ? (
-              <CopyField label="Provider redirect URI" value={providerRedirectUri} testId="provider-redirect-uri" />
-            ) : null}
-            <UpdateProxyAuthStrategyForm
+            {providerRedirectUris.map((item) => {
+              const labelSuffix = item.strategy === "preauthorized" ? "preauthorized" : "redirect";
+              const label =
+                providerRedirectUris.length > 1
+                  ? `Provider redirect URI (${labelSuffix})`
+                  : "Provider redirect URI";
+              return (
+                <CopyField
+                  key={item.strategy}
+                  label={label}
+                  value={item.value}
+                  testId={`provider-redirect-uri-${item.strategy}`}
+                />
+              );
+            })}
+            <UpdateProxyAuthStrategiesForm
               clientId={client.id}
               canEdit={canManageClients}
-              initialStrategy={resolvedProxyAuthStrategy ?? "redirect"}
+              initialStrategies={proxyAuthStrategies}
             />
             {proxyConfigMissing ? (
               <Alert variant="warning" data-testid="proxy-config-missing">
