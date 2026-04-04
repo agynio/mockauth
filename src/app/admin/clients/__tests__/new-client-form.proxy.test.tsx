@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { NewClientForm } from "../new/client-form";
+import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 
 const mockCreateClientAction = vi.hoisted(() => vi.fn());
 const mockToast = vi.hoisted(() => vi.fn());
@@ -101,7 +102,7 @@ describe("NewClientForm proxy mode", () => {
     expect(mockCreateClientAction).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant_123",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         proxyConfig: expect.objectContaining({ providerType: "oauth2" }),
       }),
     );
@@ -163,7 +164,7 @@ describe("NewClientForm proxy mode", () => {
       allowedGrantTypes: ["authorization_code"],
       redirects: ["https://client.example.test/callback"],
       mode: "proxy",
-      proxyAuthStrategy: "redirect",
+      proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
       proxyConfig: {
         providerType: "oidc",
         authorizationEndpoint: "https://idp.example.test/oauth2/authorize",
@@ -228,7 +229,7 @@ describe("NewClientForm proxy mode", () => {
     expect(mockCreateClientAction).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         proxyConfig: expect.objectContaining({
           upstreamTokenEndpointAuthMethod: "client_secret_post",
         }),

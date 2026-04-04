@@ -7,6 +7,7 @@ import { prisma } from "@/server/db/client";
 import { encrypt, decrypt } from "@/server/crypto/key-vault";
 import { DomainError } from "@/server/errors";
 import { resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
+import { parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   buildPreauthorizedIdentityDetails,
@@ -271,10 +272,8 @@ export const refreshPreauthorizedIdentity = async (params: {
     });
   };
 
-  if (
-    identity.client.oauthClientMode !== "proxy" ||
-    identity.client.proxyAuthStrategy !== "preauthorized"
-  ) {
+  const proxyAuthStrategies = parseProxyAuthStrategies(identity.client.proxyAuthStrategies);
+  if (identity.client.oauthClientMode !== "proxy" || !proxyAuthStrategies.preauthorized.enabled) {
     return failRefresh({
       message: "Client is not preauthorized",
       error: "client_not_preauthorized",

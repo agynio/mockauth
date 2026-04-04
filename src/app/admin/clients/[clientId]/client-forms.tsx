@@ -5,7 +5,6 @@ import {
   useMemo,
   useReducer,
   useState,
-  useSyncExternalStore,
   useTransition,
   type FormEvent,
   type KeyboardEvent,
@@ -28,7 +27,7 @@ import {
   updateClientReauthTtlAction,
   updateClientSigningAlgsAction,
   updateProxyClientConfigAction,
-  updateProxyAuthStrategyAction,
+  updateProxyAuthStrategiesAction,
 } from "@/app/admin/actions";
 import { CopyField } from "@/app/admin/_components/copy-field";
 import {
@@ -40,7 +39,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -53,6 +51,8 @@ import {
 } from "@/app/admin/clients/proxy-auth-options";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import type { ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
+import { hasEnabledProxyStrategy } from "@/server/oidc/proxy-auth-strategy";
 import { cn } from "@/lib/utils";
 import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
@@ -133,9 +133,12 @@ const proxyConfigFormSchema = z.object({
   passthroughTokenResponse: z.boolean(),
 });
 
-const proxyAuthStrategySchema = z.object({
-  proxyAuthStrategy: z.enum(["redirect", "preauthorized"]),
-});
+const proxyAuthStrategiesSchema = z
+  .object({
+    redirect: z.object({ enabled: z.boolean() }),
+    preauthorized: z.object({ enabled: z.boolean() }),
+  })
+  .refine(hasEnabledProxyStrategy, { message: "Enable at least one strategy", path: ["root"] });
 
 const splitProxyScopes = (value?: string) => {
   if (!value) {
@@ -1410,80 +1413,99 @@ function StoredProxySecretField({ value }: { value: string }) {
   );
 }
 
-export function UpdateProxyAuthStrategyForm({
+const proxyStrategyMetadata: Record<keyof ProxyAuthStrategies, { title: string; description: string }> = {
+  redirect: {
+    title: "Redirect (standard proxy)",
+    description: "Use the upstream provider redirect flow.",
+  },
+  preauthorized: {
+    title: "Preauthorized identities",
+    description: "Allow admin-managed identities to skip the redirect flow.",
+  },
+};
+
+export function UpdateProxyAuthStrategiesForm({
   clientId,
   canEdit,
-  initialStrategy,
+  initialStrategies,
 }: {
   clientId: string;
   canEdit: boolean;
-  initialStrategy: "redirect" | "preauthorized";
+  initialStrategies: ProxyAuthStrategies;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const disableForm = !canEdit || pending;
-  const isHydrated = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
-
-  const form = useForm<z.infer<typeof proxyAuthStrategySchema>>({
-    resolver: zodResolver(proxyAuthStrategySchema),
-    defaultValues: { proxyAuthStrategy: initialStrategy },
+  const form = useForm<z.infer<typeof proxyAuthStrategiesSchema>>({
+    resolver: zodResolver(proxyAuthStrategiesSchema),
+    defaultValues: initialStrategies,
   });
 
   useEffect(() => {
-    form.reset({ proxyAuthStrategy: initialStrategy });
-  }, [form, initialStrategy]);
+    form.reset(initialStrategies);
+  }, [initialStrategies, form]);
 
-  if (!isHydrated) {
+  const handleSubmit = form.handleSubmit(
+    (values) => {
+      startTransition(async () => {
+        const result = await updateProxyAuthStrategiesAction({
+          clientId,
+          proxyAuthStrategies: values,
+        });
+        if (result.error) {
+          toast({ variant: "destructive", title: "Unable to update", description: result.error });
+          return;
+        }
+        router.refresh();
+        toast({ title: "Proxy auth strategies updated", description: result.success ?? "Saved" });
+      });
+    },
+    () => undefined,
+  );
+
+  const renderStrategySection = (key: keyof ProxyAuthStrategies) => {
     return (
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end" aria-hidden>
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-4 w-64" />
+      <div key={key} className="rounded-md border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">{proxyStrategyMetadata[key].title}</h4>
+            <p className="text-xs text-muted-foreground">{proxyStrategyMetadata[key].description}</p>
+          </div>
+          <FormField
+            control={form.control}
+            name={`${key}.enabled` as const}
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2">
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-muted"
+                    checked={field.value}
+                    onChange={(event) => field.onChange(event.target.checked)}
+                    disabled={!canEdit || pending}
+                    data-testid={`proxy-strategy-${key}-enabled`}
+                  />
+                </FormControl>
+                <FormLabel className="text-xs text-muted-foreground">Enabled</FormLabel>
+              </FormItem>
+            )}
+          />
         </div>
-        <Skeleton className="h-10 w-full sm:w-36" />
       </div>
     );
-  }
-
-  const onSubmit = form.handleSubmit((values) => {
-    startTransition(async () => {
-      const result = await updateProxyAuthStrategyAction({
-        clientId,
-        proxyAuthStrategy: values.proxyAuthStrategy,
-      });
-      if (result.error) {
-        toast({ variant: "destructive", title: "Unable to update", description: result.error });
-        return;
-      }
-      router.refresh();
-      toast({ title: "Proxy auth strategy updated", description: result.success ?? "Saved" });
-    });
-  });
+  };
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <RHFSelectField
-          control={form.control}
-          name="proxyAuthStrategy"
-          label="Proxy auth strategy"
-          placeholder="Select strategy"
-          options={[
-            { value: "redirect", label: "Redirect (standard proxy)" },
-            { value: "preauthorized", label: "Preauthorized identities" },
-          ]}
-          disabled={disableForm}
-          description="Switch between standard redirect flow and preauthorized identity selection."
-          className="flex-1"
-        />
-        <Button type="submit" disabled={disableForm} className="w-full sm:w-auto">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save strategy"}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(Object.keys(proxyStrategyMetadata) as (keyof ProxyAuthStrategies)[]).map(renderStrategySection)}
+        </div>
+        {form.formState.errors.root?.message ? (
+          <p className="text-sm text-destructive">{form.formState.errors.root.message}</p>
+        ) : null}
+        <Button type="submit" disabled={!canEdit || pending} className="w-full sm:w-auto">
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save strategies"}
         </Button>
       </form>
     </Form>

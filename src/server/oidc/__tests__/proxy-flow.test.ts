@@ -17,6 +17,7 @@ import {
 import { createSession, clearSession } from "@/server/services/mock-session-service";
 import { PROXY_TRANSACTION_COOKIE, buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
+import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 
@@ -117,7 +118,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy QA Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -214,7 +215,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy No PKCE Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -928,7 +929,7 @@ describe("Proxy client OAuth flow", () => {
         clientSecretHash: await hashSecret(localSecret),
         clientSecretEncrypted: encrypt(localSecret),
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -1270,7 +1271,7 @@ describe("Proxy client OAuth flow", () => {
         clientSecretHash: await hashSecret(localSecret),
         clientSecretEncrypted: encrypt(localSecret),
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {

@@ -10,6 +10,7 @@ import { generateOpaqueToken } from "@/server/crypto/opaque-token";
 import { mapAppScopesToProvider } from "@/server/oidc/proxy/scope-mapping";
 import { resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
 import { buildPreauthorizedAdminCallbackUrl } from "@/server/oidc/preauthorized/constants";
+import { parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { emitAuditEvent, recordSecurityViolation } from "@/server/services/audit-service";
 import {
   buildProxyCallbackErrorDetails,
@@ -74,7 +75,8 @@ const markAdminAuthTransactionCompleted = async (id: string) => {
 
 export const startPreauthorizedAdminAuth = async (params: StartAdminAuthArgs) => {
   const client = await getClientByIdForTenant(params.tenantId, params.clientId);
-  if (client.oauthClientMode !== "proxy" || client.proxyAuthStrategy !== "preauthorized") {
+  const proxyAuthStrategies = parseProxyAuthStrategies(client.proxyAuthStrategies);
+  if (client.oauthClientMode !== "proxy" || !proxyAuthStrategies.preauthorized.enabled) {
     throw new DomainError("Client is not preauthorized", { status: 400 });
   }
   const proxyConfig = client.proxyConfig;

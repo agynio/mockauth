@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { prisma } from "@/server/db/client";
+import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 import { createClient } from "@/server/services/client-service";
 import { completePreauthorizedAdminAuth } from "@/server/services/preauthorized-admin-auth-service";
 
@@ -34,7 +35,11 @@ const createPreauthorizedClient = async (tenantId: string) => {
     name: "Preauth Client",
     tokenEndpointAuthMethods: ["client_secret_basic"],
     oauthClientMode: "proxy",
-    proxyAuthStrategy: "preauthorized",
+    proxyAuthStrategies: {
+      ...DEFAULT_PROXY_AUTH_STRATEGIES,
+      redirect: { enabled: false },
+      preauthorized: { enabled: true },
+    },
     proxyConfig: {
       providerType: "oidc",
       authorizationEndpoint: "https://provider.example/authorize",
@@ -52,7 +57,11 @@ const createBarePreauthorizedClient = async (tenantId: string) => {
       name: "Bare Preauth Client",
       clientId: `client_${randomUUID()}`,
       oauthClientMode: "proxy",
-      proxyAuthStrategy: "preauthorized",
+      proxyAuthStrategies: {
+        ...DEFAULT_PROXY_AUTH_STRATEGIES,
+        redirect: { enabled: false },
+        preauthorized: { enabled: true },
+      },
     },
   });
 };
