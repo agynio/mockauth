@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import { DomainError } from "@/server/errors";
+import { prisma } from "@/server/db/client";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createAuthorizationCode } from "@/server/services/authorization-code-service";
 import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { enabledProxyStrategies, parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { normalizeScopes } from "@/server/oidc/scopes";
 import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-token";
@@ -119,7 +121,19 @@ export const handleAuthorize = async (
   const auditCodeChallenge = client.pkceRequired ? resolvedCodeChallenge : undefined;
 
   if (client.oauthClientMode === "proxy") {
-    if (client.proxyAuthStrategy === "preauthorized") {
+    const proxyAuthStrategies = parseProxyAuthStrategies(client.proxyAuthStrategies);
+    const enabledStrategies = enabledProxyStrategies(proxyAuthStrategies);
+    if (enabledStrategies.length === 0) {
+      throw new DomainError("At least one proxy auth strategy must be enabled", { status: 400, code: "invalid_client" });
+    }
+    let strategy = enabledStrategies[0];
+    if (enabledStrategies.length > 1) {
+      const preauthorizedCount = await prisma.preauthorizedIdentity.count({
+        where: { tenantId: tenant.id, clientId: client.id },
+      });
+      strategy = preauthorizedCount > 0 ? "preauthorized" : "redirect";
+    }
+    if (strategy === "preauthorized") {
       return handlePreauthorizedAuthorize({
         params: resolvedParams,
         origin,

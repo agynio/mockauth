@@ -33,11 +33,16 @@ import {
   getClientSecret,
   updateClientSigningAlgorithms,
   upsertProxyProviderConfig,
-  updateProxyAuthStrategy,
+  updateProxyAuthStrategies,
 } from "@/server/services/client-service";
 import type { ProxyProviderConfigInput } from "@/server/services/client-service";
 import { startPreauthorizedAdminAuth, ADMIN_AUTH_TTL_SECONDS } from "@/server/services/preauthorized-admin-auth-service";
 import { deletePreauthorizedIdentity, refreshPreauthorizedIdentity } from "@/server/services/preauthorized-identity-service";
+import {
+  hasEnabledProxyStrategy,
+  parseProxyAuthStrategies,
+  proxyAuthStrategiesZodSchema,
+} from "@/server/oidc/proxy-auth-strategy";
 import { rotateKeyForAlg } from "@/server/services/key-service";
 import {
   ADMIN_ACTIVE_TENANT_COOKIE,
@@ -86,8 +91,10 @@ const tenantSchema = z.object({
 });
 
 const grantTypeOptions = ["authorization_code", "refresh_token", "password"] as const;
-const proxyAuthStrategyOptions = ["redirect", "preauthorized"] as const;
-
+const proxyAuthStrategiesSchema = proxyAuthStrategiesZodSchema.refine(hasEnabledProxyStrategy, {
+  message: "Enable at least one proxy auth strategy",
+  path: ["root"],
+});
 const clientSchema = z.object({
   tenantId: z.string().min(1),
   name: z.string().min(2),
@@ -97,7 +104,7 @@ const clientSchema = z.object({
   redirects: z.array(z.string().min(1)).optional(),
   scopes: z.array(z.string().min(1)).optional(),
   mode: z.enum(["regular", "proxy"]).default("regular"),
-  proxyAuthStrategy: z.enum(proxyAuthStrategyOptions).optional(),
+  proxyAuthStrategies: proxyAuthStrategiesSchema.optional(),
   proxyConfig: proxyProviderConfigSchema.optional(),
 });
 
@@ -330,9 +337,9 @@ const updateClientTokenConfigSchema = z.object({
 const deleteClientSchema = z.object({ clientId: z.string().min(1) });
 
 const updateProxyConfigSchema = proxyProviderConfigSchema.extend({ clientId: z.string().min(1) });
-const updateProxyAuthStrategySchema = z.object({
+const updateProxyAuthStrategiesSchema = z.object({
   clientId: z.string().min(1),
-  proxyAuthStrategy: z.enum(proxyAuthStrategyOptions),
+  proxyAuthStrategies: proxyAuthStrategiesSchema,
 });
 const preauthorizedAdminAuthSchema = z.object({
   clientId: z.string().min(1),
@@ -400,7 +407,7 @@ const getClientForAdmin = async (clientId: string, adminId: string, allowedRoles
       name: true,
       apiResourceId: true,
       oauthClientMode: true,
-      proxyAuthStrategy: true,
+      proxyAuthStrategies: true,
       tokenEndpointAuthMethods: true,
       pkceRequired: true,
       allowedGrantTypes: true,
@@ -472,8 +479,8 @@ export const createClientAction = async (
     const membership = await assertTenantMembership(adminId, parsed.tenantId);
     ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
     if (parsed.mode === "proxy") {
-      if (!parsed.proxyAuthStrategy) {
-        return { error: "Proxy auth strategy is required" };
+      if (!parsed.proxyAuthStrategies) {
+        return { error: "Proxy auth strategies are required" };
       }
       const proxyValidationError = validateProxyConfigInput(parsed.proxyConfig);
       if (proxyValidationError) {
@@ -493,7 +500,7 @@ export const createClientAction = async (
     const proxyConfigResult = parsed.mode === "proxy"
       ? normalizeProxyConfigInput(parsed.proxyConfig)
       : { normalized: undefined, keepExistingSecret: false };
-    const proxyAuthStrategy = parsed.mode === "proxy" ? parsed.proxyAuthStrategy : undefined;
+    const proxyAuthStrategies = parsed.mode === "proxy" ? parsed.proxyAuthStrategies : undefined;
 
     const { client, clientSecret } = await createClient(parsed.tenantId, {
       name: parsed.name,
@@ -503,7 +510,7 @@ export const createClientAction = async (
       redirectUris: redirectEntries,
       allowedScopes: canonicalScopes,
       oauthClientMode: parsed.mode,
-      proxyAuthStrategy,
+      proxyAuthStrategies,
       proxyConfig: proxyConfigResult.normalized,
     });
     let providerRedirectUri: string | undefined;
@@ -515,8 +522,10 @@ export const createClientAction = async (
       });
       const resourceId = client.apiResourceId ?? tenant?.defaultApiResourceId;
       if (resourceId) {
+        const usePreauthorized =
+          proxyAuthStrategies?.preauthorized.enabled && !proxyAuthStrategies?.redirect.enabled;
         providerRedirectUri =
-          proxyAuthStrategy === "preauthorized"
+          usePreauthorized
             ? buildPreauthorizedAdminCallbackUrl(origin, resourceId)
             : buildProxyCallbackUrl(origin, resourceId);
       }
@@ -813,12 +822,12 @@ export const updateProxyClientConfigAction = async (
   }
 };
 
-export const updateProxyAuthStrategyAction = async (
-  input: z.infer<typeof updateProxyAuthStrategySchema>,
+export const updateProxyAuthStrategiesAction = async (
+  input: z.infer<typeof updateProxyAuthStrategiesSchema>,
 ): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = updateProxyAuthStrategySchema.parse(input);
+    const parsed = updateProxyAuthStrategiesSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {
       return { error: "Client not found" };
@@ -827,23 +836,23 @@ export const updateProxyAuthStrategyAction = async (
       return { error: "Client is not configured for upstream mode" };
     }
 
-    await updateProxyAuthStrategy(client.id, parsed.proxyAuthStrategy);
+    await updateProxyAuthStrategies(client.id, parsed.proxyAuthStrategies);
     revalidatePath(clientPath(client.id));
     revalidatePath("/admin/clients");
     void emitConfigChange({
       tenantId: client.tenantId,
       actorId: adminId,
       action: "update",
-      resource: "proxy_auth_strategy",
+      resource: "proxy_auth_strategies",
       resourceId: client.id,
       resourceName: client.name,
       clientId: client.id,
-      message: "Proxy auth strategy updated",
+      message: "Proxy auth strategies updated",
     });
-    return { success: "Proxy auth strategy updated" };
+    return { success: "Proxy auth strategies updated" };
   } catch (error) {
     console.error(error);
-    return { error: "Unable to update proxy auth strategy" };
+    return { error: "Unable to update proxy auth strategies" };
   }
 };
 
@@ -857,7 +866,8 @@ export const startPreauthorizedAdminAuthAction = async (
     if (!client) {
       return { error: "Client not found" };
     }
-    if (client.oauthClientMode !== "proxy" || client.proxyAuthStrategy !== "preauthorized") {
+    const proxyAuthStrategies = parseProxyAuthStrategies(client.proxyAuthStrategies);
+    if (client.oauthClientMode !== "proxy" || !proxyAuthStrategies.preauthorized.enabled) {
       return { error: "Client is not preauthorized" };
     }
 

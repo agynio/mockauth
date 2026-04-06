@@ -27,6 +27,13 @@ import {
   PROXY_TOKEN_AUTH_OPTIONS,
   getProxyTokenAuthDescription,
 } from "@/app/admin/clients/proxy-auth-options";
+import {
+  DEFAULT_PROXY_AUTH_STRATEGIES,
+  hasEnabledProxyStrategy,
+  PROXY_AUTH_STRATEGY_METADATA,
+  proxyAuthStrategiesZodSchema,
+  type ProxyAuthStrategies,
+} from "@/server/oidc/proxy-auth-strategy";
 
 const scopeMappingSchema = z.object({
   appScope: z.string().optional(),
@@ -63,12 +70,20 @@ const formSchema = z
       .min(1, "Select at least one grant type"),
     redirects: z.string().optional(),
     mode: z.enum(["regular", "proxy"] as const),
-    proxyAuthStrategy: z.enum(["redirect", "preauthorized"]).default("redirect"),
+    proxyAuthStrategies: proxyAuthStrategiesZodSchema,
     proxyConfig: proxyConfigSchema.optional(),
   })
   .superRefine((values, ctx) => {
     if (values.mode === "regular") {
       return;
+    }
+
+    if (!hasEnabledProxyStrategy(values.proxyAuthStrategies)) {
+      ctx.addIssue({
+        path: ["proxyAuthStrategies", "root"],
+        code: "custom",
+        message: "Enable at least one strategy",
+      });
     }
 
     const config = values.proxyConfig;
@@ -217,6 +232,10 @@ const createDefaultProxyConfig = (): NonNullable<FormValues["proxyConfig"]> => (
   passthroughTokenResponse: false,
 });
 
+const createDefaultProxyAuthStrategies = (): ProxyAuthStrategies => ({
+  ...DEFAULT_PROXY_AUTH_STRATEGIES,
+});
+
 const splitScopes = (value?: string | null) => {
   if (!value) {
     return [];
@@ -317,7 +336,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       allowedGrantTypes: ["authorization_code"],
       redirects: "",
       mode: "regular",
-      proxyAuthStrategy: "redirect",
+      proxyAuthStrategies: createDefaultProxyAuthStrategies(),
       proxyConfig: createDefaultProxyConfig(),
     },
   });
@@ -414,7 +433,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         allowedGrantTypes: values.allowedGrantTypes,
         redirects: redirectEntries,
         mode: values.mode,
-        proxyAuthStrategy: values.mode === "proxy" ? values.proxyAuthStrategy : undefined,
+        proxyAuthStrategies: values.mode === "proxy" ? values.proxyAuthStrategies : undefined,
         proxyConfig: proxyConfigInput,
       });
 
@@ -432,7 +451,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         allowedGrantTypes: values.allowedGrantTypes,
         redirects: "",
         mode: values.mode,
-        proxyAuthStrategy: values.proxyAuthStrategy,
+        proxyAuthStrategies: values.proxyAuthStrategies,
         proxyConfig: createDefaultProxyConfig(),
       });
     });
@@ -594,18 +613,52 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
               </p>
             </div>
 
-            <RHFSelectField
-              control={form.control}
-              name="proxyAuthStrategy"
-              label="Proxy auth strategy"
-              placeholder="Select auth strategy"
-              options={[
-                { value: "redirect", label: "Redirect (standard proxy)" },
-                { value: "preauthorized", label: "Preauthorized identities" },
-              ]}
-              disabled={pending}
-              description="Choose how upstream identities are selected during authorization."
-            />
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold">Proxy auth strategies</h4>
+                <p className="text-xs text-muted-foreground">
+                  Choose how upstream identities are selected during authorization.
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {(Object.keys(PROXY_AUTH_STRATEGY_METADATA) as (keyof ProxyAuthStrategies)[]).map((key) => (
+                  <div key={key} className="rounded-md border p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h5 className="text-sm font-semibold text-foreground">
+                          {PROXY_AUTH_STRATEGY_METADATA[key].title}
+                        </h5>
+                        <p className="text-xs text-muted-foreground">
+                          {PROXY_AUTH_STRATEGY_METADATA[key].description}
+                        </p>
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name={`proxyAuthStrategies.${key}.enabled` as const}
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2">
+                            <FormControl>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border border-muted"
+                                checked={field.value}
+                                onChange={(event) => field.onChange(event.target.checked)}
+                                disabled={pending}
+                                data-testid={`proxy-strategy-${key}-enabled`}
+                              />
+                            </FormControl>
+                            <FormLabel className="text-xs text-muted-foreground">Enabled</FormLabel>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {form.formState.errors.proxyAuthStrategies?.root?.message ? (
+                <p className="text-sm text-destructive">{form.formState.errors.proxyAuthStrategies.root.message}</p>
+              ) : null}
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <RHFSelectField

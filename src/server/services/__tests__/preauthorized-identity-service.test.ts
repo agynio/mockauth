@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/server/db/client";
 import { decrypt, encrypt } from "@/server/crypto/key-vault";
+import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 import { createClient } from "@/server/services/client-service";
 import {
   createPreauthorizedIdentity,
@@ -28,7 +29,11 @@ const createPreauthorizedClient = async (tenantId: string) => {
     name: "Preauth Client",
     tokenEndpointAuthMethods: ["client_secret_basic"],
     oauthClientMode: "proxy",
-    proxyAuthStrategy: "preauthorized",
+    proxyAuthStrategies: {
+      ...DEFAULT_PROXY_AUTH_STRATEGIES,
+      redirect: { enabled: false },
+      preauthorized: { enabled: true },
+    },
     proxyConfig: {
       providerType: "oidc",
       authorizationEndpoint: "https://provider.example/authorize",

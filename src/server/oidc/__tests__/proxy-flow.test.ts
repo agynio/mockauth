@@ -15,8 +15,10 @@ import {
   completeProxyRefreshGrant,
 } from "@/server/services/proxy-token-service";
 import { createSession, clearSession } from "@/server/services/mock-session-service";
+import { PREAUTHORIZED_PICKER_COOKIE } from "@/server/oidc/preauthorized/constants";
 import { PROXY_TRANSACTION_COOKIE, buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
+import { DEFAULT_PROXY_AUTH_STRATEGIES, type ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 
@@ -63,7 +65,7 @@ describe("Proxy client OAuth flow", () => {
     };
   };
 
-  const startProxyAuthorization = async (options: {
+  type ProxyAuthorizeOptions = {
     clientId: string;
     redirectUri: string;
     codeChallenge: string;
@@ -72,8 +74,10 @@ describe("Proxy client OAuth flow", () => {
     nonce?: string;
     prompt?: string;
     loginHint?: string;
-  }) => {
-    const authorize = await handleAuthorize(
+  };
+
+  const requestAuthorize = async (options: ProxyAuthorizeOptions) => {
+    return handleAuthorize(
       {
         apiResourceId,
         clientId: options.clientId,
@@ -91,11 +95,52 @@ describe("Proxy client OAuth flow", () => {
       "https://mockauth.test",
       `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${options.clientId}`,
     );
+  };
+
+  const startProxyAuthorization = async (options: ProxyAuthorizeOptions) => {
+    const authorize = await requestAuthorize(options);
 
     const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
     const providerAuthorizeUrl = new URL(authorize.redirectTo);
     const transactionId = providerAuthorizeUrl.searchParams.get("state");
     return { authorize, proxyCookie, transactionId };
+  };
+
+  const createProxyStrategyClient = async (proxyAuthStrategies: ProxyAuthStrategies) => {
+    const client = await prisma.client.create({
+      data: {
+        tenantId,
+        clientId: `proxy_strategy_${randomUUID().slice(0, 8)}`,
+        name: "Proxy Strategy Client",
+        tokenEndpointAuthMethods: ["none"],
+        oauthClientMode: "proxy",
+        proxyAuthStrategies,
+        allowedScopes: ["openid", "profile"],
+        authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
+        redirectUris: {
+          create: [{ uri: "https://proxy-strategy.test/callback", type: "EXACT" }],
+        },
+        proxyConfig: {
+          create: {
+            providerType: "oidc",
+            authorizationEndpoint: "https://upstream-strategy.example.com/oauth2/authorize",
+            tokenEndpoint: "https://upstream-strategy.example.com/oauth2/token",
+            upstreamClientId: `up-strategy-${randomUUID().slice(0, 8)}`,
+            defaultScopes: ["openid", "profile"],
+            scopeMapping: { profile: ["profile.read"] },
+            pkceSupported: true,
+            oidcEnabled: true,
+            promptPassthroughEnabled: false,
+            loginHintPassthroughEnabled: false,
+            passthroughTokenResponse: false,
+            upstreamTokenEndpointAuthMethod: "none",
+          },
+        },
+      },
+    });
+
+    cleanupClientIds.push(client.id);
+    return client;
   };
 
   const asNextRequest = (request: Request) => request as unknown as NextRequest;
@@ -117,7 +162,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy QA Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -153,6 +198,94 @@ describe("Proxy client OAuth flow", () => {
     await Promise.all(
       cleanupClientIds.map((id) => prisma.client.delete({ where: { id } }).catch(() => undefined)),
     );
+  });
+
+  describe("proxy auth strategy selection", () => {
+    it("routes redirect-only strategies to the upstream flow", async () => {
+      const client = await createProxyStrategyClient(DEFAULT_PROXY_AUTH_STRATEGIES);
+      const codeChallenge = computeS256Challenge("verifier-strategy-redirect-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+
+      const authorize = await requestAuthorize({
+        clientId: client.clientId,
+        redirectUri: "https://proxy-strategy.test/callback",
+        codeChallenge,
+        state: "strategy-redirect",
+      });
+
+      expect(authorize.redirectTo).toContain("https://upstream-strategy.example.com/oauth2/authorize");
+      const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
+      expect(proxyCookie).toBeDefined();
+      const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
+      expect(pickerCookie).toBeUndefined();
+    });
+
+    it("routes preauthorized-only strategies to the picker", async () => {
+      const client = await createProxyStrategyClient({
+        redirect: { enabled: false },
+        preauthorized: { enabled: true },
+      });
+      const codeChallenge = computeS256Challenge("verifier-strategy-preauth-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+
+      const authorize = await requestAuthorize({
+        clientId: client.clientId,
+        redirectUri: "https://proxy-strategy.test/callback",
+        codeChallenge,
+        state: "strategy-preauthorized",
+      });
+
+      expect(authorize.redirectTo).toBe(`/r/${apiResourceId}/oidc/preauthorized/picker`);
+      const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
+      expect(pickerCookie).toBeDefined();
+    });
+
+    it("prefers the preauthorized flow when identities exist", async () => {
+      const client = await createProxyStrategyClient({
+        redirect: { enabled: true },
+        preauthorized: { enabled: true },
+      });
+      await prisma.preauthorizedIdentity.create({
+        data: {
+          tenantId,
+          clientId: client.id,
+          label: "Strategy User",
+          providerSubject: `strategy-${randomUUID().slice(0, 8)}`,
+          providerEmail: "strategy@example.com",
+          providerScope: "openid profile",
+          providerResponseEncrypted: encrypt(JSON.stringify({ access_token: "preauth-access" })),
+        },
+      });
+
+      const codeChallenge = computeS256Challenge("verifier-strategy-both-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+      const authorize = await requestAuthorize({
+        clientId: client.clientId,
+        redirectUri: "https://proxy-strategy.test/callback",
+        codeChallenge,
+        state: "strategy-preauth-exists",
+      });
+
+      expect(authorize.redirectTo).toBe(`/r/${apiResourceId}/oidc/preauthorized/picker`);
+      const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
+      expect(pickerCookie).toBeDefined();
+    });
+
+    it("falls back to redirect when no preauthorized identities exist", async () => {
+      const client = await createProxyStrategyClient({
+        redirect: { enabled: true },
+        preauthorized: { enabled: true },
+      });
+      const codeChallenge = computeS256Challenge("verifier-strategy-fallback-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+
+      const authorize = await requestAuthorize({
+        clientId: client.clientId,
+        redirectUri: "https://proxy-strategy.test/callback",
+        codeChallenge,
+        state: "strategy-fallback",
+      });
+
+      expect(authorize.redirectTo).toContain("https://upstream-strategy.example.com/oauth2/authorize");
+      const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
+      expect(proxyCookie).toBeDefined();
+    });
   });
 
   it("logs provider redirect details with PKCE", async () => {
@@ -214,7 +347,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy No PKCE Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -298,7 +431,7 @@ describe("Proxy client OAuth flow", () => {
         name: "Proxy Invalid Endpoint Client",
         tokenEndpointAuthMethods: ["none"],
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -928,7 +1061,7 @@ describe("Proxy client OAuth flow", () => {
         clientSecretHash: await hashSecret(localSecret),
         clientSecretEncrypted: encrypt(localSecret),
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {
@@ -1270,7 +1403,7 @@ describe("Proxy client OAuth flow", () => {
         clientSecretHash: await hashSecret(localSecret),
         clientSecretEncrypted: encrypt(localSecret),
         oauthClientMode: "proxy",
-        proxyAuthStrategy: "redirect",
+        proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
         allowedScopes: ["openid", "profile"],
         authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
         redirectUris: {

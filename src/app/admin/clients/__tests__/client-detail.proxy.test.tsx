@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, beforeEach, it, expect, vi } from "vitest";
 
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
+import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 
 import ClientDetailPage from "../[clientId]/page";
 
@@ -16,7 +17,7 @@ const proxyClientBase = {
   tokenEndpointAuthMethods: ["none"],
   pkceRequired: true,
   oauthClientMode: "proxy",
-  proxyAuthStrategy: "redirect",
+  proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
   allowedScopes: ["openid", "profile"],
   allowedGrantTypes: ["authorization_code", "refresh_token"],
   allowedResponseTypes: ["code"],
@@ -89,7 +90,7 @@ vi.mock("../[clientId]/client-forms", () => ({
   UpdateClientNameForm: () => <div data-testid="client-name-form" />,
   UpdateTokenConfigForm: () => <div data-testid="client-token-form" />,
   UpdateClientIssuerForm: () => <div data-testid="client-issuer-form" />,
-  UpdateProxyAuthStrategyForm: () => <div data-testid="proxy-auth-strategy-form" />,
+  UpdateProxyAuthStrategiesForm: () => <div data-testid="proxy-auth-strategy-form" />,
   UpdateProxyProviderConfigForm: ({
     initialConfig,
     storedSecret,
@@ -132,7 +133,7 @@ describe("ClientDetailPage proxy mode", () => {
     const page = await ClientDetailPage({ params: Promise.resolve({ clientId: "client_proxy" }) });
     render(page);
 
-    const providerField = screen.getByTestId("provider-redirect-uri");
+    const providerField = screen.getByTestId("provider-redirect-uri-redirect");
     expect(within(providerField).getByText("https://mockauth.test/r/api-default/oidc/proxy/callback")).toBeInTheDocument();
     expect(screen.getByTestId("proxy-mode-note")).toBeInTheDocument();
 

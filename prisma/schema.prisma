@@ -36,11 +36,6 @@ enum OAuthClientMode {
   proxy
 }
 
-enum ProxyAuthStrategy {
-  redirect
-  preauthorized
-}
-
 enum ProxyProviderType {
   oidc
   oauth2
@@ -192,7 +187,7 @@ model Client {
   clientSecretHash         String?
   clientSecretEncrypted    String?
   oauthClientMode          OAuthClientMode          @default(regular)
-  proxyAuthStrategy        ProxyAuthStrategy?
+  proxyAuthStrategies      Json?
   allowedScopes            String[]                 @default(["openid", "profile", "email"])
   allowedGrantTypes        String[]                 @default(["authorization_code"])
   allowedResponseTypes     String[]                 @default(["code"])
