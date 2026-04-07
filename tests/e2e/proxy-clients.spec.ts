@@ -262,9 +262,11 @@ test.describe("proxy clients", () => {
     await page.waitForURL(/\/admin\/clients\/[0-9a-f-]+$/);
 
     await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
+    const strategyCard = page.getByTestId("proxy-auth-strategies-card");
+    await expect(strategyCard).toBeVisible();
 
-    const redirectCheckbox = page.getByTestId("proxy-strategy-redirect-enabled");
-    const preauthorizedCheckbox = page.getByTestId("proxy-strategy-preauthorized-enabled");
+    const redirectCheckbox = strategyCard.getByTestId("proxy-strategy-redirect-enabled");
+    const preauthorizedCheckbox = strategyCard.getByTestId("proxy-strategy-preauthorized-enabled");
 
     await expect(redirectCheckbox).toBeChecked();
     await expect(preauthorizedCheckbox).not.toBeChecked();
@@ -301,6 +303,7 @@ test.describe("proxy clients", () => {
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
+    await expect(page.getByTestId("proxy-auth-strategies-card")).toBeVisible();
     await expect(redirectCheckbox).toBeChecked();
     await expect(preauthorizedCheckbox).not.toBeChecked();
     await expect(page.locator('[data-testid="preauthorized-identities"]')).toHaveCount(0);

@@ -136,6 +136,8 @@ describe("ClientDetailPage proxy mode", () => {
     const providerField = screen.getByTestId("provider-redirect-uri-redirect");
     expect(within(providerField).getByText("https://mockauth.test/r/api-default/oidc/proxy/callback")).toBeInTheDocument();
     expect(screen.getByTestId("proxy-mode-note")).toBeInTheDocument();
+    expect(screen.getByTestId("proxy-auth-strategies-card")).toBeInTheDocument();
+    expect(screen.getByTestId("proxy-auth-strategy-form")).toBeInTheDocument();
 
     expect(screen.queryByTestId("client-scopes-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-auth-strategies-card")).not.toBeInTheDocument();
