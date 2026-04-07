@@ -233,7 +233,7 @@ describe("Proxy client OAuth flow", () => {
         state: "strategy-preauthorized",
       });
 
-      expect(authorize.redirectTo).toBe(`/r/${apiResourceId}/oidc/preauthorized/picker`);
+      expect(authorize.redirectTo).toBe(`https://mockauth.test/r/${apiResourceId}/oidc/preauthorized/picker`);
       const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
       expect(pickerCookie).toBeDefined();
     });
@@ -263,7 +263,7 @@ describe("Proxy client OAuth flow", () => {
         state: "strategy-preauth-exists",
       });
 
-      expect(authorize.redirectTo).toBe(`/r/${apiResourceId}/oidc/preauthorized/picker`);
+      expect(authorize.redirectTo).toBe(`https://mockauth.test/r/${apiResourceId}/oidc/preauthorized/picker`);
       const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
       expect(pickerCookie).toBeDefined();
     });

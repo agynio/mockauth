@@ -492,5 +492,9 @@ const handlePreauthorizedAuthorize = async (args: {
     },
   ];
 
-  return { type: "redirect", redirectTo: `/r/${resourceId}/oidc/preauthorized/picker`, cookies };
+  return {
+    type: "redirect",
+    redirectTo: new URL(`/r/${resourceId}/oidc/preauthorized/picker`, origin).toString(),
+    cookies,
+  };
 };
