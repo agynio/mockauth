@@ -357,11 +357,6 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                 />
               );
             })}
-            <UpdateProxyAuthStrategiesForm
-              clientId={client.id}
-              canEdit={canManageClients}
-              initialStrategies={proxyAuthStrategies}
-            />
             {proxyConfigMissing ? (
               <Alert variant="warning" data-testid="proxy-config-missing">
                 <AlertTitle>Missing upstream configuration</AlertTitle>
@@ -386,6 +381,22 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                 storedSecret={upstreamClientSecretValue}
               />
             ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showProxyProviderSection ? (
+        <Card data-testid="proxy-auth-strategies-card">
+          <CardHeader>
+            <CardTitle>Auth strategies</CardTitle>
+            <CardDescription>Enable proxy authentication strategies for this client.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UpdateProxyAuthStrategiesForm
+              clientId={client.id}
+              canEdit={canManageClients}
+              initialStrategies={proxyAuthStrategies}
+            />
           </CardContent>
         </Card>
       ) : null}
