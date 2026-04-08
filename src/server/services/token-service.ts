@@ -268,6 +268,14 @@ export const issueTokensFromCode = async (params: {
 }) => {
   const { code, codeVerifier, redirectUri, clientSecret, origin, authorizationCode, auditContext } = params;
   const traceId = code.traceId ?? null;
+
+  if (code.client.oauthClientMode === "proxy") {
+    throw new DomainError("Proxy authorization codes must be redeemed via proxy token flow", {
+      status: 400,
+      code: "invalid_grant",
+    });
+  }
+
   const allowedMethods = parseTokenAuthMethods(code.client.tokenEndpointAuthMethods);
   const authMethod = auditContext?.authMethod ?? allowedMethods[0];
   const violationContext = {
