@@ -8,7 +8,7 @@ const DEFAULT_RESOURCE_ID = "tenant_qa_default_resource";
 const ISSUER_BASE = `http://127.0.0.1:3000/r/${DEFAULT_RESOURCE_ID}/oidc`;
 const PROXY_CALLBACK_URI = `${ISSUER_BASE}/proxy/callback`;
 const APP_REDIRECT_URI = "https://proxy-app.example.test/callback";
-const APP_SCOPE = "openid profile email";
+const APP_SCOPE = "openid profile email offline_access";
 const PROXY_TRANSACTION_COOKIE = "mockauth_proxy_tx";
 
 type CreatedClient = {
@@ -103,12 +103,16 @@ const createRegularClient = async (page: Page, name: string, redirectUris: strin
 
   await page.getByLabel("Client name").fill(name);
   await page.getByLabel("Redirect URIs").fill(redirectUris.join("\n"));
+  await page.getByLabel("Refresh token").check();
   await page.getByRole("button", { name: "Create client" }).click();
 
   await expect(page.getByText("Client created").first()).toBeVisible();
   await page.getByRole("link", { name: "Back to list" }).click();
 
   const detailUrl = await openClientDetail(page, name);
+  await page.getByTestId("scope-suggestion-offline_access").click();
+  await page.getByTestId("scope-save-button").click();
+  await expect(page.getByTestId("scope-chip-offline_access")).toBeVisible();
   const clientId = await getCopyFieldValue(page, "oauth-field-client-id");
   const clientSecret = await getCopyFieldValue(page, "oauth-field-client-secret");
   const internalId = extractClientIdFromUrl(detailUrl);
@@ -349,13 +353,11 @@ const requestProxyToken = async (params: {
 const requestProxyRefresh = async (params: {
   clientId: string;
   clientSecret: string;
-  refreshToken?: string;
+  refreshToken: string;
   scope?: string;
 }) => {
   const body = new URLSearchParams({ grant_type: "refresh_token" });
-  if (params.refreshToken) {
-    body.set("refresh_token", params.refreshToken);
-  }
+  body.set("refresh_token", params.refreshToken);
   if (params.scope) {
     body.set("scope", params.scope);
   }
@@ -392,6 +394,26 @@ const fetchAuditLogs = async (
   }
   const payload = (await response.json()) as { logs: AuditLogEntry[] };
   return payload.logs;
+};
+
+const fetchProxyTokenExchange = async (request: APIRequestContext, transactionId: string) => {
+  const response = await request.get(`/api/test/proxy/token-exchange?transactionId=${transactionId}`);
+  if (!response.ok()) {
+    throw new Error(`Proxy token exchange request failed: ${response.status()}`);
+  }
+  const payload = (await response.json()) as {
+    exchange: { providerResponse: Record<string, unknown> };
+  };
+  return payload.exchange;
+};
+
+const updateClientScopes = async (request: APIRequestContext, clientId: string, scopes: string[]) => {
+  const response = await request.post("/api/test/clients/scopes", {
+    data: { clientId, scopes },
+  });
+  if (!response.ok()) {
+    throw new Error(`Client scopes update failed: ${response.status()}`);
+  }
 };
 
 const findAuditEvent = (logs: AuditLogEntry[], eventType: string, severity?: string) => {
@@ -492,6 +514,7 @@ test.describe("proxy mockauth upstream", () => {
         upstreamClientId: upstream.clientId,
         upstreamClientSecret: upstream.clientSecret,
       });
+      await updateClientScopes(request, proxy.internalId, ["openid", "profile", "email", "offline_access"]);
 
       const authorization = await runProxyAuthorization({
         clientId: proxy.clientId,
@@ -513,54 +536,82 @@ test.describe("proxy mockauth upstream", () => {
       expect(tokenPayload.token_type).toBe("Bearer");
       expect(tokenPayload.expires_in).toBeDefined();
       expect(tokenPayload.scope).toContain("openid");
+      expect(tokenPayload.scope).toContain("offline_access");
       if (tokenPayload.id_token !== undefined) {
         expect(typeof tokenPayload.id_token).toBe("string");
       }
+      if (!tokenPayload.refresh_token) {
+        throw new Error("Refresh token missing from proxy token response");
+      }
+      const refreshToken = tokenPayload.refresh_token;
 
       const auditLogs = await fetchAuditLogs(request, { traceId: authorization.transactionId });
       const callbackSuccess = findAuditEvent(auditLogs, "PROXY_CALLBACK_SUCCESS", "INFO");
       expect(callbackSuccess.traceId).toBe(authorization.transactionId);
+      const callbackDetails = callbackSuccess.details as Record<string, unknown>;
+      const callbackTokenResponse = callbackDetails?.tokenResponse as Record<string, unknown> | undefined;
+      if (!callbackTokenResponse) {
+        throw new Error("Proxy callback token response missing");
+      }
+      expect(callbackTokenResponse.refresh_token).toBe(refreshToken);
       const tokenCompleted = findAuditEvent(auditLogs, "TOKEN_AUTHCODE_COMPLETED", "INFO");
       const completedDetails = tokenCompleted.details as Record<string, unknown>;
       expect(completedDetails?.upstreamCall).toBe(false);
       expect(typeof completedDetails?.access_token).toBe("string");
       expect(completedDetails?.token_type).toBe("Bearer");
       expect(completedDetails?.expires_in).toBeDefined();
+      expect(completedDetails?.refresh_token).toBe(refreshToken);
 
       const providerResponse = completedDetails?.providerResponse as Record<string, unknown> | undefined;
       if (!providerResponse) {
         throw new Error("Provider response missing from audit log");
       }
       expect(providerResponse.access_token).toBe(tokenPayload.access_token);
+      expect(providerResponse.refresh_token).toBe(refreshToken);
       if (tokenPayload.id_token) {
         expect(providerResponse.id_token).toBe(tokenPayload.id_token);
       }
+      const tokenExchange = await fetchProxyTokenExchange(request, authorization.transactionId);
+      expect(tokenExchange.providerResponse.refresh_token).toBe(refreshToken);
 
-      if (tokenPayload.refresh_token) {
-        const refreshResponse = await requestProxyRefresh({
-          clientId: proxy.clientId,
-          clientSecret: proxy.clientSecret,
-          refreshToken: tokenPayload.refresh_token,
-          scope: tokenPayload.scope,
-        });
-        expect(refreshResponse.response.ok).toBeTruthy();
-        const refreshPayload = refreshResponse.payload as TokenResponse;
-        expect(typeof refreshPayload.access_token).toBe("string");
-        const refreshLogs = await fetchAuditLogs(request, {
-          clientId: proxy.internalId,
-          eventType: "TOKEN_REFRESH_COMPLETED",
-        });
-        const refreshEvent = findAuditEvent(refreshLogs, "TOKEN_REFRESH_COMPLETED", "INFO");
-        const refreshDetails = refreshEvent.details as TokenResponse;
-        expect(refreshDetails.diagnostics).toBeTruthy();
-      } else {
-        const refreshResponse = await requestProxyRefresh({
-          clientId: proxy.clientId,
-          clientSecret: proxy.clientSecret,
-        });
-        expect(refreshResponse.response.status).toBe(400);
-        expect(refreshResponse.payload.error).toBe("invalid_request");
+      const refreshResponse = await requestProxyRefresh({
+        clientId: proxy.clientId,
+        clientSecret: proxy.clientSecret,
+        refreshToken,
+        scope: tokenPayload.scope,
+      });
+      expect(refreshResponse.response.ok).toBeTruthy();
+      const refreshPayload = refreshResponse.payload as TokenResponse;
+      expect(typeof refreshPayload.access_token).toBe("string");
+      if (!refreshPayload.refresh_token) {
+        throw new Error("Refresh token missing from refresh response");
       }
+
+      const refreshLogs = await fetchAuditLogs(request, {
+        clientId: proxy.internalId,
+        eventType: "TOKEN_REFRESH_COMPLETED",
+      });
+      const refreshEvent = findAuditEvent(refreshLogs, "TOKEN_REFRESH_COMPLETED", "INFO");
+      const refreshDetails = refreshEvent.details as TokenResponse;
+      expect(refreshDetails.diagnostics).toBeTruthy();
+      expect(refreshDetails.refresh_token).toBe(refreshPayload.refresh_token);
+
+      const upstreamRefreshReceivedLogs = await fetchAuditLogs(request, {
+        clientId: upstream.internalId,
+        eventType: "TOKEN_REFRESH_RECEIVED",
+      });
+      const upstreamRefreshReceived = findAuditEvent(upstreamRefreshReceivedLogs, "TOKEN_REFRESH_RECEIVED", "INFO");
+      const upstreamReceivedDetails = upstreamRefreshReceived.details as Record<string, unknown>;
+      expect(upstreamReceivedDetails.refreshToken).toBe(refreshToken);
+
+      const upstreamRefreshLogs = await fetchAuditLogs(request, {
+        clientId: upstream.internalId,
+        eventType: "TOKEN_REFRESH_COMPLETED",
+      });
+      const upstreamRefresh = findAuditEvent(upstreamRefreshLogs, "TOKEN_REFRESH_COMPLETED", "INFO");
+      const upstreamRefreshDetails = upstreamRefresh.details as TokenResponse;
+      expect(typeof upstreamRefreshDetails.access_token).toBe("string");
+      expect(typeof upstreamRefreshDetails.refresh_token).toBe("string");
     } finally {
       if (proxy) {
         await deleteClient(page, proxy.detailUrl);
@@ -586,6 +637,7 @@ test.describe("proxy mockauth upstream", () => {
         upstreamClientId: upstream.clientId,
         upstreamClientSecret: upstream.clientSecret,
       });
+      await updateClientScopes(request, proxy.internalId, ["openid", "profile", "email", "offline_access"]);
 
       const authorization = await runProxyAuthorization({
         clientId: proxy.clientId,
@@ -641,6 +693,7 @@ test.describe("proxy mockauth upstream", () => {
         upstreamClientId: upstream.clientId,
         upstreamClientSecret: upstream.clientSecret,
       });
+      await updateClientScopes(request, proxy.internalId, ["openid", "profile", "email", "offline_access"]);
 
       await updateProxyClientSecret(page, proxy.detailUrl, "bad-secret");
       const failedAuthorization = await runProxyAuthorizationError({
