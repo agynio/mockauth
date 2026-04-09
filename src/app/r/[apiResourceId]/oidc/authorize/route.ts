@@ -21,6 +21,7 @@ const authorizeSchema = z.object({
   code_challenge: z.string().min(43).max(128).optional(),
   code_challenge_method: z.string().default("S256"),
   fresh_login: z.string().optional(),
+  proxy_strategy: z.enum(["redirect", "preauthorized"]).optional(),
 });
 
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
         codeChallengeMethod: validation.data.code_challenge_method,
         prompt: validation.data.prompt,
         loginHint: validation.data.login_hint,
+        proxyStrategy: validation.data.proxy_strategy,
         sessionToken,
         reauthCookie,
         freshLoginCookie,

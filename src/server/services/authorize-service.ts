@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
 
 import { DomainError } from "@/server/errors";
-import { prisma } from "@/server/db/client";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createAuthorizationCode } from "@/server/services/authorization-code-service";
 import { getSessionUser } from "@/server/services/mock-session-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
-import { enabledProxyStrategies, parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
+import {
+  enabledProxyStrategies,
+  parseProxyAuthStrategies,
+  type ProxyAuthStrategy,
+} from "@/server/oidc/proxy-auth-strategy";
 import { normalizeScopes } from "@/server/oidc/scopes";
 import { verifyFreshLoginCookieValue, verifyReauthCookieValue } from "@/server/oidc/reauth-cookie";
 import { hashOpaqueToken, generateOpaqueToken } from "@/server/crypto/opaque-token";
@@ -43,6 +46,7 @@ type AuthorizeParams = {
   codeChallengeMethod?: string;
   prompt?: string;
   loginHint?: string;
+  proxyStrategy?: ProxyAuthStrategy;
   sessionToken?: string;
   reauthCookie?: string;
   freshLoginCookie?: string;
@@ -99,6 +103,11 @@ export const handleAuthorize = async (
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
+  const buildLoginRedirect = (): AuthorizeResult => ({
+    type: "login",
+    redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
+  });
+
   const codeChallengeMethod = params.codeChallengeMethod ?? "S256";
   let resolvedCodeChallenge = "";
   let resolvedCodeChallengeMethod = "S256";
@@ -126,12 +135,18 @@ export const handleAuthorize = async (
     if (enabledStrategies.length === 0) {
       throw new DomainError("At least one proxy auth strategy must be enabled", { status: 400, code: "invalid_client" });
     }
-    let strategy = enabledStrategies[0];
-    if (enabledStrategies.length > 1) {
-      const preauthorizedCount = await prisma.preauthorizedIdentity.count({
-        where: { tenantId: tenant.id, clientId: client.id },
-      });
-      strategy = preauthorizedCount > 0 ? "preauthorized" : "redirect";
+    let strategy: ProxyAuthStrategy | null = null;
+    if (params.proxyStrategy) {
+      if (!enabledStrategies.includes(params.proxyStrategy)) {
+        throw new DomainError("Requested proxy strategy is not enabled", { status: 400, code: "invalid_request" });
+      }
+      strategy = params.proxyStrategy;
+    } else if (enabledStrategies.length === 1) {
+      strategy = enabledStrategies[0] ?? null;
+    }
+
+    if (!strategy) {
+      return buildLoginRedirect();
     }
     if (strategy === "preauthorized") {
       return handlePreauthorizedAuthorize({
@@ -140,6 +155,7 @@ export const handleAuthorize = async (
         tenantId: tenant.id,
         resourceId: resource.id,
         client,
+        returnTo,
         requestContext,
       });
     }
@@ -212,11 +228,6 @@ export const handleAuthorize = async (
   const reusedViaReauthCookie = Boolean(cookieValid && session && strategyAllowed);
   const hasReusableLogin =
     resolvedParams.prompt === "login" ? reusedViaFreshLogin : reusedViaFreshLogin || reusedViaReauthCookie;
-
-  const buildLoginRedirect = (): AuthorizeResult => ({
-    type: "login",
-    redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
-  });
 
   if (resolvedParams.prompt === "login" && !reusedViaFreshLogin) {
     return buildLoginRedirect();
@@ -429,9 +440,10 @@ const handlePreauthorizedAuthorize = async (args: {
   tenantId: string;
   resourceId: string;
   client: Awaited<ReturnType<typeof getClientForTenant>>;
+  returnTo: string;
   requestContext?: RequestContext;
 }): Promise<AuthorizeResult> => {
-  const { params, origin, tenantId, resourceId, client, requestContext } = args;
+  const { params, origin, tenantId, resourceId, client, returnTo, requestContext } = args;
   const codeChallenge = params.codeChallenge ?? "";
   const codeChallengeMethod = params.codeChallengeMethod ?? "S256";
 
@@ -492,9 +504,12 @@ const handlePreauthorizedAuthorize = async (args: {
     },
   ];
 
+  const pickerUrl = new URL(`/r/${resourceId}/oidc/preauthorized/picker`, origin);
+  pickerUrl.searchParams.set("return_to", new URL(returnTo).toString());
+
   return {
     type: "redirect",
-    redirectTo: new URL(`/r/${resourceId}/oidc/preauthorized/picker`, origin).toString(),
+    redirectTo: pickerUrl.toString(),
     cookies,
   };
 };

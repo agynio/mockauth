@@ -4,6 +4,7 @@ import { format } from "date-fns";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { listPreauthorizedIdentities } from "@/server/services/preauthorized-identity-service";
 import { getPickerTransaction } from "@/server/services/preauthorized-picker-service";
@@ -11,6 +12,7 @@ import { PREAUTHORIZED_PICKER_COOKIE } from "@/server/oidc/preauthorized/constan
 
 type PageProps = {
   params: Promise<{ apiResourceId: string }>;
+  searchParams?: Promise<{ return_to?: string }>;
 };
 
 const renderError = (message: string) => (
@@ -25,8 +27,10 @@ const renderError = (message: string) => (
   </div>
 );
 
-export default async function PreauthorizedPickerPage({ params }: PageProps) {
+export default async function PreauthorizedPickerPage({ params, searchParams }: PageProps) {
   const { apiResourceId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const returnTo = resolvedSearchParams?.return_to;
   const store = await cookies();
   const transactionId = store.get(PREAUTHORIZED_PICKER_COOKIE)?.value;
   if (!transactionId) {
@@ -43,6 +47,17 @@ export default async function PreauthorizedPickerPage({ params }: PageProps) {
 
   const { tenant } = await getApiResourceWithTenant(apiResourceId);
   const identities = await listPreauthorizedIdentities(transaction.tenantId, transaction.clientId);
+  const proxyStrategies = parseProxyAuthStrategies(transaction.client.proxyAuthStrategies);
+  let redirectStrategyUrl: string | null = null;
+  if (proxyStrategies.redirect.enabled && returnTo) {
+    try {
+      const redirectUrl = new URL(returnTo, "http://localhost");
+      redirectUrl.searchParams.set("proxy_strategy", "redirect");
+      redirectStrategyUrl = redirectUrl.toString();
+    } catch {
+      redirectStrategyUrl = null;
+    }
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 text-foreground">
@@ -53,6 +68,11 @@ export default async function PreauthorizedPickerPage({ params }: PageProps) {
             Choose which identity should authorize access to <strong>{transaction.client.name}</strong> on tenant{" "}
             <strong>{tenant.name}</strong>.
           </p>
+          {redirectStrategyUrl ? (
+            <Button asChild variant="link" size="sm" className="h-auto p-0 text-xs">
+              <Link href={redirectStrategyUrl}>Use redirect instead</Link>
+            </Button>
+          ) : null}
         </div>
 
         {identities.length === 0 ? (
