@@ -395,31 +395,42 @@ export const issueTokensFromPassword = async (params: {
   }
 
   const strategies = parseClientAuthStrategies(client.authStrategies);
-  if (!strategies.username.enabled) {
-    throw new DomainError("Username authentication is disabled", { status: 400, code: "invalid_grant" });
-  }
-
   const trimmedIdentifier = username.trim();
   if (!trimmedIdentifier) {
     throw new DomainError("username is required", { status: 400, code: "invalid_request" });
+  }
+
+  const emailEnabled = strategies.email.enabled;
+  const usernameEnabled = strategies.username.enabled;
+  if (!emailEnabled && !usernameEnabled) {
+    throw new DomainError("No authentication strategy is enabled", { status: 400, code: "invalid_grant" });
+  }
+
+  const looksLikeEmail = trimmedIdentifier.includes("@");
+  const strategy: ClientAuthStrategy = emailEnabled && looksLikeEmail ? "email" : "username";
+  if (strategy === "username" && !usernameEnabled) {
+    throw new DomainError("Username authentication is disabled", { status: 400, code: "invalid_grant" });
   }
 
   await withSecurityViolationAudit(() => assertClientAuth(client, authMethod, clientSecret), violationContext);
 
   const requestedScopes = normalizeRequestedScopes(scope, client.allowedScopes);
   const normalizedScope = requestedScopes.join(" ");
+  const selectedConfig = strategy === "email" ? strategies.email : strategies.username;
   const subject =
-    strategies.username.subSource === "entered"
+    selectedConfig.subSource === "entered"
       ? trimmedIdentifier
       : await resolveStableSubject({
           tenantId: tenant.id,
-          strategy: "username",
+          strategy,
           identifier: trimmedIdentifier,
         });
 
+  const emailVerifiedClaim =
+    strategy === "email" && strategies.email.emailVerifiedMode === "true" ? true : undefined;
   const user = await findOrCreateMockUser(tenant.id, trimmedIdentifier, {
     displayName: trimmedIdentifier,
-    email: null,
+    email: strategy === "email" ? trimmedIdentifier : null,
   });
 
   return issueTokens({
@@ -430,6 +441,7 @@ export const issueTokensFromPassword = async (params: {
     subject,
     scope: normalizedScope,
     origin,
-    strategy: "username",
+    strategy,
+    emailVerifiedClaim,
   });
 };

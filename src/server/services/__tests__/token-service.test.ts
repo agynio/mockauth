@@ -38,6 +38,15 @@ const buildAuthStrategies = (overrides: StrategyOverrides = {}): ClientAuthStrat
   email: { ...DEFAULT_CLIENT_AUTH_STRATEGIES.email, ...overrides.email },
 });
 
+const updateAuthStrategies = async (clientId: string, overrides: StrategyOverrides) => {
+  await prisma.client.update({
+    where: { id: clientId },
+    data: {
+      authStrategies: buildAuthStrategies(overrides),
+    },
+  });
+};
+
 const createPasswordClient = async (input: {
   tenantId: string;
   allowedGrantTypes?: string[];
@@ -70,19 +79,175 @@ const createPasswordClient = async (input: {
 };
 
 describe("token service password grant", () => {
-  it("issues tokens when subject is entered", async () => {
+  it("issues tokens for email strategy", async () => {
     const { tenant, apiResource } = await createTenant();
     const { client, clientSecret } = await createPasswordClient({
       tenantId: tenant.id,
       allowedGrantTypes: ["password"],
-      allowedScopes: ["openid", "profile"],
+      allowedScopes: ["openid", "email", "profile"],
+    });
+
+    await updateAuthStrategies(client.id, {
+      username: { enabled: false },
+      email: { enabled: true },
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "user@example.com",
+      scope: "openid email profile",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    expect(response.access_token).toBeTruthy();
+    expect(response.id_token).toBeTruthy();
+
+    const idToken = decodeJwt(response.id_token!);
+    expect(idToken.sub).toBe("user@example.com");
+    expect(idToken.email).toBe("user@example.com");
+    expect(idToken.email_verified).toBe(false);
+    expect(idToken.preferred_username).toBeUndefined();
+  });
+
+  it("issues tokens when email subject is generated", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "email"],
+    });
+
+    await updateAuthStrategies(client.id, {
+      username: { enabled: false },
+      email: { enabled: true, subSource: "generated_uuid" },
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "user@example.com",
+      scope: "openid email",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const idToken = decodeJwt(response.id_token!);
+    const identity = await prisma.mockIdentity.findFirstOrThrow({
+      where: {
+        tenantId: tenant.id,
+        strategy: $Enums.LoginStrategy.EMAIL,
+        identifier: "user@example.com",
+      },
+    });
+
+    expect(idToken.sub).toBe(identity.sub);
+    expect(idToken.sub).not.toBe("user@example.com");
+  });
+
+  it("marks email as verified when configured", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "email"],
+    });
+
+    await updateAuthStrategies(client.id, {
+      username: { enabled: false },
+      email: { enabled: true, emailVerifiedMode: "true" },
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "user@example.com",
+      scope: "openid email",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const idToken = decodeJwt(response.id_token!);
+    expect(idToken.email_verified).toBe(true);
+  });
+
+  it("defaults email verification to false for user choice", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "email"],
+    });
+
+    await updateAuthStrategies(client.id, {
+      username: { enabled: false },
+      email: { enabled: true, emailVerifiedMode: "user_choice" },
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "user@example.com",
+      scope: "openid email",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const idToken = decodeJwt(response.id_token!);
+    expect(idToken.email_verified).toBe(false);
+  });
+
+  it("prefers email strategy when identifier includes @", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "email", "profile"],
+    });
+
+    await updateAuthStrategies(client.id, {
+      username: { enabled: true },
+      email: { enabled: true },
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "user@example.com",
+      scope: "openid email profile",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const idToken = decodeJwt(response.id_token!);
+    expect(idToken.email).toBe("user@example.com");
+    expect(idToken.preferred_username).toBeUndefined();
+  });
+
+  it("selects username strategy when identifier is not an email", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "email", "profile"],
+    });
+
+    await updateAuthStrategies(client.id, {
+      username: { enabled: true },
+      email: { enabled: true },
     });
 
     const response = await issueTokensFromPassword({
       apiResourceId: apiResource.id,
       clientId: client.clientId,
       username: "demo-user",
-      scope: "openid profile",
+      scope: "openid email profile",
       origin: ORIGIN,
       authMethod: "client_secret_post",
       clientSecret,
@@ -94,46 +259,61 @@ describe("token service password grant", () => {
     const idToken = decodeJwt(response.id_token!);
     expect(idToken.sub).toBe("demo-user");
     expect(idToken.preferred_username).toBe("demo-user");
+    expect(idToken.email).toBeUndefined();
   });
 
-  it("issues tokens when subject is generated", async () => {
+  it("treats email-like identifiers as username when only username is enabled", async () => {
     const { tenant, apiResource } = await createTenant();
     const { client, clientSecret } = await createPasswordClient({
       tenantId: tenant.id,
       allowedGrantTypes: ["password"],
-      allowedScopes: ["openid", "profile"],
+      allowedScopes: ["openid", "email", "profile"],
     });
 
-    await prisma.client.update({
-      where: { id: client.id },
-      data: {
-        authStrategies: buildAuthStrategies({
-          username: { subSource: "generated_uuid" },
-        }),
-      },
+    await updateAuthStrategies(client.id, {
+      username: { enabled: true },
+      email: { enabled: false },
     });
 
     const response = await issueTokensFromPassword({
       apiResourceId: apiResource.id,
       clientId: client.clientId,
-      username: "demo-user",
-      scope: "openid profile",
+      username: "user@example.com",
+      scope: "openid email profile",
       origin: ORIGIN,
       authMethod: "client_secret_post",
       clientSecret,
     });
 
     const idToken = decodeJwt(response.id_token!);
-    const identity = await prisma.mockIdentity.findFirstOrThrow({
-      where: {
-        tenantId: tenant.id,
-        strategy: $Enums.LoginStrategy.USERNAME,
-        identifier: "demo-user",
-      },
+    expect(idToken.preferred_username).toBe("user@example.com");
+    expect(idToken.email).toBeUndefined();
+  });
+
+  it("rejects password grants when only email is enabled and identifier is not an email", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password"],
+      allowedScopes: ["openid", "email"],
     });
 
-    expect(idToken.sub).toBe(identity.sub);
-    expect(idToken.sub).not.toBe("demo-user");
+    await updateAuthStrategies(client.id, {
+      username: { enabled: false },
+      email: { enabled: true },
+    });
+
+    await expect(
+      issueTokensFromPassword({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        username: "demo-user",
+        scope: "openid email",
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Username authentication is disabled");
   });
 
   it("rejects password grants when client disallows the grant type", async () => {
@@ -157,7 +337,7 @@ describe("token service password grant", () => {
     ).rejects.toThrowError("Client does not support password grant");
   });
 
-  it("rejects password grants when username strategy is disabled", async () => {
+  it("rejects password grants when no auth strategy is enabled", async () => {
     const { tenant, apiResource } = await createTenant();
     const { client, clientSecret } = await createPasswordClient({
       tenantId: tenant.id,
@@ -165,13 +345,9 @@ describe("token service password grant", () => {
       allowedScopes: ["openid", "profile"],
     });
 
-    await prisma.client.update({
-      where: { id: client.id },
-      data: {
-        authStrategies: buildAuthStrategies({
-          username: { enabled: false },
-        }),
-      },
+    await updateAuthStrategies(client.id, {
+      username: { enabled: false },
+      email: { enabled: false },
     });
 
     await expect(
@@ -184,7 +360,7 @@ describe("token service password grant", () => {
         authMethod: "client_secret_post",
         clientSecret,
       }),
-    ).rejects.toThrowError("Username authentication is disabled");
+    ).rejects.toThrowError("No authentication strategy is enabled");
   });
 
   it("rejects password grants for proxy clients", async () => {
