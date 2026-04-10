@@ -144,7 +144,7 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
             ) : (
               <form
                 method="POST"
-                action={`/r/${apiResourceId}/oidc/preauthorized/picker/select`}
+                action={`/r/${apiResourceId}/oidc/login/preauthorized/select`}
                 className="space-y-4"
               >
                 <fieldset className="space-y-3">
