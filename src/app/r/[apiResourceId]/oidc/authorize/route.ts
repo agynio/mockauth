@@ -21,8 +21,7 @@ const authorizeSchema = z.object({
   code_challenge: z.string().min(43).max(128).optional(),
   code_challenge_method: z.string().default("S256"),
   fresh_login: z.string().optional(),
-  auth_strategy: z.enum(["username", "email", "redirect", "preauthorized"]).optional(),
-  proxy_strategy: z.enum(["redirect", "preauthorized"]).optional(),
+  auth_strategy: z.string().trim().min(1).max(32).optional(),
 });
 
 export async function GET(request: NextRequest, context: ApiResourceRouteContext) {
@@ -40,7 +39,6 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
     const reauthCookie = request.cookies.get(MOCK_REAUTH_COOKIE)?.value;
     const freshLoginCookie = request.cookies.get(MOCK_FRESH_LOGIN_COOKIE)?.value;
     const freshLoginRequested = validation.data.fresh_login === "1";
-    const authStrategy = validation.data.auth_strategy ?? validation.data.proxy_strategy;
     const result = await handleAuthorize(
       {
         apiResourceId,
@@ -54,7 +52,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
         codeChallengeMethod: validation.data.code_challenge_method,
         prompt: validation.data.prompt,
         loginHint: validation.data.login_hint,
-        authStrategy,
+        authStrategy: validation.data.auth_strategy,
         sessionToken,
         reauthCookie,
         freshLoginCookie,

@@ -34,7 +34,6 @@ import { searchParamsToRecord } from "@/server/utils/search-params";
 import type { RequestContext } from "@/server/utils/request-context";
 
 type LoadedClient = Awaited<ReturnType<typeof getClientForTenant>>;
-type AuthStrategy = ClientAuthStrategy | ProxyAuthStrategy;
 type AuthorizeParams = {
   apiResourceId: string;
   clientId: string;
@@ -47,7 +46,7 @@ type AuthorizeParams = {
   codeChallengeMethod?: string;
   prompt?: string;
   loginHint?: string;
-  authStrategy?: AuthStrategy;
+  authStrategy?: string;
   sessionToken?: string;
   reauthCookie?: string;
   freshLoginCookie?: string;
@@ -87,10 +86,10 @@ const ensureScopes = (requestedScopes: string[], allowedScopes: string[]) => {
   }
 };
 
-const isProxyAuthStrategy = (value: AuthStrategy | undefined): value is ProxyAuthStrategy =>
+const isProxyAuthStrategy = (value: string | undefined): value is ProxyAuthStrategy =>
   value === "redirect" || value === "preauthorized";
 
-const isClientAuthStrategy = (value: AuthStrategy | undefined): value is ClientAuthStrategy =>
+const isClientAuthStrategy = (value: string | undefined): value is ClientAuthStrategy =>
   value === "username" || value === "email";
 
 export const handleAuthorize = async (
@@ -142,18 +141,19 @@ export const handleAuthorize = async (
     if (enabledStrategies.length === 0) {
       throw new DomainError("At least one proxy auth strategy must be enabled", { status: 400, code: "invalid_client" });
     }
-    if (params.authStrategy && !isProxyAuthStrategy(params.authStrategy)) {
-      throw new DomainError("Requested auth strategy is not valid for proxy clients", {
-        status: 400,
-        code: "invalid_request",
-      });
-    }
+    const requestedStrategy = params.authStrategy;
     let strategy: ProxyAuthStrategy | null = null;
-    if (params.authStrategy) {
-      if (!enabledStrategies.includes(params.authStrategy)) {
+    if (requestedStrategy) {
+      if (!isProxyAuthStrategy(requestedStrategy)) {
+        throw new DomainError("Requested auth strategy is not valid for proxy clients", {
+          status: 400,
+          code: "invalid_request",
+        });
+      }
+      if (!enabledStrategies.includes(requestedStrategy)) {
         throw new DomainError("Requested proxy strategy is not enabled", { status: 400, code: "invalid_request" });
       }
-      strategy = params.authStrategy;
+      strategy = requestedStrategy;
     } else if (enabledStrategies.length === 1) {
       strategy = enabledStrategies[0] ?? null;
     }
