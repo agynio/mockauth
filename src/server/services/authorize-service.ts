@@ -549,12 +549,14 @@ const handlePreauthorizedAuthorize = async (args: {
     },
   ];
 
-  const pickerUrl = new URL(`/r/${resourceId}/oidc/preauthorized/picker`, origin);
-  pickerUrl.searchParams.set("return_to", new URL(returnTo).toString());
+  const returnToUrl = new URL(returnTo);
+  returnToUrl.searchParams.set("auth_strategy", "preauthorized");
+  const loginUrl = new URL(`/r/${resourceId}/oidc/login`, origin);
+  loginUrl.searchParams.set("return_to", returnToUrl.toString());
 
   return {
     type: "redirect",
-    redirectTo: pickerUrl.toString(),
+    redirectTo: loginUrl.toString(),
     cookies,
   };
 };

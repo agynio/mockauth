@@ -251,7 +251,7 @@ describe("Proxy client OAuth flow", () => {
       expect(pickerCookie).toBeUndefined();
     });
 
-    it("routes preauthorized-only strategies to the picker", async () => {
+    it("routes preauthorized-only strategies to login", async () => {
       const client = await createProxyStrategyClient({
         redirect: { enabled: false },
         preauthorized: { enabled: true },
@@ -265,11 +265,12 @@ describe("Proxy client OAuth flow", () => {
         state: "strategy-preauthorized",
       };
       const returnToUrl = buildAuthorizeUrl(authorizeOptions);
+      returnToUrl.searchParams.set("auth_strategy", "preauthorized");
       const authorize = await requestAuthorize(authorizeOptions);
 
-      const pickerUrl = new URL(authorize.redirectTo);
-      expect(pickerUrl.pathname).toBe(`/r/${apiResourceId}/oidc/preauthorized/picker`);
-      expect(pickerUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
+      const loginUrl = new URL(authorize.redirectTo);
+      expect(loginUrl.pathname).toBe(`/r/${apiResourceId}/oidc/login`);
+      expect(loginUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
       const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
       expect(pickerCookie).toBeDefined();
     });
@@ -350,9 +351,9 @@ describe("Proxy client OAuth flow", () => {
       const returnToUrl = buildAuthorizeUrl(authorizeOptions);
       const authorize = await requestAuthorize(authorizeOptions);
 
-      const pickerUrl = new URL(authorize.redirectTo);
-      expect(pickerUrl.pathname).toBe(`/r/${apiResourceId}/oidc/preauthorized/picker`);
-      expect(pickerUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
+      const loginUrl = new URL(authorize.redirectTo);
+      expect(loginUrl.pathname).toBe(`/r/${apiResourceId}/oidc/login`);
+      expect(loginUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
       const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
       expect(pickerCookie).toBeDefined();
     });
