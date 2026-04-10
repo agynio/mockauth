@@ -340,7 +340,7 @@ describe("Proxy client OAuth flow", () => {
       });
       const codeChallenge = computeS256Challenge("verifier-strategy-preauth-requested-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
 
-      const authorizeOptions = {
+      const authorizeOptions: ProxyAuthorizeOptions = {
         clientId: client.clientId,
         redirectUri: "https://proxy-strategy.test/callback",
         codeChallenge,
