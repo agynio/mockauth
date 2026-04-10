@@ -42,6 +42,9 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     apiResourceId: resource.id,
     origin,
   });
+  const requestedAuthStrategy = parsedReturnTo?.searchParams.get("auth_strategy");
+  const preferredStrategy =
+    requestedAuthStrategy === "username" || requestedAuthStrategy === "email" ? requestedAuthStrategy : undefined;
   const safeReturnTo = resolveAuthorizeReturnTo(resolvedSearchParams?.return_to, {
     apiResourceId: resource.id,
     origin,
@@ -71,13 +74,13 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     }
     if (enabledStrategies.length === 1) {
       const redirectUrl = new URL(parsedReturnTo.toString());
-      redirectUrl.searchParams.set("proxy_strategy", enabledStrategies[0]!);
+      redirectUrl.searchParams.set("auth_strategy", enabledStrategies[0]!);
       redirect(toRelativeReturnTo(redirectUrl));
     }
 
     const buildStrategyUrl = (strategy: ProxyAuthStrategy) => {
       const redirectUrl = new URL(parsedReturnTo.toString());
-      redirectUrl.searchParams.set("proxy_strategy", strategy);
+      redirectUrl.searchParams.set("auth_strategy", strategy);
       return toRelativeReturnTo(redirectUrl);
     };
     const strategySummary = enabledStrategies
@@ -165,6 +168,9 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     };
   });
   const strategySummary = strategies.map((strategy) => strategy.title.toLowerCase()).join(" or ");
+  const preferredEnabledStrategy = preferredStrategy && strategies.some((strategy) => strategy.key === preferredStrategy)
+    ? preferredStrategy
+    : undefined;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 text-foreground">
@@ -173,7 +179,12 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
         <p className="mb-6 text-sm text-muted-foreground">
           Enter any {strategySummary} to simulate an end-user signing in. The session is scoped to tenant {tenant.id}.
         </p>
-        <LoginForm apiResourceId={apiResourceId} returnTo={returnTo} strategies={strategies} />
+        <LoginForm
+          apiResourceId={apiResourceId}
+          returnTo={returnTo}
+          strategies={strategies}
+          preferredStrategy={preferredEnabledStrategy}
+        />
         <p className="mt-4 text-xs text-muted-foreground">
           Need to manage tenants? Visit the{" "}
           <Link

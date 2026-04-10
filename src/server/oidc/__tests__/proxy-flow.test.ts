@@ -78,7 +78,7 @@ describe("Proxy client OAuth flow", () => {
     nonce?: string;
     prompt?: string;
     loginHint?: string;
-    proxyStrategy?: ProxyAuthStrategy;
+    authStrategy?: ProxyAuthStrategy;
   };
 
   const buildAuthorizeUrl = (options: ProxyAuthorizeOptions) => {
@@ -100,8 +100,8 @@ describe("Proxy client OAuth flow", () => {
     if (options.loginHint) {
       authorizeUrl.searchParams.set("login_hint", options.loginHint);
     }
-    if (options.proxyStrategy) {
-      authorizeUrl.searchParams.set("proxy_strategy", options.proxyStrategy);
+    if (options.authStrategy) {
+      authorizeUrl.searchParams.set("auth_strategy", options.authStrategy);
     }
     return authorizeUrl;
   };
@@ -122,7 +122,7 @@ describe("Proxy client OAuth flow", () => {
         prompt: options.prompt,
         sessionToken,
         loginHint: options.loginHint,
-        proxyStrategy: options.proxyStrategy,
+        authStrategy: options.authStrategy,
       },
       "https://mockauth.test",
       authorizeUrl.toString(),
@@ -325,7 +325,7 @@ describe("Proxy client OAuth flow", () => {
         redirectUri: "https://proxy-strategy.test/callback",
         codeChallenge,
         state: "strategy-redirect-requested",
-        proxyStrategy: "redirect",
+        authStrategy: "redirect",
       });
 
       expect(authorize.redirectTo).toContain("https://upstream-strategy.example.com/oauth2/authorize");
@@ -345,7 +345,7 @@ describe("Proxy client OAuth flow", () => {
         redirectUri: "https://proxy-strategy.test/callback",
         codeChallenge,
         state: "strategy-preauth-requested",
-        proxyStrategy: "preauthorized",
+        authStrategy: "preauthorized",
       };
       const returnToUrl = buildAuthorizeUrl(authorizeOptions);
       const authorize = await requestAuthorize(authorizeOptions);

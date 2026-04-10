@@ -58,7 +58,7 @@ export default async function PreauthorizedPickerPage({ params, searchParams }: 
   let redirectStrategyUrl: string | null = null;
   if (proxyStrategies.redirect.enabled && returnToUrl) {
     const redirectUrl = new URL(returnToUrl.toString());
-    redirectUrl.searchParams.set("proxy_strategy", "redirect");
+    redirectUrl.searchParams.set("auth_strategy", "redirect");
     redirectStrategyUrl = toRelativeReturnTo(redirectUrl);
   }
 
