@@ -1,23 +1,24 @@
-import { format } from "date-fns";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { format } from "date-fns";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { LoginForm } from "@/app/r/[apiResourceId]/oidc/login/login-form";
-import { DEFAULT_CLIENT_AUTH_STRATEGIES, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
-import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { ProxyStrategyTabs } from "@/app/r/[apiResourceId]/oidc/login/proxy-strategy-tabs";
+import { Button } from "@/components/ui/button";
 import {
-  PROXY_AUTH_STRATEGY_METADATA,
+  DEFAULT_CLIENT_AUTH_STRATEGIES,
+  parseClientAuthStrategies,
+  type ClientAuthStrategies,
+} from "@/server/oidc/auth-strategy";
+import { PREAUTHORIZED_PICKER_COOKIE } from "@/server/oidc/preauthorized/constants";
+import { parseAuthorizeReturnTo, resolveAuthorizeReturnTo, toRelativeReturnTo } from "@/server/oidc/return-to";
+import {
   enabledProxyStrategies,
   parseProxyAuthStrategies,
   type ProxyAuthStrategy,
 } from "@/server/oidc/proxy-auth-strategy";
-import { PREAUTHORIZED_PICKER_COOKIE } from "@/server/oidc/preauthorized/constants";
-import { parseAuthorizeReturnTo, resolveAuthorizeReturnTo, toRelativeReturnTo } from "@/server/oidc/return-to";
-import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { getClientForTenant } from "@/server/services/client-service";
 import { listPreauthorizedIdentities } from "@/server/services/preauthorized-identity-service";
 import { getPickerTransaction } from "@/server/services/preauthorized-picker-service";
 import { getRequestOrigin } from "@/server/utils/request-origin";
@@ -39,17 +40,16 @@ const renderUnavailable = (message: string) => (
   </div>
 );
 
-const renderPreauthorizedError = (message: string) => (
-  <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 text-foreground">
-    <div className="w-full max-w-md rounded-2xl border border-border bg-surface-1/90 p-8 text-center shadow-2xl">
-      <h1 className="mb-3 text-2xl font-semibold">Preauthorized session unavailable</h1>
-      <p className="text-sm text-muted-foreground">{message}</p>
-      <Button asChild variant="ghost" size="sm" className="mt-6">
-        <Link href="/">Return home</Link>
-      </Button>
-    </div>
-  </div>
-);
+const isProxyAuthStrategy = (value: string | null): value is ProxyAuthStrategy =>
+  value === "redirect" || value === "preauthorized";
+
+const isClientAuthStrategy = (value: string | null): value is "username" | "email" =>
+  value === "username" || value === "email";
+
+type PreauthorizedPanelState =
+  | { state: "idle" }
+  | { state: "error"; message: string }
+  | { state: "ready"; identities: Array<{ id: string; label: string; metadata: string | null; updatedAtLabel: string }> };
 
 export default async function TenantLoginPage({ params, searchParams }: LoginPageProps) {
   const { apiResourceId } = await params;
@@ -60,28 +60,29 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     apiResourceId: resource.id,
     origin,
   });
-  const requestedAuthStrategy = parsedReturnTo?.searchParams.get("auth_strategy");
-  const preferredStrategy =
-    requestedAuthStrategy === "username" || requestedAuthStrategy === "email" ? requestedAuthStrategy : undefined;
   const safeReturnTo = resolveAuthorizeReturnTo(resolvedSearchParams?.return_to, {
     apiResourceId: resource.id,
     origin,
   });
   const returnTo = toRelativeReturnTo(safeReturnTo);
+  const requestedAuthStrategy = parsedReturnTo?.searchParams.get("auth_strategy") ?? null;
+  const requestedProxyStrategy = isProxyAuthStrategy(requestedAuthStrategy) ? requestedAuthStrategy : null;
+  const preferredStrategy = isClientAuthStrategy(requestedAuthStrategy) ? requestedAuthStrategy : undefined;
+
   let strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
   let proxyClient: Awaited<ReturnType<typeof getClientForTenant>> | null = null;
-  try {
-    const clientId = parsedReturnTo?.searchParams.get("client_id");
-    if (clientId) {
+  const clientId = parsedReturnTo?.searchParams.get("client_id");
+  if (clientId) {
+    try {
       const client = await getClientForTenant(tenant.id, clientId);
       if (client.oauthClientMode === "proxy") {
         proxyClient = client;
       } else {
         strategyConfig = parseClientAuthStrategies(client.authStrategies);
       }
+    } catch {
+      strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
     }
-  } catch {
-    strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
   }
 
   if (proxyClient && parsedReturnTo) {
@@ -91,152 +92,88 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
       return renderUnavailable("No proxy login strategies are enabled for this client.");
     }
 
-    if (requestedAuthStrategy === "preauthorized") {
-      if (!proxyStrategies.preauthorized.enabled) {
-        return renderUnavailable("Preauthorized identities are not enabled for this client.");
-      }
+    const defaultStrategy =
+      requestedProxyStrategy && enabledStrategies.includes(requestedProxyStrategy)
+        ? requestedProxyStrategy
+        : enabledStrategies.includes("redirect")
+          ? "redirect"
+          : enabledStrategies[0]!;
 
-      const store = await cookies();
-      const transactionId = store.get(PREAUTHORIZED_PICKER_COOKIE)?.value;
-      if (!transactionId) {
-        return renderPreauthorizedError("The authorization request has expired. Please start again.");
-      }
-
-      const transaction = await getPickerTransaction(transactionId);
-      if (!transaction || transaction.apiResourceId !== apiResourceId) {
-        return renderPreauthorizedError("The authorization request could not be found.");
-      }
-      if (transaction.consumedAt || transaction.expiresAt < new Date()) {
-        return renderPreauthorizedError("This authorization request is no longer active.");
-      }
-
-      const identities = await listPreauthorizedIdentities(transaction.tenantId, transaction.clientId);
-      let redirectStrategyUrl: string | null = null;
-      if (proxyStrategies.redirect.enabled) {
-        const redirectUrl = new URL(parsedReturnTo.toString());
-        redirectUrl.searchParams.set("auth_strategy", "redirect");
-        redirectStrategyUrl = toRelativeReturnTo(redirectUrl);
-      }
-
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 text-foreground">
-          <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-border bg-surface-1/90 p-8 shadow-2xl">
-            <div className="space-y-2">
-              <h1 className="text-2xl font-semibold">Select a preauthorized identity</h1>
-              <p className="text-sm text-muted-foreground">
-                Choose which identity should authorize access to <strong>{transaction.client.name}</strong> on tenant{" "}
-                <strong>{tenant.name}</strong>.
-              </p>
-              {redirectStrategyUrl ? (
-                <Button asChild variant="link" size="sm" className="h-auto p-0 text-xs">
-                  <Link href={redirectStrategyUrl}>Use redirect instead</Link>
-                </Button>
-              ) : null}
-            </div>
-
-            {identities.length === 0 ? (
-              <Alert>
-                <AlertTitle>No preauthorized identities</AlertTitle>
-                <AlertDescription>
-                  An administrator must preauthorize at least one identity for this client before access can be granted.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <form
-                method="POST"
-                action={`/r/${apiResourceId}/oidc/login/preauthorized/select`}
-                className="space-y-4"
-              >
-                <fieldset className="space-y-3">
-                  {identities.map((identity, index) => {
-                    const label = identity.label ?? identity.providerEmail ?? identity.providerSubject ?? identity.id;
-                    const metadata = [identity.providerEmail, identity.providerSubject].filter(Boolean).join(" · ");
-                    return (
-                      <label
-                        key={identity.id}
-                        className="flex gap-3 rounded-xl border border-border bg-surface-2/70 p-4 text-sm shadow-sm"
-                      >
-                        <input
-                          type="radio"
-                          name="identity_id"
-                          value={identity.id}
-                          required
-                          defaultChecked={index === 0}
-                          className="mt-1 h-4 w-4 rounded-full border border-border text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                        />
-                        <div className="space-y-1">
-                          <div className="font-medium text-foreground">{label}</div>
-                          {metadata ? <div className="text-xs text-muted-foreground">{metadata}</div> : null}
-                          <div className="text-[0.7rem] text-muted-foreground">
-                            Last updated {format(identity.updatedAt, "MMM d, yyyy 'at' h:mm a")}
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </fieldset>
-                <Button type="submit" size="lg" className="w-full text-base">
-                  Continue
-                </Button>
-              </form>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    if (enabledStrategies.length === 1) {
-      const redirectUrl = new URL(parsedReturnTo.toString());
-      redirectUrl.searchParams.set("auth_strategy", enabledStrategies[0]!);
-      redirect(toRelativeReturnTo(redirectUrl));
-    }
-
-    const buildStrategyUrl = (strategy: ProxyAuthStrategy) => {
-      const redirectUrl = new URL(parsedReturnTo.toString());
-      redirectUrl.searchParams.set("auth_strategy", strategy);
-      return toRelativeReturnTo(redirectUrl);
+    const buildStrategyHref = (strategy: ProxyAuthStrategy) => {
+      const nextReturnTo = new URL(parsedReturnTo.toString());
+      nextReturnTo.searchParams.set("auth_strategy", strategy);
+      return toRelativeReturnTo(nextReturnTo);
     };
-    const strategySummary = enabledStrategies
-      .map((strategy) => (strategy === "redirect" ? "redirect flow" : "preauthorized identities"))
-      .join(" or ");
-    const strategyCards = enabledStrategies.map((strategy) => {
-      const metadata = PROXY_AUTH_STRATEGY_METADATA[strategy];
-      const actionLabel = strategy === "redirect" ? "Continue with redirect" : "Choose a preauthorized identity";
-      return {
-        strategy,
-        title: metadata.title,
-        description: metadata.description,
-        href: buildStrategyUrl(strategy),
-        actionLabel,
-      };
-    });
+
+    const redirectHref = proxyStrategies.redirect.enabled ? buildStrategyHref("redirect") : undefined;
+    const preauthorizedHref = proxyStrategies.preauthorized.enabled ? buildStrategyHref("preauthorized") : undefined;
+
+    let preauthorizedPanel: PreauthorizedPanelState | undefined;
+
+    if (proxyStrategies.preauthorized.enabled && preauthorizedHref) {
+      if (requestedProxyStrategy === "preauthorized") {
+        const store = await cookies();
+        const transactionId = store.get(PREAUTHORIZED_PICKER_COOKIE)?.value;
+        if (!transactionId) {
+          preauthorizedPanel = {
+            state: "error",
+            message: "The authorization request has expired. Please start again.",
+          };
+        } else {
+          const transaction = await getPickerTransaction(transactionId);
+          if (!transaction || transaction.apiResourceId !== apiResourceId) {
+            preauthorizedPanel = {
+              state: "error",
+              message: "The authorization request could not be found.",
+            };
+          } else if (transaction.consumedAt || transaction.expiresAt < new Date()) {
+            preauthorizedPanel = {
+              state: "error",
+              message: "This authorization request is no longer active.",
+            };
+          } else {
+            const identities = await listPreauthorizedIdentities(transaction.tenantId, transaction.clientId);
+            preauthorizedPanel = {
+              state: "ready",
+              identities: identities.map((identity) => {
+                const label = identity.label ?? identity.providerEmail ?? identity.providerSubject ?? identity.id;
+                const metadata = [identity.providerEmail, identity.providerSubject].filter(Boolean).join(" · ");
+                return {
+                  id: identity.id,
+                  label,
+                  metadata: metadata || null,
+                  updatedAtLabel: `Last updated ${format(identity.updatedAt, "MMM d, yyyy 'at' h:mm a")}`,
+                };
+              }),
+            };
+          }
+        }
+      }
+
+      if (!preauthorizedPanel) {
+        preauthorizedPanel = { state: "idle" };
+      }
+    }
 
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 text-foreground">
-        <div className="w-full max-w-md space-y-6 rounded-2xl border border-border bg-surface-1/90 p-8 shadow-2xl">
+        <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-border bg-surface-1/90 p-8 shadow-2xl">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold">Choose how to sign in</h1>
+            <h1 className="text-2xl font-semibold">Authorize {proxyClient.name}</h1>
             <p className="text-sm text-muted-foreground">
-              Select a {strategySummary} to authorize <strong>{proxyClient.name}</strong> on tenant{" "}
-              <strong>{tenant.name}</strong>.
+              Select how you want to authenticate to <strong>{tenant.name}</strong>.
             </p>
           </div>
-          <div className="space-y-4">
-            {strategyCards.map((card) => (
-              <div
-                key={card.strategy}
-                className="space-y-3 rounded-xl border border-border bg-surface-2/70 p-4 text-sm shadow-sm"
-              >
-                <div className="space-y-1">
-                  <p className="font-semibold text-foreground">{card.title}</p>
-                  <p className="text-xs text-muted-foreground">{card.description}</p>
-                </div>
-                <Button asChild size="lg" className="w-full text-base">
-                  <Link href={card.href}>{card.actionLabel}</Link>
-                </Button>
-              </div>
-            ))}
-          </div>
+          <ProxyStrategyTabs
+            apiResourceId={apiResourceId}
+            clientName={proxyClient.name}
+            tenantName={tenant.name}
+            strategies={enabledStrategies}
+            defaultStrategy={defaultStrategy}
+            redirectHref={redirectHref}
+            preauthorizedHref={preauthorizedHref}
+            preauthorizedPanel={preauthorizedPanel}
+          />
           <p className="text-xs text-muted-foreground">
             Need to manage tenants? Visit the{" "}
             <Link
