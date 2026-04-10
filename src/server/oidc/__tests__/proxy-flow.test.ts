@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { vi, describe, it, beforeAll, afterAll, expect } from "vitest";
 import type { NextRequest } from "next/server";
 
-
 import { POST as handleTokenPost } from "@/app/r/[apiResourceId]/oidc/token/route";
 import { prisma } from "@/server/db/client";
 import { encrypt } from "@/server/crypto/key-vault";

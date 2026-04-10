@@ -186,6 +186,7 @@ export const handleAuthorize = async (
       });
       return buildLoginRedirect();
     }
+
     if (strategy === "preauthorized") {
       return handlePreauthorizedAuthorize({
         params: resolvedParams,
@@ -212,7 +213,6 @@ export const handleAuthorize = async (
       code: "invalid_request",
     });
   }
-
   const redirect = resolveRedirectUri(resolvedParams.redirectUri, client.redirectUris ?? []);
 
   ensureScopes(resolvedParams.scope.split(" ").filter(Boolean), client.allowedScopes);
