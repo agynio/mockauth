@@ -11,8 +11,10 @@ import {
   parseProxyAuthStrategies,
   type ProxyAuthStrategy,
 } from "@/server/oidc/proxy-auth-strategy";
+import { parseAuthorizeReturnTo, resolveAuthorizeReturnTo, toRelativeReturnTo } from "@/server/oidc/return-to";
 import { getClientForTenant } from "@/server/services/client-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { getRequestOrigin } from "@/server/utils/request-origin";
 
 type LoginPageProps = {
   params: Promise<{ apiResourceId: string }>;
@@ -35,14 +37,20 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
   const { apiResourceId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const { tenant, resource } = await getApiResourceWithTenant(apiResourceId);
-  const fallbackReturnTo = `/r/${resource.id}/oidc/authorize`;
-  const returnTo = resolvedSearchParams?.return_to ?? fallbackReturnTo;
+  const origin = await getRequestOrigin();
+  const parsedReturnTo = parseAuthorizeReturnTo(resolvedSearchParams?.return_to, {
+    apiResourceId: resource.id,
+    origin,
+  });
+  const safeReturnTo = resolveAuthorizeReturnTo(resolvedSearchParams?.return_to, {
+    apiResourceId: resource.id,
+    origin,
+  });
+  const returnTo = toRelativeReturnTo(safeReturnTo);
   let strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
   let proxyClient: Awaited<ReturnType<typeof getClientForTenant>> | null = null;
-  let returnToUrl: URL | null = null;
   try {
-    returnToUrl = new URL(returnTo, "http://localhost");
-    const clientId = returnToUrl.searchParams.get("client_id");
+    const clientId = parsedReturnTo?.searchParams.get("client_id");
     if (clientId) {
       const client = await getClientForTenant(tenant.id, clientId);
       if (client.oauthClientMode === "proxy") {
@@ -55,22 +63,22 @@ export default async function TenantLoginPage({ params, searchParams }: LoginPag
     strategyConfig = DEFAULT_CLIENT_AUTH_STRATEGIES;
   }
 
-  if (proxyClient && returnToUrl) {
+  if (proxyClient && parsedReturnTo) {
     const proxyStrategies = parseProxyAuthStrategies(proxyClient.proxyAuthStrategies);
     const enabledStrategies = enabledProxyStrategies(proxyStrategies);
     if (enabledStrategies.length === 0) {
       return renderUnavailable("No proxy login strategies are enabled for this client.");
     }
     if (enabledStrategies.length === 1) {
-      const redirectUrl = new URL(returnToUrl.toString());
+      const redirectUrl = new URL(parsedReturnTo.toString());
       redirectUrl.searchParams.set("proxy_strategy", enabledStrategies[0]!);
-      redirect(redirectUrl.toString());
+      redirect(toRelativeReturnTo(redirectUrl));
     }
 
     const buildStrategyUrl = (strategy: ProxyAuthStrategy) => {
-      const redirectUrl = new URL(returnToUrl.toString());
+      const redirectUrl = new URL(parsedReturnTo.toString());
       redirectUrl.searchParams.set("proxy_strategy", strategy);
-      return redirectUrl.toString();
+      return toRelativeReturnTo(redirectUrl);
     };
     const strategySummary = enabledStrategies
       .map((strategy) => (strategy === "redirect" ? "redirect flow" : "preauthorized identities"))

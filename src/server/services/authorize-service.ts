@@ -146,6 +146,31 @@ export const handleAuthorize = async (
     }
 
     if (!strategy) {
+      const redirect = resolveRedirectUri(resolvedParams.redirectUri, client.redirectUris ?? []);
+      ensureScopes(resolvedParams.scope.split(" ").filter(Boolean), client.allowedScopes);
+      const traceId = randomUUID();
+      void emitAuditEvent({
+        tenantId: tenant.id,
+        clientId: client.id,
+        traceId,
+        actorId: null,
+        eventType: "AUTHORIZE_RECEIVED",
+        severity: "INFO",
+        message: "Proxy authorization request received",
+        details: buildAuthorizeReceivedDetails({
+          responseType: resolvedParams.responseType,
+          scope: resolvedParams.scope,
+          prompt: resolvedParams.prompt,
+          redirectUri: redirect,
+          state: resolvedParams.state,
+          nonce: resolvedParams.nonce,
+          codeChallenge: auditCodeChallenge,
+          codeChallengeMethod: resolvedCodeChallengeMethod,
+          loginHint: resolvedParams.loginHint,
+          freshLoginRequested: resolvedParams.freshLoginRequested,
+        }),
+        requestContext: requestContext ?? null,
+      });
       return buildLoginRedirect();
     }
     if (strategy === "preauthorized") {

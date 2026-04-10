@@ -5,10 +5,12 @@ import { format } from "date-fns";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
+import { parseAuthorizeReturnTo, toRelativeReturnTo } from "@/server/oidc/return-to";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { listPreauthorizedIdentities } from "@/server/services/preauthorized-identity-service";
 import { getPickerTransaction } from "@/server/services/preauthorized-picker-service";
 import { PREAUTHORIZED_PICKER_COOKIE } from "@/server/oidc/preauthorized/constants";
+import { getRequestOrigin } from "@/server/utils/request-origin";
 
 type PageProps = {
   params: Promise<{ apiResourceId: string }>;
@@ -45,18 +47,19 @@ export default async function PreauthorizedPickerPage({ params, searchParams }: 
     return renderError("This authorization request is no longer active.");
   }
 
+  const origin = await getRequestOrigin();
   const { tenant } = await getApiResourceWithTenant(apiResourceId);
   const identities = await listPreauthorizedIdentities(transaction.tenantId, transaction.clientId);
   const proxyStrategies = parseProxyAuthStrategies(transaction.client.proxyAuthStrategies);
+  const returnToUrl = parseAuthorizeReturnTo(returnTo, {
+    apiResourceId,
+    origin,
+  });
   let redirectStrategyUrl: string | null = null;
-  if (proxyStrategies.redirect.enabled && returnTo) {
-    try {
-      const redirectUrl = new URL(returnTo, "http://localhost");
-      redirectUrl.searchParams.set("proxy_strategy", "redirect");
-      redirectStrategyUrl = redirectUrl.toString();
-    } catch {
-      redirectStrategyUrl = null;
-    }
+  if (proxyStrategies.redirect.enabled && returnToUrl) {
+    const redirectUrl = new URL(returnToUrl.toString());
+    redirectUrl.searchParams.set("proxy_strategy", "redirect");
+    redirectStrategyUrl = toRelativeReturnTo(redirectUrl);
   }
 
   return (

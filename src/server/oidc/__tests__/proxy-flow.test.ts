@@ -296,6 +296,23 @@ describe("Proxy client OAuth flow", () => {
       expect(loginUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
     });
 
+    it("rejects invalid redirect URIs before prompting", async () => {
+      const client = await createProxyStrategyClient({
+        redirect: { enabled: true },
+        preauthorized: { enabled: true },
+      });
+      const codeChallenge = computeS256Challenge("verifier-strategy-invalid-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+
+      await expect(
+        requestAuthorize({
+          clientId: client.clientId,
+          redirectUri: "https://proxy-strategy.test/invalid",
+          codeChallenge,
+          state: "strategy-invalid-redirect",
+        }),
+      ).rejects.toMatchObject({ options: { code: "invalid_redirect_uri" } });
+    });
+
     it("routes redirect strategy when explicitly requested", async () => {
       const client = await createProxyStrategyClient({
         redirect: { enabled: true },

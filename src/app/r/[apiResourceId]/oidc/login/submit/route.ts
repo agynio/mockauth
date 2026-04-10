@@ -25,6 +25,7 @@ import {
   MOCK_FRESH_LOGIN_COOKIE,
   MOCK_REAUTH_COOKIE,
 } from "@/server/oidc/reauth-cookie";
+import { parseAuthorizeReturnTo, resolveAuthorizeReturnTo } from "@/server/oidc/return-to";
 
 const loginSchema = z.object({
   strategy: z.enum(["username", "email"]).default("username"),
@@ -33,22 +34,6 @@ const loginSchema = z.object({
   return_to: z.string().optional(),
   email_verified_preference: z.enum(["true", "false"]).optional(),
 });
-
-const sanitizeReturnTo = (value: string | undefined, fallback: URL, currentUrl: URL) => {
-  if (!value) {
-    return fallback;
-  }
-
-  try {
-    const parsed = new URL(value);
-    if (parsed.origin !== currentUrl.origin) {
-      return fallback;
-    }
-    return parsed;
-  } catch {
-    return fallback;
-  }
-};
 
 export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
   const { apiResourceId } = await context.params;
@@ -67,7 +52,10 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const authorizeUrl = data.data.return_to ? new URL(data.data.return_to, currentUrl.origin) : null;
+  const authorizeUrl = parseAuthorizeReturnTo(data.data.return_to, {
+    apiResourceId: resource.id,
+    origin: currentUrl.origin,
+  });
   const clientId = authorizeUrl?.searchParams.get("client_id");
   if (!clientId) {
     return Response.json({ error: "invalid_client" }, { status: 400 });
@@ -123,8 +111,10 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     });
     const sessionHash = hashOpaqueToken(token);
     const reauthTtlSeconds = client.reauthTtlSeconds ?? 0;
-    const fallback = new URL(`/r/${resource.id}/oidc/authorize`, currentUrl.origin);
-    const redirectUrl = sanitizeReturnTo(data.data.return_to, fallback, currentUrl);
+    const redirectUrl = resolveAuthorizeReturnTo(data.data.return_to, {
+      apiResourceId: resource.id,
+      origin: currentUrl.origin,
+    });
     redirectUrl.searchParams.set("fresh_login", "1");
     const response = NextResponse.redirect(redirectUrl, 303);
     const isSecure = currentUrl.protocol === "https:";
