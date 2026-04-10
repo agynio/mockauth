@@ -18,7 +18,11 @@ import { createSession, clearSession } from "@/server/services/mock-session-serv
 import { PREAUTHORIZED_PICKER_COOKIE } from "@/server/oidc/preauthorized/constants";
 import { PROXY_TRANSACTION_COOKIE, buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
-import { DEFAULT_PROXY_AUTH_STRATEGIES, type ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
+import {
+  DEFAULT_PROXY_AUTH_STRATEGIES,
+  type ProxyAuthStrategies,
+  type ProxyAuthStrategy,
+} from "@/server/oidc/proxy-auth-strategy";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 
@@ -74,9 +78,36 @@ describe("Proxy client OAuth flow", () => {
     nonce?: string;
     prompt?: string;
     loginHint?: string;
+    authStrategy?: ProxyAuthStrategy;
+  };
+
+  const buildAuthorizeUrl = (options: ProxyAuthorizeOptions) => {
+    const scope = options.scope ?? "openid profile";
+    const authorizeUrl = new URL(`https://mockauth.test/r/${apiResourceId}/oidc/authorize`);
+    authorizeUrl.searchParams.set("client_id", options.clientId);
+    authorizeUrl.searchParams.set("redirect_uri", options.redirectUri);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("scope", scope);
+    authorizeUrl.searchParams.set("state", options.state);
+    authorizeUrl.searchParams.set("code_challenge", options.codeChallenge);
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    if (options.nonce) {
+      authorizeUrl.searchParams.set("nonce", options.nonce);
+    }
+    if (options.prompt) {
+      authorizeUrl.searchParams.set("prompt", options.prompt);
+    }
+    if (options.loginHint) {
+      authorizeUrl.searchParams.set("login_hint", options.loginHint);
+    }
+    if (options.authStrategy) {
+      authorizeUrl.searchParams.set("auth_strategy", options.authStrategy);
+    }
+    return authorizeUrl;
   };
 
   const requestAuthorize = async (options: ProxyAuthorizeOptions) => {
+    const authorizeUrl = buildAuthorizeUrl(options);
     return handleAuthorize(
       {
         apiResourceId,
@@ -91,9 +122,10 @@ describe("Proxy client OAuth flow", () => {
         prompt: options.prompt,
         sessionToken,
         loginHint: options.loginHint,
+        authStrategy: options.authStrategy,
       },
       "https://mockauth.test",
-      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${options.clientId}`,
+      authorizeUrl.toString(),
     );
   };
 
@@ -219,72 +251,111 @@ describe("Proxy client OAuth flow", () => {
       expect(pickerCookie).toBeUndefined();
     });
 
-    it("routes preauthorized-only strategies to the picker", async () => {
+    it("routes preauthorized-only strategies to login", async () => {
       const client = await createProxyStrategyClient({
         redirect: { enabled: false },
         preauthorized: { enabled: true },
       });
       const codeChallenge = computeS256Challenge("verifier-strategy-preauth-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
 
-      const authorize = await requestAuthorize({
+      const authorizeOptions = {
         clientId: client.clientId,
         redirectUri: "https://proxy-strategy.test/callback",
         codeChallenge,
         state: "strategy-preauthorized",
-      });
+      };
+      const returnToUrl = buildAuthorizeUrl(authorizeOptions);
+      returnToUrl.searchParams.set("auth_strategy", "preauthorized");
+      const authorize = await requestAuthorize(authorizeOptions);
 
-      expect(authorize.redirectTo).toBe(`https://mockauth.test/r/${apiResourceId}/oidc/preauthorized/picker`);
+      const loginUrl = new URL(authorize.redirectTo);
+      expect(loginUrl.pathname).toBe(`/r/${apiResourceId}/oidc/login`);
+      expect(loginUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
       const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
       expect(pickerCookie).toBeDefined();
     });
 
-    it("prefers the preauthorized flow when identities exist", async () => {
+    it("prompts for selection when multiple strategies are enabled", async () => {
       const client = await createProxyStrategyClient({
         redirect: { enabled: true },
         preauthorized: { enabled: true },
       });
-      await prisma.preauthorizedIdentity.create({
-        data: {
-          tenantId,
-          clientId: client.id,
-          label: "Strategy User",
-          providerSubject: `strategy-${randomUUID().slice(0, 8)}`,
-          providerEmail: "strategy@example.com",
-          providerScope: "openid profile",
-          providerResponseEncrypted: encrypt(JSON.stringify({ access_token: "preauth-access" })),
-        },
-      });
-
       const codeChallenge = computeS256Challenge("verifier-strategy-both-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
-      const authorize = await requestAuthorize({
+
+      const authorizeOptions = {
         clientId: client.clientId,
         redirectUri: "https://proxy-strategy.test/callback",
         codeChallenge,
-        state: "strategy-preauth-exists",
-      });
+        state: "strategy-prompt",
+      };
+      const returnToUrl = buildAuthorizeUrl(authorizeOptions);
+      const authorize = await requestAuthorize(authorizeOptions);
 
-      expect(authorize.redirectTo).toBe(`https://mockauth.test/r/${apiResourceId}/oidc/preauthorized/picker`);
-      const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
-      expect(pickerCookie).toBeDefined();
+      expect(authorize.type).toBe("login");
+      const loginUrl = new URL(authorize.redirectTo, "https://mockauth.test");
+      expect(loginUrl.pathname).toBe(`/r/${apiResourceId}/oidc/login`);
+      expect(loginUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
     });
 
-    it("falls back to redirect when no preauthorized identities exist", async () => {
+    it("rejects invalid redirect URIs before prompting", async () => {
       const client = await createProxyStrategyClient({
         redirect: { enabled: true },
         preauthorized: { enabled: true },
       });
-      const codeChallenge = computeS256Challenge("verifier-strategy-fallback-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+      const codeChallenge = computeS256Challenge("verifier-strategy-invalid-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+
+      await expect(
+        requestAuthorize({
+          clientId: client.clientId,
+          redirectUri: "https://proxy-strategy.test/invalid",
+          codeChallenge,
+          state: "strategy-invalid-redirect",
+        }),
+      ).rejects.toMatchObject({ options: { code: "invalid_redirect_uri" } });
+    });
+
+    it("routes redirect strategy when explicitly requested", async () => {
+      const client = await createProxyStrategyClient({
+        redirect: { enabled: true },
+        preauthorized: { enabled: true },
+      });
+      const codeChallenge = computeS256Challenge("verifier-strategy-redirect-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
 
       const authorize = await requestAuthorize({
         clientId: client.clientId,
         redirectUri: "https://proxy-strategy.test/callback",
         codeChallenge,
-        state: "strategy-fallback",
+        state: "strategy-redirect-requested",
+        authStrategy: "redirect",
       });
 
       expect(authorize.redirectTo).toContain("https://upstream-strategy.example.com/oauth2/authorize");
       const proxyCookie = authorize.cookies?.find((cookie) => cookie.name === PROXY_TRANSACTION_COOKIE);
       expect(proxyCookie).toBeDefined();
+    });
+
+    it("routes preauthorized strategy when explicitly requested", async () => {
+      const client = await createProxyStrategyClient({
+        redirect: { enabled: true },
+        preauthorized: { enabled: true },
+      });
+      const codeChallenge = computeS256Challenge("verifier-strategy-preauth-requested-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
+
+      const authorizeOptions: ProxyAuthorizeOptions = {
+        clientId: client.clientId,
+        redirectUri: "https://proxy-strategy.test/callback",
+        codeChallenge,
+        state: "strategy-preauth-requested",
+        authStrategy: "preauthorized",
+      };
+      const returnToUrl = buildAuthorizeUrl(authorizeOptions);
+      const authorize = await requestAuthorize(authorizeOptions);
+
+      const loginUrl = new URL(authorize.redirectTo);
+      expect(loginUrl.pathname).toBe(`/r/${apiResourceId}/oidc/login`);
+      expect(loginUrl.searchParams.get("return_to")).toBe(returnToUrl.toString());
+      const pickerCookie = authorize.cookies?.find((cookie) => cookie.name === PREAUTHORIZED_PICKER_COOKIE);
+      expect(pickerCookie).toBeDefined();
     });
   });
 

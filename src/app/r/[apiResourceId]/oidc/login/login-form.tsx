@@ -20,10 +20,15 @@ type LoginFormProps = {
   apiResourceId: string;
   returnTo: string;
   strategies: StrategyOption[];
+  preferredStrategy?: StrategyOption["key"];
 };
 
-export function LoginForm({ apiResourceId, returnTo, strategies }: LoginFormProps) {
-  const [selectedStrategy, setSelectedStrategy] = useState<"username" | "email">(strategies[0]?.key ?? "username");
+export function LoginForm({ apiResourceId, returnTo, strategies, preferredStrategy }: LoginFormProps) {
+  const fallbackStrategy = strategies[0]?.key ?? "username";
+  const initialStrategy = preferredStrategy && strategies.some((strategy) => strategy.key === preferredStrategy)
+    ? preferredStrategy
+    : fallbackStrategy;
+  const [selectedStrategy, setSelectedStrategy] = useState<"username" | "email">(initialStrategy);
   const [emailVerifiedPreference, setEmailVerifiedPreference] = useState<"true" | "false">("true");
 
   const renderStrategyFields = (option: StrategyOption, isActive: boolean) => {
