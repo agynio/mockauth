@@ -420,6 +420,84 @@ export const refreshPreauthorizedIdentity = async (params: {
   return { identity: updated, providerResponse: mergedResponse };
 };
 
+export const persistPreauthorizedIdentityRefreshResponse = async (params: {
+  tenantId: string;
+  clientId: string;
+  refreshToken: string;
+  providerResponse: ProviderTokenResponse;
+  now?: Date;
+}) => {
+  const now = params.now ?? new Date();
+  const identities = await prisma.preauthorizedIdentity.findMany({
+    where: { tenantId: params.tenantId, clientId: params.clientId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      providerResponseEncrypted: true,
+      providerSubject: true,
+      providerEmail: true,
+    },
+  });
+
+  let matched: {
+    id: string;
+    providerSubject: string;
+    providerEmail: string | null;
+    storedRefreshToken: string;
+  } | null = null;
+
+  for (const identity of identities) {
+    let storedResponse: ProviderTokenResponse;
+    try {
+      storedResponse = JSON.parse(decrypt(identity.providerResponseEncrypted)) as ProviderTokenResponse;
+    } catch {
+      continue;
+    }
+    const storedRefreshToken = extractRefreshToken(storedResponse);
+    if (storedRefreshToken && storedRefreshToken === params.refreshToken) {
+      matched = {
+        id: identity.id,
+        providerSubject: identity.providerSubject,
+        providerEmail: identity.providerEmail,
+        storedRefreshToken,
+      };
+      break;
+    }
+  }
+
+  if (!matched) {
+    return null;
+  }
+
+  const incomingRefreshToken = extractRefreshToken(params.providerResponse);
+  const mergedResponse: ProviderTokenResponse = {
+    ...params.providerResponse,
+    refresh_token:
+      incomingRefreshToken && incomingRefreshToken.trim().length > 0
+        ? incomingRefreshToken
+        : matched.storedRefreshToken,
+  };
+  const { subject, email } = resolveProviderMetadata(mergedResponse, {
+    subject: matched.providerSubject,
+    email: matched.providerEmail,
+  });
+  const providerSubject = requireProviderSubject(subject);
+  const accessTokenExpiresAt = extractAccessTokenExpiresAt(mergedResponse, now);
+  const refreshTokenExpiresAt = extractRefreshTokenExpiresAt(mergedResponse, now);
+  const encrypted = encrypt(JSON.stringify(mergedResponse));
+
+  return prisma.preauthorizedIdentity.update({
+    where: { id: matched.id },
+    data: {
+      providerResponseEncrypted: encrypted,
+      providerSubject,
+      providerEmail: email,
+      accessTokenExpiresAt,
+      refreshTokenExpiresAt,
+    },
+  });
+};
+
 export const resolvePreauthorizedIdentityTokens = async (params: {
   tenantId: string;
   clientId: string;

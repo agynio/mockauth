@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 
 import { POST as handleTokenPost } from "@/app/r/[apiResourceId]/oidc/token/route";
 import { prisma } from "@/server/db/client";
-import { encrypt } from "@/server/crypto/key-vault";
+import { decrypt, encrypt } from "@/server/crypto/key-vault";
 import { hashSecret } from "@/server/crypto/hash";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { handleAuthorize } from "@/server/services/authorize-service";
@@ -738,6 +738,117 @@ describe("Proxy client OAuth flow", () => {
     const secondParams = new URLSearchParams(secondInit?.body as URLSearchParams);
     expect(secondParams.get("client_id")).toBe("up-client");
     expect(secondParams.has("client_secret")).toBe(false);
+
+    fetchMock.mockRestore();
+  });
+
+  it("persists rotated refresh tokens for preauthorized identities", async () => {
+    const client = await createProxyStrategyClient({
+      ...DEFAULT_PROXY_AUTH_STRATEGIES,
+      preauthorized: { enabled: true },
+    });
+
+    const identity = await prisma.preauthorizedIdentity.create({
+      data: {
+        tenantId,
+        clientId: client.id,
+        label: "Preauthorized",
+        providerSubject: `preauth_${randomUUID()}`,
+        providerEmail: null,
+        providerScope: "openid profile",
+        providerResponseEncrypted: encrypt(JSON.stringify({
+          access_token: "stored-access",
+          refresh_token: "stored-refresh",
+          expires_in: 3600,
+        })),
+        accessTokenExpiresAt: null,
+        refreshTokenExpiresAt: null,
+      },
+    });
+
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "new-access",
+          refresh_token: "rotated-refresh",
+          expires_in: 7200,
+          token_type: "Bearer",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await completeProxyRefreshGrant({
+      apiResourceId,
+      clientId: client.clientId,
+      refreshToken: "stored-refresh",
+      scope: "openid profile",
+      authMethod: "none",
+      clientSecret: null,
+    });
+
+    const stored = await prisma.preauthorizedIdentity.findUnique({ where: { id: identity.id } });
+    expect(stored).not.toBeNull();
+    const decrypted = JSON.parse(decrypt(stored!.providerResponseEncrypted)) as Record<string, unknown>;
+    expect(decrypted).toMatchObject({
+      access_token: "new-access",
+      refresh_token: "rotated-refresh",
+    });
+
+    fetchMock.mockRestore();
+  });
+
+  it("preserves refresh tokens when providers omit them", async () => {
+    const client = await createProxyStrategyClient({
+      ...DEFAULT_PROXY_AUTH_STRATEGIES,
+      preauthorized: { enabled: true },
+    });
+
+    const identity = await prisma.preauthorizedIdentity.create({
+      data: {
+        tenantId,
+        clientId: client.id,
+        label: "Preauthorized",
+        providerSubject: `preauth_${randomUUID()}`,
+        providerEmail: null,
+        providerScope: "openid profile",
+        providerResponseEncrypted: encrypt(JSON.stringify({
+          access_token: "stored-access",
+          refresh_token: "stored-refresh",
+          expires_in: 3600,
+        })),
+        accessTokenExpiresAt: null,
+        refreshTokenExpiresAt: null,
+      },
+    });
+
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "new-access",
+          expires_in: 7200,
+          token_type: "Bearer",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await completeProxyRefreshGrant({
+      apiResourceId,
+      clientId: client.clientId,
+      refreshToken: "stored-refresh",
+      scope: "openid profile",
+      authMethod: "none",
+      clientSecret: null,
+    });
+
+    const stored = await prisma.preauthorizedIdentity.findUnique({ where: { id: identity.id } });
+    expect(stored).not.toBeNull();
+    const decrypted = JSON.parse(decrypt(stored!.providerResponseEncrypted)) as Record<string, unknown>;
+    expect(decrypted).toMatchObject({
+      access_token: "new-access",
+      refresh_token: "stored-refresh",
+    });
 
     fetchMock.mockRestore();
   });
