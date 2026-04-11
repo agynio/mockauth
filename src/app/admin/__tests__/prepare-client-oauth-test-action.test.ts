@@ -127,6 +127,7 @@ describe("prepareClientOauthTestAction", () => {
       discovery: "https://issuer.example/.well-known/openid-configuration",
       jwks: "https://issuer.example/jwks.json",
       authorize: "https://issuer.example/authorize",
+      endSession: "https://issuer.example/end-session",
       token: "https://issuer.example/token",
       userinfo: "https://issuer.example/userinfo",
     });

@@ -10,6 +10,7 @@ export const buildDiscoveryDocument = (origin: string, apiResourceId: string) =>
     token_endpoint: `${issuer}/token`,
     userinfo_endpoint: `${issuer}/userinfo`,
     jwks_uri: `${issuer}/jwks.json`,
+    end_session_endpoint: `${issuer}/end-session`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "password"],
     scopes_supported: SUPPORTED_SCOPES,
