@@ -450,7 +450,17 @@ export const persistPreauthorizedIdentityRefreshResponse = async (params: {
     let storedResponse: ProviderTokenResponse;
     try {
       storedResponse = JSON.parse(decrypt(identity.providerResponseEncrypted)) as ProviderTokenResponse;
-    } catch {
+    } catch (error) {
+      const errorPayload =
+        error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { error: String(error) };
+      console.warn("Failed to decode preauthorized provider response", {
+        ...errorPayload,
+        tenantId: params.tenantId,
+        clientId: params.clientId,
+        identityId: identity.id,
+      });
       continue;
     }
     const storedRefreshToken = extractRefreshToken(storedResponse);

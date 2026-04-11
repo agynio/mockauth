@@ -543,7 +543,7 @@ export const completeProxyRefreshGrant = async (
       clientId: client.id,
       refreshToken: params.refreshToken,
       providerResponse: response.json,
-    }).catch(() => undefined);
+    });
   }
 
   return refreshResponse;
