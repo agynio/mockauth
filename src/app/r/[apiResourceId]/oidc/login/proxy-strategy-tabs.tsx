@@ -51,10 +51,6 @@ export function ProxyStrategyTabs({
     resolvedPreauthorizedPanel.state !== "ready" &&
     Boolean(preauthorizedHref);
 
-  if (strategies.length === 0) {
-    throw new Error("Proxy strategies are required");
-  }
-
   useEffect(() => {
     if (!shouldAutoNavigate) {
       navigationRef.current = null;
@@ -66,6 +62,10 @@ export function ProxyStrategyTabs({
     navigationRef.current = preauthorizedHref;
     router.push(preauthorizedHref);
   }, [preauthorizedHref, router, shouldAutoNavigate]);
+
+  if (strategies.length === 0) {
+    throw new Error("Proxy strategies are required");
+  }
 
   const renderRedirectPanel = (href: string) => {
     return (
