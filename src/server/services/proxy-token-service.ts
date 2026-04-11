@@ -1,6 +1,7 @@
 import { URLSearchParams } from "node:url";
 
 import { DomainError } from "@/server/errors";
+import { parseProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { buildProxyCallbackUrl } from "@/server/oidc/proxy/constants";
 import { resolveUpstreamAuthMethod } from "@/server/oidc/token-auth-method";
@@ -16,6 +17,7 @@ import { assertClientAuth, verifyPkce } from "@/server/services/token-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
 import { getClientForTenant } from "@/server/services/client-service";
 import { emitAuditEvent } from "@/server/services/audit-service";
+import { persistPreauthorizedIdentityRefreshResponse } from "@/server/services/preauthorized-identity-service";
 import {
   buildProxyCallbackErrorDetails,
   buildProxyFlowDiagnostics,
@@ -533,6 +535,16 @@ export const completeProxyRefreshGrant = async (
     details: toTokenResponsePayload(refreshResponse, exchangeDiagnostics),
     requestContext: params.auditContext?.requestContext ?? null,
   });
+
+  const proxyAuthStrategies = parseProxyAuthStrategies(client.proxyAuthStrategies);
+  if (proxyAuthStrategies.preauthorized.enabled) {
+    await persistPreauthorizedIdentityRefreshResponse({
+      tenantId: tenant.id,
+      clientId: client.id,
+      refreshToken: params.refreshToken,
+      providerResponse: response.json,
+    });
+  }
 
   return refreshResponse;
 };
