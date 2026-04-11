@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,26 @@ export function ProxyStrategyTabs({
   preauthorizedHref,
   preauthorizedPanel,
 }: ProxyStrategyTabsProps) {
+  const router = useRouter();
   const [selectedStrategy, setSelectedStrategy] = useState<ProxyAuthStrategy>(defaultStrategy);
+  const navigationRef = useRef<string | null>(null);
   const resolvedPreauthorizedPanel = preauthorizedPanel ?? { state: "idle" };
+  const shouldAutoNavigate =
+    selectedStrategy === "preauthorized" &&
+    resolvedPreauthorizedPanel.state !== "ready" &&
+    Boolean(preauthorizedHref);
+
+  useEffect(() => {
+    if (!shouldAutoNavigate) {
+      navigationRef.current = null;
+      return;
+    }
+    if (!preauthorizedHref || navigationRef.current === preauthorizedHref) {
+      return;
+    }
+    navigationRef.current = preauthorizedHref;
+    router.push(preauthorizedHref);
+  }, [preauthorizedHref, router, shouldAutoNavigate]);
 
   if (strategies.length === 0) {
     throw new Error("Proxy strategies are required");
@@ -102,7 +121,7 @@ export function ProxyStrategyTabs({
     );
   };
 
-  const renderPreauthorizedPanel = (href: string) => {
+  const renderPreauthorizedPanel = () => {
     if (resolvedPreauthorizedPanel.state === "ready") {
       return (
         <div className="space-y-4">
@@ -127,11 +146,11 @@ export function ProxyStrategyTabs({
             <AlertDescription>{resolvedPreauthorizedPanel.message}</AlertDescription>
           </Alert>
         ) : null}
-        <Button asChild size="lg" className="w-full text-base">
-          <Link href={href}>
-            {resolvedPreauthorizedPanel.state === "error" ? "Start again" : "Continue"}
-          </Link>
-        </Button>
+        {shouldAutoNavigate ? (
+          <p className="text-xs text-muted-foreground animate-pulse" aria-live="polite">
+            Loading preauthorized identities...
+          </p>
+        ) : null}
       </div>
     );
   };
@@ -146,7 +165,7 @@ export function ProxyStrategyTabs({
     if (!preauthorizedHref) {
       throw new Error("Preauthorized strategy is missing a target URL");
     }
-    return renderPreauthorizedPanel(preauthorizedHref);
+    return renderPreauthorizedPanel();
   };
 
   if (strategies.length <= 1) {
