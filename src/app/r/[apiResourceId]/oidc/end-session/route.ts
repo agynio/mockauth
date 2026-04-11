@@ -44,9 +44,8 @@ const handleRequest = async (
   request: NextRequest,
   context: ApiResourceRouteContext,
   data: z.infer<typeof endSessionSchema>,
+  normalizedUrl: URL,
 ) => {
-  const normalizedUrl = resolveUrl(request);
-
   try {
     const { apiResourceId } = await context.params;
     const sessionToken = request.cookies.get(MOCK_SESSION_COOKIE)?.value;
@@ -76,7 +75,7 @@ export async function GET(request: NextRequest, context: ApiResourceRouteContext
     return Response.json({ error: "invalid_request", details: validation.error.flatten() }, { status: 400 });
   }
 
-  return handleRequest(request, context, validation.data);
+  return handleRequest(request, context, validation.data, normalizedUrl);
 }
 
 export async function POST(request: NextRequest, context: ApiResourceRouteContext) {
@@ -90,5 +89,6 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
     return Response.json({ error: "invalid_request", details: validation.error.flatten() }, { status: 400 });
   }
 
-  return handleRequest(request, context, validation.data);
+  const normalizedUrl = resolveUrl(request);
+  return handleRequest(request, context, validation.data, normalizedUrl);
 }
