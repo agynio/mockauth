@@ -5,6 +5,7 @@ import { prisma } from "@/server/db/client";
 import { decrypt } from "@/server/crypto/key-vault";
 import { DEFAULT_PROXY_AUTH_STRATEGIES } from "@/server/oidc/proxy-auth-strategy";
 import {
+  addPostLogoutRedirectUri,
   createClient,
   deleteClient,
   getClientByIdForTenant,
@@ -63,6 +64,39 @@ describe("client service", () => {
     expect(stored?.clientSecretEncrypted).toBeTruthy();
     expect(stored?.allowedScopes).toEqual(["openid", "profile", "email"]);
     expect(decrypt(stored?.clientSecretEncrypted as string)).toEqual(clientSecret);
+  });
+
+  it("creates a client with post-logout redirect URIs", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Logout App",
+      tokenEndpointAuthMethods: ["none"],
+      postLogoutRedirectUris: ["https://example.com/logout"],
+    });
+
+    const stored = await prisma.client.findUnique({
+      where: { id: client.id },
+      include: { redirectUris: true, postLogoutRedirectUris: true },
+    });
+
+    expect(stored?.redirectUris).toHaveLength(0);
+    expect(stored?.postLogoutRedirectUris).toHaveLength(1);
+    expect(stored?.postLogoutRedirectUris[0].uri).toBe("https://example.com/logout");
+  });
+
+  it("adds post-logout redirect URIs", async () => {
+    const tenant = await createTenant();
+    const { client } = await createClient(tenant.id, {
+      name: "Add Logout",
+      tokenEndpointAuthMethods: ["none"],
+      redirectUris: ["https://example.com/callback"],
+    });
+
+    const added = await addPostLogoutRedirectUri(client.id, "https://example.com/logout");
+    expect(added.uri).toBe("https://example.com/logout");
+
+    const stored = await prisma.postLogoutRedirectUri.findMany({ where: { clientId: client.id } });
+    expect(stored).toHaveLength(1);
   });
 
   it("allows configuring custom scopes", async () => {
@@ -208,6 +242,7 @@ describe("client service", () => {
       name: "Cascade Client",
       tokenEndpointAuthMethods: ["client_secret_basic"],
       redirectUris: ["https://cascade.example/callback"],
+      postLogoutRedirectUris: ["https://cascade.example/logout"],
       oauthClientMode: "proxy",
       proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
       proxyConfig: {
@@ -326,6 +361,7 @@ describe("client service", () => {
     expect(retainedLog).not.toBeNull();
     expect(retainedLog?.clientId).toBeNull();
     expect(await prisma.redirectUri.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.postLogoutRedirectUri.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.oAuthTestSession.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.authorizationCode.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.accessToken.count({ where: { clientId: client.id } })).toBe(0);

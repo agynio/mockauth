@@ -69,6 +69,7 @@ const formSchema = z
       .array(z.enum(grantTypeOptions))
       .min(1, "Select at least one grant type"),
     redirects: z.string().optional(),
+    postLogoutRedirects: z.string().optional(),
     mode: z.enum(["regular", "proxy"] as const),
     proxyAuthStrategies: proxyAuthStrategiesZodSchema,
     proxyConfig: proxyConfigSchema.optional(),
@@ -335,6 +336,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
       pkceRequired: true,
       allowedGrantTypes: ["authorization_code"],
       redirects: "",
+      postLogoutRedirects: "",
       mode: "regular",
       proxyAuthStrategies: createDefaultProxyAuthStrategies(),
       proxyConfig: createDefaultProxyConfig(),
@@ -404,6 +406,10 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         ?.split(/\r?\n/)
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0);
+      const postLogoutRedirectEntries = values.postLogoutRedirects
+        ?.split(/\r?\n/)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
 
       const proxyConfigInput = values.mode === "proxy" && values.proxyConfig
         ? {
@@ -432,6 +438,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         pkceRequired: values.pkceRequired,
         allowedGrantTypes: values.allowedGrantTypes,
         redirects: redirectEntries,
+        postLogoutRedirects: postLogoutRedirectEntries,
         mode: values.mode,
         proxyAuthStrategies: values.mode === "proxy" ? values.proxyAuthStrategies : undefined,
         proxyConfig: proxyConfigInput,
@@ -450,6 +457,7 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
         pkceRequired: values.pkceRequired,
         allowedGrantTypes: values.allowedGrantTypes,
         redirects: "",
+        postLogoutRedirects: "",
         mode: values.mode,
         proxyAuthStrategies: values.proxyAuthStrategies,
         proxyConfig: createDefaultProxyConfig(),
@@ -918,6 +926,21 @@ export function NewClientForm({ tenantId }: { tenantId: string }) {
                 <Textarea rows={4} placeholder="https://client.example.test/callback" {...field} />
               </FormControl>
               <p className="text-xs text-muted-foreground">Enter one URI per line. Wildcards are normalized automatically.</p>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="postLogoutRedirects"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Post-logout redirect URIs</FormLabel>
+              <FormControl>
+                <Textarea rows={4} placeholder="https://client.example.test/logout" {...field} />
+              </FormControl>
+              <p className="text-xs text-muted-foreground">Enter one URI per line for logout redirects.</p>
               <FormMessage />
             </FormItem>
           )}

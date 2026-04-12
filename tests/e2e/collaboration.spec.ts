@@ -132,7 +132,9 @@ test.describe("collaboration", () => {
     expect(detailsHref).toBeTruthy();
     await readerPage.goto(detailsHref!, { waitUntil: "domcontentloaded" });
     await expect(readerPage.getByTestId("scope-save-button")).toBeDisabled();
-    await expect(readerPage.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+    const addButtons = readerPage.getByRole("button", { name: "Add" });
+    await expect(addButtons.first()).toBeDisabled();
+    await expect(addButtons.nth(1)).toBeDisabled();
     await expect(readerPage.getByText("Client secrets can only be rotated by owners or writers.")).toBeVisible();
     await readerContext.close();
   });

@@ -198,6 +198,7 @@ model Client {
   authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\",\"emailVerifiedMode\":\"false\"}}")
   reauthTtlSeconds         Int                      @default(0)
   redirectUris             RedirectUri[]
+  postLogoutRedirectUris   PostLogoutRedirectUri[]
   oauthTestSessions        OAuthTestSession[]
   authorizationCodes       AuthorizationCode[]
   accessTokens             AccessToken[]
@@ -215,6 +216,17 @@ model Client {
 }
 
 model RedirectUri {
+  id        String          @id @default(uuid())
+  client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String
+  uri       String
+  type      RedirectUriType @default(EXACT)
+  enabled   Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  @@unique([clientId, uri])
+}
+
+model PostLogoutRedirectUri {
   id        String          @id @default(uuid())
   client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId  String

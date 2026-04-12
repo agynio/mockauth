@@ -5,7 +5,9 @@ import { format } from "date-fns";
 
 import { CopyBundleButton, CopyField } from "@/app/admin/_components/copy-field";
 import {
+  AddPostLogoutRedirectForm,
   AddRedirectForm,
+  DeletePostLogoutRedirectButton,
   DeleteRedirectButton,
   RotateSecretForm,
   UpdateAuthStrategiesForm,
@@ -541,6 +543,44 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
                     <TableCell className="hidden sm:table-cell text-xs uppercase text-muted-foreground">{uri.type.toLowerCase()}</TableCell>
                     <TableCell className="text-right">
                       <DeleteRedirectButton redirectId={uri.id} canEdit={canManageClients} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Post-logout Redirect URIs</CardTitle>
+          <CardDescription>Allow RP-initiated logout redirects to approved destinations.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <AddPostLogoutRedirectForm clientId={client.id} canEdit={canManageClients} />
+          {client.postLogoutRedirectUris.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No post-logout redirect URIs configured yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>URI</TableHead>
+                  <TableHead className="hidden sm:table-cell">Type</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {client.postLogoutRedirectUris.map((uri) => (
+                  <TableRow key={uri.id}>
+                    <TableCell>
+                      <p className="font-mono text-sm">{uri.uri}</p>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-xs uppercase text-muted-foreground">
+                      {uri.type.toLowerCase()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DeletePostLogoutRedirectButton redirectId={uri.id} canEdit={canManageClients} />
                     </TableCell>
                   </TableRow>
                 ))}

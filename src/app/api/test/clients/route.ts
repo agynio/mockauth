@@ -13,6 +13,7 @@ type Body = {
   pkceRequired?: boolean;
   allowedGrantTypes?: string[];
   redirectUris?: string[];
+  postLogoutRedirectUris?: string[];
 };
 
 export async function POST(request: Request) {
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
       ? payload.allowedGrantTypes
       : ["authorization_code"];
   const redirectUris = Array.isArray(payload.redirectUris) ? payload.redirectUris : undefined;
+  const postLogoutRedirectUris = Array.isArray(payload.postLogoutRedirectUris)
+    ? payload.postLogoutRedirectUris
+    : undefined;
 
   const created = [] as { id: string; name: string; clientId: string }[];
   for (const name of names) {
@@ -45,6 +49,7 @@ export async function POST(request: Request) {
       pkceRequired,
       allowedGrantTypes,
       redirectUris,
+      postLogoutRedirectUris,
     });
     created.push({ id: client.id, name: client.name, clientId: client.clientId });
   }

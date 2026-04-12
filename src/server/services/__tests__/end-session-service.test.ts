@@ -28,7 +28,8 @@ const API_RESOURCE_ID = "resource_123";
 const ISSUER = `${ORIGIN}/r/${API_RESOURCE_ID}/oidc`;
 const TENANT_ID = "tenant_123";
 const REDIRECT_URI = "https://client.example/logout";
-const REDIRECT_URIS = [{ uri: REDIRECT_URI }];
+const REDIRECT_URIS = [{ uri: "https://client.example/callback" }];
+const POST_LOGOUT_REDIRECT_URIS = [{ uri: REDIRECT_URI }];
 
 const buildIdToken = (payload: Record<string, unknown>) => {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
@@ -43,7 +44,10 @@ describe("handleEndSession", () => {
       tenant: { id: TENANT_ID },
       resource: { id: API_RESOURCE_ID },
     } as never);
-    mockGetClientForTenant.mockResolvedValue({ redirectUris: REDIRECT_URIS } as never);
+    mockGetClientForTenant.mockResolvedValue({
+      redirectUris: REDIRECT_URIS,
+      postLogoutRedirectUris: POST_LOGOUT_REDIRECT_URIS,
+    } as never);
     mockResolveRedirectUri.mockReturnValue(REDIRECT_URI);
     mockClearSession.mockResolvedValue(undefined);
   });
@@ -68,7 +72,7 @@ describe("handleEndSession", () => {
     }
     expect(result.clearSessionCookie).toBe(false);
     expect(mockGetClientForTenant).toHaveBeenCalledWith(TENANT_ID, "client_123");
-    expect(mockResolveRedirectUri).toHaveBeenCalledWith(REDIRECT_URI, REDIRECT_URIS);
+    expect(mockResolveRedirectUri).toHaveBeenCalledWith(REDIRECT_URI, POST_LOGOUT_REDIRECT_URIS);
     expect(mockClearSession).not.toHaveBeenCalled();
   });
 

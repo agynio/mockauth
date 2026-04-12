@@ -86,7 +86,7 @@ export const handleEndSession = async (params: EndSessionParams, origin: string)
   const client = resolvedClientId ? await getClientForTenant(tenant.id, resolvedClientId) : null;
   const redirectUri =
     params.postLogoutRedirectUri && client
-      ? resolveRedirectUri(params.postLogoutRedirectUri, client.redirectUris ?? [])
+      ? resolveRedirectUri(params.postLogoutRedirectUri, client.postLogoutRedirectUris ?? [])
       : null;
 
   const clearSessionCookie = Boolean(params.sessionToken);
