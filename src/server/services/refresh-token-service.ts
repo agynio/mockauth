@@ -28,9 +28,9 @@ export const createRefreshToken = async (
   const token = generateOpaqueToken();
   const familyId = input.familyId ?? randomUUID();
   const now = input.now ?? new Date();
-  const client = tx ?? prisma;
+  const db = tx ?? prisma;
 
-  await client.refreshToken.create({
+  await db.refreshToken.create({
     data: {
       tenantId: input.tenantId,
       clientId: input.clientId,
@@ -54,8 +54,8 @@ export const revokeRefreshTokenFamily = async (
   now: Date = new Date(),
   tx?: Prisma.TransactionClient,
 ) => {
-  const client = tx ?? prisma;
-  await client.refreshToken.updateMany({
+  const db = tx ?? prisma;
+  await db.refreshToken.updateMany({
     where: { familyId, revokedAt: null },
     data: { revokedAt: now },
   });

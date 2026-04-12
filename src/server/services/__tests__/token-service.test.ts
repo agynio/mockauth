@@ -566,6 +566,142 @@ describe("token service refresh grant", () => {
     expect(newRecord.scope).toContain("offline_access");
   });
 
+  it("rejects scope widening during refresh", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "email", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "scope-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        scope: "openid profile email",
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token does not allow scopes: email");
+  });
+
+  it("rejects expired refresh tokens", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "expired-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await prisma.refreshToken.update({
+      where: { tokenHash: hashOpaqueToken(initial.refresh_token!) },
+      data: { expiresAt: new Date(Date.now() - 60 * 1000) },
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token expired");
+  });
+
+  it("rejects refresh tokens issued to a different client", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+    const { client: otherClient, clientSecret: otherSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "mismatch-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: otherClient.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret: otherSecret,
+      }),
+    ).rejects.toThrowError("Invalid refresh token");
+  });
+
+  it("rejects revoked refresh tokens", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "revoked-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await prisma.refreshToken.update({
+      where: { tokenHash: hashOpaqueToken(initial.refresh_token!) },
+      data: { revokedAt: new Date() },
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token reuse detected");
+  });
+
   it("revokes refresh tokens when reuse is detected", async () => {
     const { tenant, apiResource } = await createTenant();
     const { client, clientSecret } = await createPasswordClient({

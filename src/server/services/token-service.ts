@@ -148,8 +148,9 @@ const assertPkce = (code: PkceContext, verifier?: string | null) => {
   verifyPkce(code, verifier);
 };
 
-const normalizeRequestedScopes = (scope: string, allowedScopes: string[]) => {
-  const requested = normalizeScopes(scope.split(" ").filter(Boolean));
+const parseScopeList = (scope: string) => normalizeScopes(scope.split(" ").filter(Boolean));
+
+const validateRequestedScopes = (requested: string[], allowedScopes: string[]) => {
   if (requested.length === 0) {
     throw new DomainError("scope is required", { status: 400, code: "invalid_scope" });
   }
@@ -167,7 +168,8 @@ const normalizeRequestedScopes = (scope: string, allowedScopes: string[]) => {
   return requested;
 };
 
-const parseScopeList = (scope: string) => normalizeScopes(scope.split(" ").filter(Boolean));
+const normalizeRequestedScopes = (scope: string, allowedScopes: string[]) =>
+  validateRequestedScopes(parseScopeList(scope), allowedScopes);
 
 const shouldIssueRefreshToken = (scope: string, client: { oauthClientMode: string; allowedGrantTypes: string[] }) => {
   if (client.oauthClientMode !== "regular") {
@@ -183,24 +185,10 @@ const shouldIssueRefreshToken = (scope: string, client: { oauthClientMode: strin
 
 const resolveRefreshTokenScopes = (storedScope: string, requestedScope: string | undefined, allowedScopes: string[]) => {
   const original = parseScopeList(storedScope);
-  const requested = requestedScope ? parseScopeList(requestedScope) : original;
-
-  if (requested.length === 0) {
-    throw new DomainError("scope is required", { status: 400, code: "invalid_scope" });
-  }
-
-  if (!requested.includes("openid")) {
-    throw new DomainError("scope must include openid", { status: 400, code: "invalid_scope" });
-  }
-
-  const allowed = new Set(normalizeScopes(allowedScopes));
-  const notAllowed = requested.filter((value) => !allowed.has(value));
-  if (notAllowed.length > 0) {
-    throw new DomainError(`Client does not allow scopes: ${notAllowed.join(", ")}`, {
-      status: 400,
-      code: "invalid_scope",
-    });
-  }
+  const requested = validateRequestedScopes(
+    requestedScope ? parseScopeList(requestedScope) : original,
+    allowedScopes,
+  );
 
   const notGranted = requested.filter((value) => !original.includes(value));
   if (notGranted.length > 0) {
