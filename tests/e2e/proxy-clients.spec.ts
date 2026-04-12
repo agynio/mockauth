@@ -105,7 +105,7 @@ test.describe("proxy clients", () => {
       await expect(page.getByRole("heading", { name: "Upstream provider" })).toBeVisible();
       await expect(page.getByTestId("provider-redirect-uri-redirect")).toContainText("/oidc/proxy/callback");
       await expect(page.getByTestId("proxy-mode-note")).toBeVisible();
-      await expect(page.locator('[data-testid="client-scopes-card"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="client-scopes-card"]')).toHaveCount(1);
       await expect(page.locator('[data-testid="client-auth-strategies-card"]')).toHaveCount(0);
       await expect(page.locator('[data-testid="client-signing-card"]')).toHaveCount(0);
       await expect(page.locator('[data-testid="client-reauth-card"]')).toHaveCount(0);
