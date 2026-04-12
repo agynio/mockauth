@@ -132,7 +132,7 @@ describe("ClientDetailPage proxy mode", () => {
     mockGetClientByIdForTenant.mockResolvedValue({ ...proxyClientBase });
   });
 
-  it("shows upstream configuration details and hides local settings", async () => {
+  it("shows upstream configuration details and allowed scopes", async () => {
     const page = await ClientDetailPage({ params: Promise.resolve({ clientId: "client_proxy" }) });
     render(page);
 
@@ -142,7 +142,8 @@ describe("ClientDetailPage proxy mode", () => {
     expect(screen.getByTestId("proxy-auth-strategies-card")).toBeInTheDocument();
     expect(screen.getByTestId("proxy-auth-strategy-form")).toBeInTheDocument();
 
-    expect(screen.queryByTestId("client-scopes-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("client-scopes-card")).toBeInTheDocument();
+    expect(screen.getByTestId("client-scopes-form")).toBeInTheDocument();
     expect(screen.queryByTestId("client-auth-strategies-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-signing-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-reauth-card")).not.toBeInTheDocument();

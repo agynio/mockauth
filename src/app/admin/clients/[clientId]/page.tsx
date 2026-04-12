@@ -176,6 +176,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         }))
       : [];
   const showLocalClientSettings = client.oauthClientMode === "regular";
+  const showClientScopes = client.oauthClientMode === "regular" || client.oauthClientMode === "proxy";
   const showProxyProviderSection = client.oauthClientMode !== "regular";
   const proxyConfigMissing = showProxyProviderSection && !proxyConfigInitial;
   const modeLabel =
@@ -369,10 +370,10 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
               </Alert>
             ) : null}
             <Alert data-testid="proxy-mode-note">
-              <AlertTitle>Scopes and claims come from upstream</AlertTitle>
+              <AlertTitle>Scope allowlist still applies</AlertTitle>
               <AlertDescription>
-                MockAuth will forward tokens from the provider as-is. Local scope toggles and token settings are disabled in
-                proxy mode.
+                MockAuth forwards upstream tokens as-is, but it still validates requested scopes against the allowlist. Use
+                the Scopes card to control what apps can request and the mappings below to translate them upstream.
               </AlertDescription>
             </Alert>
             {proxyConfigInitial ? (
@@ -411,7 +412,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
         />
       ) : null}
 
-      {showLocalClientSettings ? (
+      {showClientScopes ? (
         <Card data-testid="client-scopes-card">
           <CardHeader>
             <CardTitle>Scopes</CardTitle>
