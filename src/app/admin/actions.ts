@@ -30,6 +30,7 @@ import {
   updateClientApiResource,
   updateClientAuthStrategies,
   updateClientReauthTtl,
+  updateClientRefreshTokenTtl,
   updateClientAllowedScopes,
   getClientSecret,
   updateClientSigningAlgorithms,
@@ -319,6 +320,10 @@ const updateClientStrategiesSchema = z.object({
 const updateClientReauthSchema = z.object({
   clientId: z.string().min(1),
   reauthTtlSeconds: z.number().int().min(0).max(86400),
+});
+const updateClientRefreshTokenTtlSchema = z.object({
+  clientId: z.string().min(1),
+  refreshTokenTtlSeconds: z.number().int().min(60).max(2592000),
 });
 
 const idTokenAlgOptions = ["default", ...SUPPORTED_JWT_SIGNING_ALGS] as const;
@@ -1201,6 +1206,34 @@ export const updateClientReauthTtlAction = async (input: z.infer<typeof updateCl
   } catch (error) {
     console.error(error);
     return { error: "Unable to update re-auth TTL" };
+  }
+};
+
+export const updateClientRefreshTokenTtlAction = async (
+  input: z.infer<typeof updateClientRefreshTokenTtlSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = updateClientRefreshTokenTtlSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    const updated = await updateClientRefreshTokenTtl(client.id, parsed.refreshTokenTtlSeconds);
+    revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: updated.tenantId,
+      actorId: adminId,
+      action: "update",
+      resource: "client_refresh_token_ttl",
+      resourceId: updated.id,
+      clientId: updated.id,
+      message: "Client refresh token TTL updated",
+    });
+    return { success: "Refresh token TTL updated" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to update refresh token TTL" };
   }
 };
 

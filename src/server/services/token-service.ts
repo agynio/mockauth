@@ -305,7 +305,7 @@ const issueTokens = async (params: TokenIssueContext): Promise<TokenResponsePayl
 const maybeIssueRefreshToken = async (params: {
   tenantId: string;
   apiResourceId: string;
-  client: { id: string; oauthClientMode: string; allowedGrantTypes: string[] };
+  client: { id: string; oauthClientMode: string; allowedGrantTypes: string[]; refreshTokenTtlSeconds: number };
   user: MockUser;
   subject: string;
   loginStrategy: CodeContext["loginStrategy"];
@@ -325,6 +325,7 @@ const maybeIssueRefreshToken = async (params: {
     subject: params.subject,
     emailVerifiedOverride: params.emailVerifiedOverride ?? null,
     scope: params.scope,
+    refreshTokenTtlSeconds: params.client.refreshTokenTtlSeconds,
   });
 
   return token;
@@ -657,6 +658,7 @@ export const issueTokensFromRefreshToken = async (params: {
         scope: refreshScope,
         familyId: record.familyId,
         now,
+        refreshTokenTtlSeconds: client.refreshTokenTtlSeconds,
       },
       tx,
     );

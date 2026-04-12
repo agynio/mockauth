@@ -60,6 +60,7 @@ async function main() {
       allowedGrantTypes: ["authorization_code", "refresh_token"],
       allowedScopes: ["openid", "profile", "email", "offline_access"],
       tokenEndpointAuthMethods: ["client_secret_post"],
+      refreshTokenTtlSeconds: 86400,
     },
   });
 
