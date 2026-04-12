@@ -20,6 +20,7 @@ import {
   addRedirectUriAction,
   deletePostLogoutRedirectUriAction,
   deleteRedirectUriAction,
+  type ActionState,
   rotateClientSecretAction,
   updateClientAuthStrategiesAction,
   updateClientTokenConfigAction,
@@ -87,6 +88,46 @@ const buildRedirectSchema = (message: string) =>
   });
 const redirectSchema = buildRedirectSchema("Enter a redirect URI");
 const postLogoutRedirectSchema = buildRedirectSchema("Enter a post-logout redirect URI");
+type RedirectFormValues = z.infer<typeof redirectSchema>;
+type RedirectFormConfig = {
+  label: string;
+  placeholder: string;
+  addAction: (input: { clientId: string; uri: string }) => Promise<ActionState>;
+  toastSuccess: string;
+  toastError: string;
+  schema: z.ZodType<RedirectFormValues>;
+};
+type RedirectDeleteConfig = {
+  deleteAction: (input: { redirectId: string }) => Promise<ActionState>;
+  toastSuccess: string;
+  toastError: string;
+};
+const redirectFormConfig: RedirectFormConfig = {
+  label: "Redirect URI",
+  placeholder: "https://app.example.com/callback or *",
+  addAction: addRedirectUriAction,
+  toastSuccess: "Redirect saved",
+  toastError: "Unable to save redirect",
+  schema: redirectSchema,
+};
+const postLogoutRedirectFormConfig: RedirectFormConfig = {
+  label: "Post-logout redirect URI",
+  placeholder: "https://app.example.com/logout or *",
+  addAction: addPostLogoutRedirectUriAction,
+  toastSuccess: "Post-logout redirect saved",
+  toastError: "Unable to save post-logout redirect",
+  schema: postLogoutRedirectSchema,
+};
+const redirectDeleteConfig: RedirectDeleteConfig = {
+  deleteAction: deleteRedirectUriAction,
+  toastSuccess: "Redirect removed",
+  toastError: "Unable to remove",
+};
+const postLogoutRedirectDeleteConfig: RedirectDeleteConfig = {
+  deleteAction: deletePostLogoutRedirectUriAction,
+  toastSuccess: "Post-logout redirect removed",
+  toastError: "Unable to remove",
+};
 const issuerSchema = z.object({ resourceId: z.union([z.literal("default"), z.string().min(1)]) });
 const strategyConfigSchema = z.object({ enabled: z.boolean(), subSource: z.enum(["entered", "generated_uuid"]) });
 const emailStrategyConfigSchema = strategyConfigSchema.extend({ emailVerifiedMode: z.enum(["true", "false", "user_choice"]) });
@@ -798,9 +839,20 @@ export function UpdateTokenConfigForm({
   );
 }
 
-export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+function AddRedirectUriForm({
+  clientId,
+  canEdit,
+  config,
+}: {
+  clientId: string;
+  canEdit: boolean;
+  config: RedirectFormConfig;
+}) {
   const router = useRouter();
-  const form = useForm<z.infer<typeof redirectSchema>>({ resolver: zodResolver(redirectSchema), defaultValues: { uri: "" } });
+  const form = useForm<RedirectFormValues>({
+    resolver: zodResolver(config.schema),
+    defaultValues: { uri: "" },
+  });
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
   const watchedField = useWatch({ control: form.control, name: "uri" }) ?? "";
@@ -811,14 +863,14 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
   const isPathWildcard =
     !isAnyWildcard && !isHostWildcard && watchedUri.endsWith("/*") && normalized.startsWith("http");
 
-  const onSubmit = (values: z.infer<typeof redirectSchema>) => {
+  const onSubmit = (values: RedirectFormValues) => {
     startTransition(async () => {
-      const result = await addRedirectUriAction({ clientId, uri: values.uri });
+      const result = await config.addAction({ clientId, uri: values.uri });
       if (result.error) {
-        toast({ variant: "destructive", title: "Unable to save redirect", description: result.error });
+        toast({ variant: "destructive", title: config.toastError, description: result.error });
         return;
       }
-      toast({ title: "Redirect saved" });
+      toast({ title: config.toastSuccess });
       form.reset();
       router.refresh();
     });
@@ -832,9 +884,9 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
           name="uri"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Redirect URI</FormLabel>
+              <FormLabel>{config.label}</FormLabel>
               <FormControl>
-                <Input placeholder="https://app.example.com/callback or *" {...field} disabled={!canEdit || pending} />
+                <Input placeholder={config.placeholder} {...field} disabled={!canEdit || pending} />
               </FormControl>
               <FormMessage />
               {isAnyWildcard ? (
@@ -865,73 +917,13 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
   );
 }
 
+export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+  return <AddRedirectUriForm clientId={clientId} canEdit={canEdit} config={redirectFormConfig} />;
+}
+
 export function AddPostLogoutRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
-  const router = useRouter();
-  const form = useForm<z.infer<typeof postLogoutRedirectSchema>>({
-    resolver: zodResolver(postLogoutRedirectSchema),
-    defaultValues: { uri: "" },
-  });
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-  const watchedField = useWatch({ control: form.control, name: "uri" }) ?? "";
-  const watchedUri = watchedField.trim();
-  const normalized = watchedUri.toLowerCase();
-  const isAnyWildcard = watchedUri === "*";
-  const isHostWildcard = !isAnyWildcard && normalized.startsWith("https://*.");
-  const isPathWildcard =
-    !isAnyWildcard && !isHostWildcard && watchedUri.endsWith("/*") && normalized.startsWith("http");
-
-  const onSubmit = (values: z.infer<typeof postLogoutRedirectSchema>) => {
-    startTransition(async () => {
-      const result = await addPostLogoutRedirectUriAction({ clientId, uri: values.uri });
-      if (result.error) {
-        toast({ variant: "destructive", title: "Unable to save post-logout redirect", description: result.error });
-        return;
-      }
-      toast({ title: "Post-logout redirect saved" });
-      form.reset();
-      router.refresh();
-    });
-  };
-
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <FormField
-          control={form.control}
-          name="uri"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Post-logout redirect URI</FormLabel>
-              <FormControl>
-                <Input placeholder="https://app.example.com/logout or *" {...field} disabled={!canEdit || pending} />
-              </FormControl>
-              <FormMessage />
-              {isAnyWildcard ? (
-                <Alert variant="destructive" data-testid="redirect-any-warning" className="mt-3">
-                  <AlertTitle>QA-only wildcard</AlertTitle>
-                  <AlertDescription>
-                    Allowing <span className="font-mono">*</span> matches every redirect URI and only works when
-                    MOCKAUTH_ALLOW_ANY_REDIRECT=true. Never enable this in production.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              {!isAnyWildcard && (isHostWildcard || isPathWildcard) ? (
-                <Alert variant="warning" data-testid="redirect-wildcard-warning" className="mt-3">
-                  <AlertTitle>Wildcard redirects are for QA</AlertTitle>
-                  <AlertDescription>
-                    Host and path wildcards are intended for QA environments only and must not be used for production tenants.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-            </FormItem>
-          )}
-        />
-        <Button type="submit" disabled={!canEdit || pending} className="self-end">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
-        </Button>
-      </form>
-    </Form>
+    <AddRedirectUriForm clientId={clientId} canEdit={canEdit} config={postLogoutRedirectFormConfig} />
   );
 }
 
@@ -1290,19 +1282,27 @@ export function UpdateAuthStrategiesForm({
   );
 }
 
-export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
+function DeleteRedirectButtonBase({
+  redirectId,
+  canEdit,
+  config,
+}: {
+  redirectId: string;
+  canEdit: boolean;
+  config: RedirectDeleteConfig;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
 
   const handleDelete = () => {
     startTransition(async () => {
-      const result = await deleteRedirectUriAction({ redirectId });
+      const result = await config.deleteAction({ redirectId });
       if (result.error) {
-        toast({ variant: "destructive", title: "Unable to remove", description: result.error });
+        toast({ variant: "destructive", title: config.toastError, description: result.error });
         return;
       }
-      toast({ title: "Redirect removed" });
+      toast({ title: config.toastSuccess });
       router.refresh();
     });
   };
@@ -1322,35 +1322,17 @@ export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: stri
   );
 }
 
+export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
+  return <DeleteRedirectButtonBase redirectId={redirectId} canEdit={canEdit} config={redirectDeleteConfig} />;
+}
+
 export function DeletePostLogoutRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-
-  const handleDelete = () => {
-    startTransition(async () => {
-      const result = await deletePostLogoutRedirectUriAction({ redirectId });
-      if (result.error) {
-        toast({ variant: "destructive", title: "Unable to remove", description: result.error });
-        return;
-      }
-      toast({ title: "Post-logout redirect removed" });
-      router.refresh();
-    });
-  };
-
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className="text-destructive"
-      onClick={handleDelete}
-      disabled={pending || !canEdit}
-    >
-      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-      {!pending && <span className="ml-1 text-sm">Remove</span>}
-    </Button>
+    <DeleteRedirectButtonBase
+      redirectId={redirectId}
+      canEdit={canEdit}
+      config={postLogoutRedirectDeleteConfig}
+    />
   );
 }
 

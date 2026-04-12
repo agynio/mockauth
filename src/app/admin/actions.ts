@@ -268,7 +268,6 @@ const keySchema = z.object({ tenantId: z.string().min(1), alg: z.enum(SUPPORTED_
 const setTenantSchema = z.object({ tenantId: z.string().min(1) });
 const rotateSecretSchema = z.object({ clientId: z.string().min(1) });
 const redirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
-const postLogoutRedirectSchema = z.object({ clientId: z.string().min(1), uri: z.string().min(1) });
 const oauthTestSchema = z.object({
   clientId: z.string().min(1),
   redirectUri: z.string().min(1),
@@ -278,7 +277,6 @@ const oauthTestSchema = z.object({
 });
 const updateClientSchema = z.object({ clientId: z.string().min(1), name: z.string().min(2) });
 const deleteRedirectSchema = z.object({ redirectId: z.string().min(1) });
-const deletePostLogoutRedirectSchema = z.object({ redirectId: z.string().min(1) });
 const membershipRoleSchema = z.enum(["OWNER", "WRITER", "READER"]);
 const inviteRoleSchema = z.enum(["WRITER", "READER"]);
 const deleteTenantSchema = z.object({ tenantId: z.string().min(1) });
@@ -1018,11 +1016,11 @@ export const addRedirectUriAction = async (input: z.infer<typeof redirectSchema>
 };
 
 export const addPostLogoutRedirectUriAction = async (
-  input: z.infer<typeof postLogoutRedirectSchema>,
+  input: z.infer<typeof redirectSchema>,
 ): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = postLogoutRedirectSchema.parse(input);
+    const parsed = redirectSchema.parse(input);
     const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
     if (!client) {
       return { error: "Client not found" };
@@ -1382,11 +1380,11 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
 };
 
 export const deletePostLogoutRedirectUriAction = async (
-  input: z.infer<typeof deletePostLogoutRedirectSchema>,
+  input: z.infer<typeof deleteRedirectSchema>,
 ): Promise<ActionState> => {
   try {
     const adminId = await requireSession();
-    const parsed = deletePostLogoutRedirectSchema.parse(input);
+    const parsed = deleteRedirectSchema.parse(input);
     const redirect = await prisma.postLogoutRedirectUri.findUnique({
       where: { id: parsed.redirectId },
       select: { id: true, uri: true, clientId: true, client: { select: { tenantId: true } } },
