@@ -521,6 +521,37 @@ describe("token service refresh grant", () => {
     expect(record.clientId).toBe(client.id);
   });
 
+  it("uses the client refresh token TTL for issuance", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+    const refreshTokenTtlSeconds = 7200;
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { refreshTokenTtlSeconds },
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "ttl-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const record = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash: hashOpaqueToken(response.refresh_token!) },
+    });
+    const ttlSeconds = Math.round((record.expiresAt.getTime() - record.createdAt.getTime()) / 1000);
+    expect(ttlSeconds).toBeGreaterThanOrEqual(refreshTokenTtlSeconds - 10);
+    expect(ttlSeconds).toBeLessThanOrEqual(refreshTokenTtlSeconds + 10);
+  });
+
   it("rotates refresh tokens and narrows scopes", async () => {
     const { tenant, apiResource } = await createTenant();
     const { client, clientSecret } = await createPasswordClient({
@@ -564,6 +595,51 @@ describe("token service refresh grant", () => {
     expect(previousRecord.rotatedAt).not.toBeNull();
     expect(newRecord.familyId).toBe(previousRecord.familyId);
     expect(newRecord.scope).toContain("offline_access");
+  });
+
+  it("uses the latest client refresh token TTL during rotation", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { refreshTokenTtlSeconds: 7200 },
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "rotate-ttl-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const refreshTokenTtlSeconds = 1800;
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { refreshTokenTtlSeconds },
+    });
+
+    const refreshed = await issueTokensFromRefreshToken({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      refreshToken: initial.refresh_token!,
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const newRecord = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash: hashOpaqueToken(refreshed.refresh_token!) },
+    });
+    const ttlSeconds = Math.round((newRecord.expiresAt.getTime() - newRecord.createdAt.getTime()) / 1000);
+    expect(ttlSeconds).toBeGreaterThanOrEqual(refreshTokenTtlSeconds - 10);
+    expect(ttlSeconds).toBeLessThanOrEqual(refreshTokenTtlSeconds + 10);
   });
 
   it("rejects scope widening during refresh", async () => {

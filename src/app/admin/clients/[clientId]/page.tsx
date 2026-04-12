@@ -14,6 +14,7 @@ import {
   UpdateClientSigningAlgorithmsForm,
   UpdateClientScopesForm,
   UpdateClientReauthTtlForm,
+  UpdateClientRefreshTokenTtlForm,
   UpdateClientIssuerForm,
   UpdateClientNameForm,
   UpdateTokenConfigForm,
@@ -179,6 +180,7 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
   const showClientScopes = client.oauthClientMode === "regular" || client.oauthClientMode === "proxy";
   const showProxyProviderSection = client.oauthClientMode !== "regular";
   const proxyConfigMissing = showProxyProviderSection && !proxyConfigInitial;
+  const showRefreshTokenTtl = showLocalClientSettings && allowedGrantTypes.includes("refresh_token");
   const modeLabel =
     client.oauthClientMode === "proxy"
       ? `proxy mode (${enabledProxyStrategyList.length > 0 ? enabledProxyStrategyList.join(" + ") : "none"})`
@@ -478,6 +480,25 @@ export default async function ClientDetailPage({ params }: { params: PageParams 
             />
             <p className="text-xs text-muted-foreground">
               0 seconds disables silent reuse. Higher values allow the authorize endpoint to skip the login form when the same admin signs in again within the TTL window.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showRefreshTokenTtl ? (
+        <Card data-testid="client-refresh-token-ttl-card">
+          <CardHeader>
+            <CardTitle>Refresh token lifetime</CardTitle>
+            <CardDescription>Set how long refresh tokens remain valid for this client.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <UpdateClientRefreshTokenTtlForm
+              clientId={client.id}
+              initialTtl={client.refreshTokenTtlSeconds}
+              canEdit={canManageClients}
+            />
+            <p className="text-xs text-muted-foreground">
+              Applies to newly issued refresh tokens and rotations for offline access grants.
             </p>
           </CardContent>
         </Card>

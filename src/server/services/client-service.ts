@@ -473,6 +473,10 @@ export const updateClientReauthTtl = async (clientId: string, reauthTtlSeconds: 
   return prisma.client.update({ where: { id: clientId }, data: { reauthTtlSeconds } });
 };
 
+export const updateClientRefreshTokenTtl = async (clientId: string, refreshTokenTtlSeconds: number) => {
+  return prisma.client.update({ where: { id: clientId }, data: { refreshTokenTtlSeconds } });
+};
+
 export const updateClientSigningAlgorithms = async (
   clientId: string,
   options: { idTokenAlg: JwtSigningAlg | null; accessTokenAlg: JwtSigningAlg | null },

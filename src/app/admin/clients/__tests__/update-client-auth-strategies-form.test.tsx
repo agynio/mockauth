@@ -18,6 +18,7 @@ vi.mock("@/app/admin/actions", () => ({
   updateClientAuthStrategiesAction: mockUpdateClientAuthStrategiesAction,
   updateClientIssuerAction: vi.fn(),
   updateClientNameAction: vi.fn(),
+  updateClientRefreshTokenTtlAction: vi.fn(),
 }));
 
 const mockRefresh = vi.fn();

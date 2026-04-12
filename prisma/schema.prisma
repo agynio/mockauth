@@ -199,6 +199,7 @@ model Client {
   accessTokenSigningAlg    JwtSigningAlg?
   authStrategies           Json                     @default("{\"username\":{\"enabled\":true,\"subSource\":\"entered\"},\"email\":{\"enabled\":false,\"subSource\":\"entered\",\"emailVerifiedMode\":\"false\"}}")
   reauthTtlSeconds         Int                      @default(0)
+  refreshTokenTtlSeconds   Int                      @default(86400)
   redirectUris             RedirectUri[]
   postLogoutRedirectUris   PostLogoutRedirectUri[]
   oauthTestSessions        OAuthTestSession[]

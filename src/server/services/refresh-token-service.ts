@@ -1,12 +1,10 @@
 import { randomUUID } from "crypto";
 
-import { addHours } from "date-fns";
+import { addSeconds } from "date-fns";
 
 import { Prisma, type LoginStrategy } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { generateOpaqueToken, hashOpaqueToken } from "@/server/crypto/opaque-token";
-
-const REFRESH_TOKEN_TTL_HOURS = 24;
 
 type RefreshTokenCreateInput = {
   tenantId: string;
@@ -17,6 +15,7 @@ type RefreshTokenCreateInput = {
   subject: string;
   emailVerifiedOverride?: boolean | null;
   scope: string;
+  refreshTokenTtlSeconds: number;
   familyId?: string;
   now?: Date;
 };
@@ -42,7 +41,7 @@ export const createRefreshToken = async (
       familyId,
       tokenHash: hashOpaqueToken(token),
       scope: input.scope,
-      expiresAt: addHours(now, REFRESH_TOKEN_TTL_HOURS),
+      expiresAt: addSeconds(now, input.refreshTokenTtlSeconds),
     },
   });
 

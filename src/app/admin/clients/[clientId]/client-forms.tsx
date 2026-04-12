@@ -28,6 +28,7 @@ import {
   updateClientIssuerAction,
   updateClientNameAction,
   updateClientReauthTtlAction,
+  updateClientRefreshTokenTtlAction,
   updateClientSigningAlgsAction,
   updateProxyClientConfigAction,
   updateProxyAuthStrategiesAction,
@@ -147,8 +148,15 @@ const tokenConfigSchema = z.object({
     .min(1, "Select at least one grant type"),
 });
 const MAX_REAUTH_TTL_SECONDS = 86400;
+const MIN_REFRESH_TOKEN_TTL_SECONDS = 60;
+const MAX_REFRESH_TOKEN_TTL_SECONDS = 2592000;
 const reauthTtlSchema = z.object({
   reauthTtlSeconds: z.coerce
+    .number()
+    .int("Enter a whole number"),
+});
+const refreshTokenTtlSchema = z.object({
+  refreshTokenTtlSeconds: z.coerce
     .number()
     .int("Enter a whole number"),
 });
@@ -607,6 +615,101 @@ export function UpdateClientReauthTtlForm({
         />
         {canEdit ? (
           <Button type="submit" disabled={pending} className="self-end" data-testid="reauth-ttl-save">
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled className="self-end">
+            Read-only
+          </Button>
+        )}
+      </form>
+    </Form>
+  );
+}
+
+export function UpdateClientRefreshTokenTtlForm({
+  clientId,
+  initialTtl,
+  canEdit,
+}: {
+  clientId: string;
+  initialTtl: number;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+  const form = useForm<z.infer<typeof refreshTokenTtlSchema>>({
+    resolver: zodResolver(refreshTokenTtlSchema),
+    defaultValues: { refreshTokenTtlSeconds: initialTtl },
+  });
+
+  useEffect(() => {
+    form.reset({ refreshTokenTtlSeconds: initialTtl });
+  }, [initialTtl, form]);
+
+  const onSubmit = form.handleSubmit((values) => {
+    if (values.refreshTokenTtlSeconds < MIN_REFRESH_TOKEN_TTL_SECONDS) {
+      form.setError("refreshTokenTtlSeconds", {
+        type: "manual",
+        message: `Enter at least ${MIN_REFRESH_TOKEN_TTL_SECONDS.toLocaleString()} seconds`,
+      });
+      return;
+    }
+    if (values.refreshTokenTtlSeconds > MAX_REFRESH_TOKEN_TTL_SECONDS) {
+      form.setError("refreshTokenTtlSeconds", {
+        type: "manual",
+        message: `Limit to ${MAX_REFRESH_TOKEN_TTL_SECONDS.toLocaleString()} seconds (30 days)`,
+      });
+      return;
+    }
+    form.clearErrors("refreshTokenTtlSeconds");
+    startTransition(async () => {
+      const result = await updateClientRefreshTokenTtlAction({
+        clientId,
+        refreshTokenTtlSeconds: values.refreshTokenTtlSeconds,
+      });
+      if (result.error) {
+        toast({ variant: "destructive", title: "Unable to update", description: result.error });
+        return;
+      }
+      router.refresh();
+      toast({ title: "Refresh token TTL updated", description: result.success ?? "Saved" });
+    });
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={onSubmit} noValidate className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <FormField
+          control={form.control}
+          name="refreshTokenTtlSeconds"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel>Refresh token lifetime (seconds)</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  type="number"
+                  min={MIN_REFRESH_TOKEN_TTL_SECONDS}
+                  max={MAX_REFRESH_TOKEN_TTL_SECONDS}
+                  inputMode="numeric"
+                  disabled={!canEdit || pending}
+                  data-testid="refresh-token-ttl-input"
+                />
+              </FormControl>
+              <FormMessage />
+              <p className="text-xs text-muted-foreground">
+                Min {MIN_REFRESH_TOKEN_TTL_SECONDS.toLocaleString()} seconds (1 minute).
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Max {MAX_REFRESH_TOKEN_TTL_SECONDS.toLocaleString()} seconds (30 days).
+              </p>
+            </FormItem>
+          )}
+        />
+        {canEdit ? (
+          <Button type="submit" disabled={pending} className="self-end" data-testid="refresh-token-ttl-save">
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
           </Button>
         ) : (

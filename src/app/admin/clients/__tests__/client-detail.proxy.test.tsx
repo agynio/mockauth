@@ -44,6 +44,7 @@ const proxyClientBase = {
     upstreamTokenEndpointAuthMethod: "client_secret_post",
   },
   reauthTtlSeconds: 0,
+  refreshTokenTtlSeconds: 86400,
   idTokenSignedResponseAlg: null,
   accessTokenSigningAlg: null,
   createdAt: new Date("2024-01-01T00:00:00.000Z"),
@@ -103,6 +104,7 @@ vi.mock("../[clientId]/client-forms", () => ({
   UpdateAuthStrategiesForm: () => <div data-testid="client-auth-form" />,
   UpdateClientSigningAlgorithmsForm: () => <div data-testid="client-signing-form" />,
   UpdateClientReauthTtlForm: () => <div data-testid="client-reauth-form" />,
+  UpdateClientRefreshTokenTtlForm: () => <div data-testid="client-refresh-token-ttl-form" />,
   AddRedirectForm: () => <div data-testid="add-redirect-form" />,
   DeleteRedirectButton: () => <button type="button" data-testid="delete-redirect-btn" />,
   AddPostLogoutRedirectForm: () => <div data-testid="add-post-logout-redirect-form" />,
@@ -147,6 +149,7 @@ describe("ClientDetailPage proxy mode", () => {
     expect(screen.queryByTestId("client-auth-strategies-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-signing-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("client-reauth-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("client-refresh-token-ttl-card")).not.toBeInTheDocument();
   });
 
   it("shows a diagnostic warning when proxy config is missing", async () => {
