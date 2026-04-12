@@ -74,7 +74,7 @@ import { buildOidcUrls } from "@/server/oidc/url-builder";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { createOauthTestSession, resetOauthTestSessionsForClient } from "@/server/services/oauth-test-service";
 import { clearOauthTestSecretCookie, setOauthTestSecretCookie } from "@/server/oauth/test-cookie";
-import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { DEFAULT_ALLOWED_SCOPES, isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import { SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import { buildConfigChangedDetails, type ProxyProviderConfigSnapshot, type TokenAuthMethod } from "@/server/services/audit-event";
@@ -491,7 +491,9 @@ export const createClientAction = async (
     }
     const redirectEntries = parsed.redirects?.filter(Boolean);
     const postLogoutRedirectEntries = parsed.postLogoutRedirects?.filter(Boolean);
-    const normalizedScopes = parsed.scopes ? normalizeScopes(parsed.scopes) : Array.from(SUPPORTED_SCOPES);
+    const normalizedScopes = parsed.scopes
+      ? normalizeScopes(parsed.scopes)
+      : Array.from(DEFAULT_ALLOWED_SCOPES);
     if (!normalizedScopes.includes("openid")) {
       return { error: "Scopes must include openid" };
     }

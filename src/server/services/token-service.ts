@@ -6,6 +6,7 @@ import type { AuthorizationCodeWithRelations } from "@/server/services/authoriza
 import { prisma } from "@/server/db/client";
 import { decrypt } from "@/server/crypto/key-vault";
 import { verifySecret } from "@/server/crypto/hash";
+import { hashOpaqueToken } from "@/server/crypto/opaque-token";
 import { computeS256Challenge } from "@/server/crypto/pkce";
 import { DomainError } from "@/server/errors";
 import { claimsForScopes } from "@/server/oidc/claims";
@@ -13,13 +14,14 @@ import { issuerForResource } from "@/server/oidc/issuer";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { ensureActiveKeyForAlg } from "@/server/services/key-service";
 import type { ClientAuthStrategy } from "@/server/oidc/auth-strategy";
-import { fromPrismaLoginStrategy, parseClientAuthStrategies } from "@/server/oidc/auth-strategy";
+import { fromPrismaLoginStrategy, parseClientAuthStrategies, toPrismaLoginStrategy } from "@/server/oidc/auth-strategy";
 import { normalizeScopes } from "@/server/oidc/scopes";
 import { parseTokenAuthMethods, type TokenAuthMethod } from "@/server/oidc/token-auth-method";
 import { DEFAULT_JWT_SIGNING_ALG } from "@/server/oidc/signing-alg";
 import { emitAuditEvent } from "@/server/services/audit-service";
 import {
   buildTokenAuthCodeReceivedDetails,
+  buildTokenRefreshReceivedDetails,
   type TokenResponsePayload,
 } from "@/server/services/audit-event";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
@@ -31,6 +33,7 @@ import {
   SecurityViolationError,
   withSecurityViolationAudit,
 } from "@/server/services/security-violation";
+import { createRefreshToken, revokeRefreshTokenFamily } from "@/server/services/refresh-token-service";
 import type { JwtSigningAlg, MockUser } from "@/generated/prisma/client";
 import type { RequestContext } from "@/server/utils/request-context";
 
@@ -145,8 +148,9 @@ const assertPkce = (code: PkceContext, verifier?: string | null) => {
   verifyPkce(code, verifier);
 };
 
-const normalizeRequestedScopes = (scope: string, allowedScopes: string[]) => {
-  const requested = normalizeScopes(scope.split(" ").filter(Boolean));
+const parseScopeList = (scope: string) => normalizeScopes(scope.split(" ").filter(Boolean));
+
+const validateRequestedScopes = (requested: string[], allowedScopes: string[]) => {
   if (requested.length === 0) {
     throw new DomainError("scope is required", { status: 400, code: "invalid_scope" });
   }
@@ -162,6 +166,47 @@ const normalizeRequestedScopes = (scope: string, allowedScopes: string[]) => {
     });
   }
   return requested;
+};
+
+const normalizeRequestedScopes = (scope: string, allowedScopes: string[]) =>
+  validateRequestedScopes(parseScopeList(scope), allowedScopes);
+
+const shouldIssueRefreshToken = (scope: string, client: { oauthClientMode: string; allowedGrantTypes: string[] }) => {
+  if (client.oauthClientMode !== "regular") {
+    return false;
+  }
+
+  if (!client.allowedGrantTypes.includes("refresh_token")) {
+    return false;
+  }
+
+  return parseScopeList(scope).includes("offline_access");
+};
+
+const resolveRefreshTokenScopes = (storedScope: string, requestedScope: string | undefined, allowedScopes: string[]) => {
+  const original = parseScopeList(storedScope);
+  const requested = validateRequestedScopes(
+    requestedScope ? parseScopeList(requestedScope) : original,
+    allowedScopes,
+  );
+
+  const notGranted = requested.filter((value) => !original.includes(value));
+  if (notGranted.length > 0) {
+    throw new DomainError(`Refresh token does not allow scopes: ${notGranted.join(", ")}`, {
+      status: 400,
+      code: "invalid_scope",
+    });
+  }
+
+  const refreshScopes =
+    original.includes("offline_access") && !requested.includes("offline_access")
+      ? [...requested, "offline_access"]
+      : requested;
+
+  return {
+    tokenScope: requested.join(" "),
+    refreshScope: refreshScopes.join(" "),
+  };
 };
 
 type TokenIssueContext = {
@@ -257,6 +302,34 @@ const issueTokens = async (params: TokenIssueContext): Promise<TokenResponsePayl
   };
 };
 
+const maybeIssueRefreshToken = async (params: {
+  tenantId: string;
+  apiResourceId: string;
+  client: { id: string; oauthClientMode: string; allowedGrantTypes: string[] };
+  user: MockUser;
+  subject: string;
+  loginStrategy: CodeContext["loginStrategy"];
+  emailVerifiedOverride?: boolean | null;
+  scope: string;
+}) => {
+  if (!shouldIssueRefreshToken(params.scope, params.client)) {
+    return null;
+  }
+
+  const { token } = await createRefreshToken({
+    tenantId: params.tenantId,
+    apiResourceId: params.apiResourceId,
+    clientId: params.client.id,
+    userId: params.user.id,
+    loginStrategy: params.loginStrategy,
+    subject: params.subject,
+    emailVerifiedOverride: params.emailVerifiedOverride ?? null,
+    scope: params.scope,
+  });
+
+  return token;
+};
+
 export const issueTokensFromCode = async (params: {
   code: CodeContext;
   codeVerifier?: string | null;
@@ -338,6 +411,19 @@ export const issueTokensFromCode = async (params: {
     nonce: code.nonce,
   });
 
+  const refreshToken = await maybeIssueRefreshToken({
+    tenantId: code.tenantId,
+    apiResourceId: code.apiResourceId,
+    client: code.client,
+    user: code.user,
+    subject: code.subject,
+    loginStrategy: code.loginStrategy,
+    emailVerifiedOverride: code.emailVerifiedOverride ?? null,
+    scope: code.scope,
+  });
+
+  const tokenResponse = refreshToken ? { ...response, refresh_token: refreshToken } : response;
+
   await emitAuditEvent({
     tenantId: code.tenantId,
     clientId: code.clientId,
@@ -346,11 +432,11 @@ export const issueTokensFromCode = async (params: {
     eventType: "TOKEN_AUTHCODE_COMPLETED",
     severity: "INFO",
     message: "Token response issued",
-    details: response,
+    details: tokenResponse,
     requestContext: auditContext?.requestContext ?? null,
   });
 
-  return response;
+  return tokenResponse;
 };
 
 export const issueTokensFromPassword = async (params: {
@@ -433,7 +519,7 @@ export const issueTokensFromPassword = async (params: {
     email: strategy === "email" ? trimmedIdentifier : null,
   });
 
-  return issueTokens({
+  const response = await issueTokens({
     tenantId: tenant.id,
     apiResourceId: resource.id,
     client,
@@ -444,4 +530,179 @@ export const issueTokensFromPassword = async (params: {
     strategy,
     emailVerifiedClaim,
   });
+
+  const refreshToken = await maybeIssueRefreshToken({
+    tenantId: tenant.id,
+    apiResourceId: resource.id,
+    client,
+    user,
+    subject,
+    loginStrategy: toPrismaLoginStrategy(strategy),
+    scope: normalizedScope,
+  });
+
+  return refreshToken ? { ...response, refresh_token: refreshToken } : response;
+};
+
+export const issueTokensFromRefreshToken = async (params: {
+  apiResourceId: string;
+  clientId: string;
+  refreshToken: string;
+  scope?: string;
+  origin: string;
+  authMethod: TokenAuthMethod;
+  clientSecret?: string | null;
+  auditContext?: TokenAuditContext | null;
+}) => {
+  const { apiResourceId, clientId, refreshToken, scope, origin, authMethod, clientSecret, auditContext } = params;
+  const { tenant, resource } = await getApiResourceWithTenant(apiResourceId);
+  const client = await getClientForTenant(tenant.id, clientId);
+  const violationContext = {
+    tenantId: tenant.id,
+    clientId: client.id,
+    traceId: null,
+    severity: "ERROR" as const,
+    authMethod,
+    clientSecretInBody: auditContext?.clientSecretInBody,
+    requestContext: auditContext?.requestContext ?? null,
+  };
+  const reportViolation = createSecurityViolationReporter(violationContext);
+
+  await emitAuditEvent({
+    tenantId: tenant.id,
+    clientId: client.id,
+    traceId: null,
+    actorId: null,
+    eventType: "TOKEN_REFRESH_RECEIVED",
+    severity: "INFO",
+    message: "Token refresh received",
+    details: buildTokenRefreshReceivedDetails({
+      authMethod,
+      clientSecretInBody: auditContext?.clientSecretInBody,
+      clientId: auditContext?.clientId ?? clientId,
+      clientSecret: clientSecret ?? null,
+      grantType: "refresh_token",
+      refreshToken,
+      includeAuthHeader: auditContext?.includeAuthHeader,
+      scope: scope ?? undefined,
+    }),
+    requestContext: auditContext?.requestContext ?? null,
+  });
+
+  const clientResourceId = client.apiResourceId ?? tenant.defaultApiResourceId;
+  if (clientResourceId !== resource.id) {
+    await reportViolation("issuer_mismatch", {
+      expectedApiResourceId: clientResourceId,
+      receivedApiResourceId: resource.id,
+    });
+    throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
+  }
+
+  if (client.oauthClientMode !== "regular") {
+    throw new DomainError("Client does not support refresh grant", { status: 400, code: "unsupported_grant_type" });
+  }
+
+  if (!client.allowedGrantTypes.includes("refresh_token")) {
+    throw new DomainError("Client does not support refresh grant", { status: 400, code: "unsupported_grant_type" });
+  }
+
+  await withSecurityViolationAudit(() => assertClientAuth(client, authMethod, clientSecret), violationContext);
+
+  const record = await prisma.refreshToken.findFirst({
+    where: {
+      tenantId: tenant.id,
+      clientId: client.id,
+      tokenHash: hashOpaqueToken(refreshToken),
+    },
+    include: { user: true },
+  });
+
+  if (!record || record.apiResourceId !== resource.id) {
+    throw new DomainError("Invalid refresh token", { status: 400, code: "invalid_grant" });
+  }
+
+  const now = new Date();
+  if (record.expiresAt <= now) {
+    throw new DomainError("Refresh token expired", { status: 400, code: "invalid_grant" });
+  }
+
+  if (record.revokedAt || record.rotatedAt) {
+    await revokeRefreshTokenFamily(record.familyId, now);
+    await reportViolation("refresh_token_reuse", "Refresh token reuse detected");
+    throw new DomainError("Refresh token reuse detected", { status: 400, code: "invalid_grant" });
+  }
+
+  const { tokenScope, refreshScope } = resolveRefreshTokenScopes(record.scope, scope, client.allowedScopes);
+
+  const nextRefreshToken = await prisma.$transaction(async (tx) => {
+    const updated = await tx.refreshToken.updateMany({
+      where: { id: record.id, rotatedAt: null, revokedAt: null },
+      data: { rotatedAt: now },
+    });
+
+    if (updated.count !== 1) {
+      await revokeRefreshTokenFamily(record.familyId, now, tx);
+      throw new DomainError("Refresh token reuse detected", { status: 400, code: "invalid_grant" });
+    }
+
+    const { token } = await createRefreshToken(
+      {
+        tenantId: tenant.id,
+        apiResourceId: resource.id,
+        clientId: client.id,
+        userId: record.userId,
+        loginStrategy: record.loginStrategy,
+        subject: record.subject,
+        emailVerifiedOverride: record.emailVerifiedOverride ?? null,
+        scope: refreshScope,
+        familyId: record.familyId,
+        now,
+      },
+      tx,
+    );
+
+    return token;
+  }).catch(async (error) => {
+    if (error instanceof DomainError && error.options.code === "invalid_grant") {
+      await reportViolation("refresh_token_reuse", "Refresh token reuse detected");
+    }
+    throw error;
+  });
+
+  const strategy = fromPrismaLoginStrategy(record.loginStrategy);
+  const strategies = parseClientAuthStrategies(client.authStrategies);
+  const emailVerifiedClaim =
+    strategy === "email"
+      ? strategies.email.emailVerifiedMode === "user_choice"
+        ? Boolean(record.emailVerifiedOverride)
+        : strategies.email.emailVerifiedMode === "true"
+      : undefined;
+
+  const response = await issueTokens({
+    tenantId: tenant.id,
+    apiResourceId: resource.id,
+    client,
+    user: record.user,
+    subject: record.subject,
+    scope: tokenScope,
+    origin,
+    strategy,
+    emailVerifiedClaim,
+  });
+
+  const tokenResponse = { ...response, refresh_token: nextRefreshToken };
+
+  await emitAuditEvent({
+    tenantId: tenant.id,
+    clientId: client.id,
+    traceId: null,
+    actorId: null,
+    eventType: "TOKEN_REFRESH_COMPLETED",
+    severity: "INFO",
+    message: "Token refresh completed",
+    details: tokenResponse,
+    requestContext: auditContext?.requestContext ?? null,
+  });
+
+  return tokenResponse;
 };

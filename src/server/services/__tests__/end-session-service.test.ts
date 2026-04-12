@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetApiResourceWithTenant = vi.hoisted(() => vi.fn());
 const mockGetClientForTenant = vi.hoisted(() => vi.fn());
 const mockResolveRedirectUri = vi.hoisted(() => vi.fn());
+const mockGetSessionUser = vi.hoisted(() => vi.fn());
 const mockClearSession = vi.hoisted(() => vi.fn());
+const mockRevokeRefreshTokensForUser = vi.hoisted(() => vi.fn());
 
 vi.mock("@/server/services/api-resource-service", () => ({
   getApiResourceWithTenant: mockGetApiResourceWithTenant,
@@ -19,6 +21,11 @@ vi.mock("@/server/oidc/redirect-uri", () => ({
 
 vi.mock("@/server/services/mock-session-service", () => ({
   clearSession: mockClearSession,
+  getSessionUser: mockGetSessionUser,
+}));
+
+vi.mock("@/server/services/refresh-token-service", () => ({
+  revokeRefreshTokensForUser: mockRevokeRefreshTokensForUser,
 }));
 
 import { handleEndSession } from "@/server/services/end-session-service";
@@ -50,6 +57,8 @@ describe("handleEndSession", () => {
     } as never);
     mockResolveRedirectUri.mockReturnValue(REDIRECT_URI);
     mockClearSession.mockResolvedValue(undefined);
+    mockGetSessionUser.mockResolvedValue(null);
+    mockRevokeRefreshTokensForUser.mockResolvedValue(undefined);
   });
 
   it("redirects when id_token_hint matches issuer", async () => {
@@ -134,6 +143,8 @@ describe("handleEndSession", () => {
   });
 
   it("clears session when a session token is present", async () => {
+    mockGetSessionUser.mockResolvedValue({ user: { id: "user-1" } });
+
     const result = await handleEndSession(
       {
         apiResourceId: API_RESOURCE_ID,
@@ -144,7 +155,13 @@ describe("handleEndSession", () => {
 
     expect(result.type).toBe("html");
     expect(result.clearSessionCookie).toBe(true);
+    expect(mockGetSessionUser).toHaveBeenCalledWith(TENANT_ID, "session-1");
     expect(mockClearSession).toHaveBeenCalledWith(TENANT_ID, "session-1");
+    expect(mockRevokeRefreshTokensForUser).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      userId: "user-1",
+      clientId: null,
+    });
   });
 
   it("rejects malformed JWT payloads", async () => {

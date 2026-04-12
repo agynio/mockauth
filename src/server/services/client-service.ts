@@ -11,7 +11,7 @@ import type { ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES } from "@/server/oidc/auth-strategy";
 import type { ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { DEFAULT_PROXY_AUTH_STRATEGIES, hasEnabledProxyStrategy } from "@/server/oidc/proxy-auth-strategy";
-import { isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES } from "@/server/oidc/scopes";
+import { DEFAULT_ALLOWED_SCOPES, isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import {
   TOKEN_AUTH_METHODS,
   parseTokenAuthMethods,
@@ -21,7 +21,8 @@ import {
 import { z } from "zod";
 
 const canonicalizeAllowedScopes = (scopes?: string[]) => {
-  const normalized = scopes && scopes.length > 0 ? normalizeScopes(scopes) : Array.from(SUPPORTED_SCOPES);
+  const normalized =
+    scopes && scopes.length > 0 ? normalizeScopes(scopes) : Array.from(DEFAULT_ALLOWED_SCOPES);
   if (!normalized.includes("openid")) {
     throw new Error("Allowed scopes must include openid");
   }

@@ -17,7 +17,7 @@ describe("OIDC scopes", () => {
     for (const scope of SUPPORTED_SCOPES) {
       expect(isSupportedScope(scope)).toBe(true);
     }
-    expect(isSupportedScope("offline_access")).toBe(false);
+    expect(isSupportedScope("offline_access")).toBe(true);
   });
 
   it("validates scope values", () => {

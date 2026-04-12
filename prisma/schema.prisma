@@ -98,6 +98,7 @@ model Tenant {
   mockIdentities    MockIdentity[]
   authorizationCode AuthorizationCode[]
   accessTokens      AccessToken[]
+  refreshTokens     RefreshToken[]
   mockSessions      MockSession[]
   proxyAuthTransactions ProxyAuthTransaction[]
   proxyTokenExchanges   ProxyTokenExchange[]
@@ -119,6 +120,7 @@ model ApiResource {
   clients     Client[]
   authorizationCodes AuthorizationCode[]
   accessTokens AccessToken[]
+  refreshTokens RefreshToken[]
   defaultFor  Tenant?    @relation("TenantDefaultApiResource")
   proxyAuthTransactions ProxyAuthTransaction[]
   proxyTokenExchanges   ProxyTokenExchange[]
@@ -202,6 +204,7 @@ model Client {
   oauthTestSessions        OAuthTestSession[]
   authorizationCodes       AuthorizationCode[]
   accessTokens             AccessToken[]
+  refreshTokens            RefreshToken[]
   proxyConfig              ProxyProviderConfig?
   proxyAuthTransactions    ProxyAuthTransaction[]
   proxyTokenExchanges      ProxyTokenExchange[]
@@ -267,6 +270,7 @@ model MockUser {
   sessions      MockSession[]
   codes         AuthorizationCode[]
   accessTokens  AccessToken[]
+  refreshTokens RefreshToken[]
   @@unique([tenantId, username])
 }
 
@@ -518,6 +522,32 @@ model AccessToken {
   scope      String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
+}
+
+model RefreshToken {
+  id           String      @id @default(uuid())
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId     String
+  client       Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String
+  apiResource  ApiResource @relation(fields: [apiResourceId], references: [id], onDelete: Cascade)
+  apiResourceId String
+  user         MockUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  loginStrategy LoginStrategy
+  subject       String
+  emailVerifiedOverride Boolean?
+  familyId     String
+  tokenHash    String      @unique
+  scope        String
+  rotatedAt    DateTime?
+  revokedAt    DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime    @default(now())
+
+  @@index([tenantId, clientId])
+  @@index([familyId])
+  @@index([expiresAt])
 }
 
 model AuditLog {

@@ -22,6 +22,7 @@ export type SecurityViolationReason =
   | "pkce_method_unsupported"
   | "pkce_mismatch"
   | "redirect_uri_mismatch"
+  | "refresh_token_reuse"
   | "state_mismatch"
   | "state_not_found"
   | "state_resource_mismatch";

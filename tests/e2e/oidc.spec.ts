@@ -16,6 +16,8 @@ import {
 const defaultResourceId = "tenant_qa_default_resource";
 const issuerBase = `http://127.0.0.1:3000/r/${defaultResourceId}/oidc`;
 const redirectUri = "https://client.example.test/callback";
+const refreshClientId = "qa-refresh-client";
+const refreshClientSecret = "qa-refresh-secret";
 
 const cookieJar = () => {
   const jar = new Map<string, string>();
@@ -107,6 +109,102 @@ test("completes Authorization Code + PKCE flow", async () => {
   expect(tokenSet.id_token).toBeTruthy();
   const userInfo = await fetchUserInfo(config, tokenSet.access_token!, skipSubjectCheck);
   expect(userInfo.sub).toBeDefined();
+});
+
+test("rotates refresh tokens for offline access", async () => {
+  const config = await discovery(new URL(issuerBase), refreshClientId, refreshClientSecret, undefined, {
+    execute: [allowInsecureRequests],
+  });
+
+  const codeVerifier = randomPKCECodeVerifier();
+  const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
+  const state = randomState();
+  const nonce = randomNonce();
+  const authUrl = buildAuthorizationUrl(config, {
+    scope: "openid profile offline_access",
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+    redirect_uri: redirectUri,
+    state,
+    nonce,
+  }).toString();
+
+  const jar = cookieJar();
+  const authorizeResponse = await fetch(authUrl, { redirect: "manual" });
+  jar.addFrom(authorizeResponse);
+  expect(authorizeResponse.status).toBe(302);
+  const loginLocation = authorizeResponse.headers.get("location");
+  expect(loginLocation).toContain("/login");
+
+  const loginUrl = new URL(loginLocation!, "http://127.0.0.1:3000");
+  loginUrl.pathname = loginUrl.pathname.replace(/\/oidc\/login$/, "/oidc/login/submit");
+  const loginResponse = await fetch(loginUrl, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      cookie: jar.header(),
+    },
+    body: new URLSearchParams({ username: "e2e-refresh", return_to: authUrl }).toString(),
+  });
+  jar.addFrom(loginResponse);
+  expect(loginResponse.status).toBe(303);
+  const authorizeAgain = await fetch(loginResponse.headers.get("location")!, {
+    redirect: "manual",
+    headers: { cookie: jar.header() },
+  });
+
+  expect(authorizeAgain.status).toBe(302);
+  const finalLocation = authorizeAgain.headers.get("location");
+  expect(finalLocation).toContain("code=");
+  const callbackUrl = new URL(finalLocation!);
+
+  const tokenSet = await authorizationCodeGrant(config, callbackUrl, {
+    pkceCodeVerifier: codeVerifier,
+    expectedState: state,
+    expectedNonce: nonce,
+  });
+  expect(tokenSet.refresh_token).toBeTruthy();
+
+  const tokenEndpoint = config.serverMetadata().token_endpoint;
+  if (!tokenEndpoint) {
+    throw new Error("Missing token endpoint in discovery");
+  }
+
+  const refreshResponse = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: tokenSet.refresh_token!,
+      scope: "openid profile",
+      client_id: refreshClientId,
+      client_secret: refreshClientSecret,
+    }).toString(),
+  });
+  expect(refreshResponse.ok).toBeTruthy();
+  const refreshedPayload = (await refreshResponse.json()) as {
+    access_token: string;
+    refresh_token: string;
+  };
+  expect(refreshedPayload.refresh_token).toBeTruthy();
+  expect(refreshedPayload.refresh_token).not.toBe(tokenSet.refresh_token);
+  const refreshedAccess = decodeJwt(refreshedPayload.access_token);
+  expect(refreshedAccess.scope).toBe("openid profile");
+
+  const reusedResponse = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: tokenSet.refresh_token!,
+      client_id: refreshClientId,
+      client_secret: refreshClientSecret,
+    }).toString(),
+  });
+  expect(reusedResponse.status).toBe(400);
+  const reusedPayload = (await reusedResponse.json()) as { error: string };
+  expect(reusedPayload.error).toBe("invalid_grant");
 });
 
 test("requires login when session strategy disallows client", async ({ request }) => {

@@ -304,6 +304,21 @@ describe("client service", () => {
       },
     });
 
+    await prisma.refreshToken.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        apiResourceId: apiResource.id,
+        userId: mockUser.id,
+        loginStrategy: $Enums.LoginStrategy.USERNAME,
+        subject: mockUser.username,
+        familyId: randomUUID(),
+        tokenHash: randomUUID(),
+        scope: "openid",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+
     const proxyAuth = await prisma.proxyAuthTransaction.create({
       data: {
         tenantId: tenant.id,
@@ -365,6 +380,7 @@ describe("client service", () => {
     expect(await prisma.oAuthTestSession.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.authorizationCode.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.accessToken.count({ where: { clientId: client.id } })).toBe(0);
+    expect(await prisma.refreshToken.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.proxyProviderConfig.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.proxyAuthTransaction.count({ where: { clientId: client.id } })).toBe(0);
     expect(await prisma.proxyTokenExchange.count({ where: { clientId: client.id } })).toBe(0);

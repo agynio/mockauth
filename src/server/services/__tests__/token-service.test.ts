@@ -5,10 +5,11 @@ import { describe, expect, it } from "vitest";
 
 import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
+import { hashOpaqueToken } from "@/server/crypto/opaque-token";
 import { DEFAULT_CLIENT_AUTH_STRATEGIES, type ClientAuthStrategies } from "@/server/oidc/auth-strategy";
 import { DEFAULT_PROXY_AUTH_STRATEGIES, type ProxyAuthStrategies } from "@/server/oidc/proxy-auth-strategy";
 import { createClient } from "@/server/services/client-service";
-import { issueTokensFromPassword } from "@/server/services/token-service";
+import { issueTokensFromPassword, issueTokensFromRefreshToken } from "@/server/services/token-service";
 
 const ORIGIN = "https://mockauth.test";
 
@@ -491,5 +492,261 @@ describe("token service password grant", () => {
         clientSecret,
       }),
     ).rejects.toThrowError("Client is not configured for this issuer");
+  });
+});
+
+describe("token service refresh grant", () => {
+  it("issues refresh tokens for offline access scopes", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const response = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "offline-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    expect(response.refresh_token).toBeTruthy();
+    const record = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash: hashOpaqueToken(response.refresh_token!) },
+    });
+    expect(record.clientId).toBe(client.id);
+  });
+
+  it("rotates refresh tokens and narrows scopes", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "rotate-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    const refreshed = await issueTokensFromRefreshToken({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      refreshToken: initial.refresh_token!,
+      scope: "openid profile",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    expect(refreshed.refresh_token).toBeTruthy();
+    expect(refreshed.refresh_token).not.toBe(initial.refresh_token);
+
+    const accessToken = decodeJwt(refreshed.access_token!);
+    expect(accessToken.scope).toBe("openid profile");
+
+    const previousRecord = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash: hashOpaqueToken(initial.refresh_token!) },
+    });
+    const newRecord = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash: hashOpaqueToken(refreshed.refresh_token!) },
+    });
+    expect(previousRecord.rotatedAt).not.toBeNull();
+    expect(newRecord.familyId).toBe(previousRecord.familyId);
+    expect(newRecord.scope).toContain("offline_access");
+  });
+
+  it("rejects scope widening during refresh", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "email", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "scope-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        scope: "openid profile email",
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token does not allow scopes: email");
+  });
+
+  it("rejects expired refresh tokens", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "expired-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await prisma.refreshToken.update({
+      where: { tokenHash: hashOpaqueToken(initial.refresh_token!) },
+      data: { expiresAt: new Date(Date.now() - 60 * 1000) },
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token expired");
+  });
+
+  it("rejects refresh tokens issued to a different client", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+    const { client: otherClient, clientSecret: otherSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "mismatch-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: otherClient.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret: otherSecret,
+      }),
+    ).rejects.toThrowError("Invalid refresh token");
+  });
+
+  it("rejects revoked refresh tokens", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "revoked-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await prisma.refreshToken.update({
+      where: { tokenHash: hashOpaqueToken(initial.refresh_token!) },
+      data: { revokedAt: new Date() },
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token reuse detected");
+  });
+
+  it("revokes refresh tokens when reuse is detected", async () => {
+    const { tenant, apiResource } = await createTenant();
+    const { client, clientSecret } = await createPasswordClient({
+      tenantId: tenant.id,
+      allowedGrantTypes: ["password", "refresh_token"],
+      allowedScopes: ["openid", "profile", "offline_access"],
+    });
+
+    const initial = await issueTokensFromPassword({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      username: "reuse-user",
+      scope: "openid profile offline_access",
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await issueTokensFromRefreshToken({
+      apiResourceId: apiResource.id,
+      clientId: client.clientId,
+      refreshToken: initial.refresh_token!,
+      origin: ORIGIN,
+      authMethod: "client_secret_post",
+      clientSecret,
+    });
+
+    await expect(
+      issueTokensFromRefreshToken({
+        apiResourceId: apiResource.id,
+        clientId: client.clientId,
+        refreshToken: initial.refresh_token!,
+        origin: ORIGIN,
+        authMethod: "client_secret_post",
+        clientSecret,
+      }),
+    ).rejects.toThrowError("Refresh token reuse detected");
+
+    const originalRecord = await prisma.refreshToken.findFirstOrThrow({
+      where: { tokenHash: hashOpaqueToken(initial.refresh_token!) },
+    });
+    const family = await prisma.refreshToken.findMany({
+      where: { familyId: originalRecord.familyId },
+    });
+    expect(family.length).toBeGreaterThan(0);
+    expect(family.every((token) => token.revokedAt !== null)).toBe(true);
   });
 });
