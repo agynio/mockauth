@@ -102,7 +102,7 @@ const createRegularClient = async (page: Page, name: string, redirectUris: strin
   await expect(page.getByRole("heading", { name: "New client" })).toBeVisible();
 
   await page.getByLabel("Client name").fill(name);
-  await page.getByLabel("Redirect URIs").fill(redirectUris.join("\n"));
+  await page.getByLabel("Redirect URIs", { exact: true }).fill(redirectUris.join("\n"));
   await page.getByRole("button", { name: "Create client" }).click();
 
   await expect(page.getByText("Client created").first()).toBeVisible();
@@ -138,7 +138,7 @@ const createProxyClient = async (
   await page.getByLabel("Userinfo endpoint").fill(`${ISSUER_BASE}/userinfo`);
   await page.getByLabel("JWKS URI").fill(`${ISSUER_BASE}/jwks.json`);
   await page.getByLabel("Default provider scopes").fill(APP_SCOPE);
-  await page.getByLabel("Redirect URIs").fill(params.redirectUris.join("\n"));
+  await page.getByLabel("Redirect URIs", { exact: true }).fill(params.redirectUris.join("\n"));
 
   await page.getByRole("button", { name: "Create client" }).click();
   await expect(page.getByText("Client created").first()).toBeVisible();

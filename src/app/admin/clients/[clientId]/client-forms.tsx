@@ -16,8 +16,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import {
+  addPostLogoutRedirectUriAction,
   addRedirectUriAction,
+  deletePostLogoutRedirectUriAction,
   deleteRedirectUriAction,
+  type ActionState,
   rotateClientSecretAction,
   updateClientAuthStrategiesAction,
   updateClientTokenConfigAction,
@@ -63,25 +66,68 @@ import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oi
 import type { JwtSigningAlg } from "@/generated/prisma/client";
 
 const nameSchema = z.object({ name: z.string().min(2, "Name must be at least 2 characters") });
-const redirectSchema = z.object({
-  uri: z
-    .string()
-    .min(1, "Enter a redirect URI")
-    .superRefine((value, ctx) => {
-      const trimmed = value.trim();
-      if (trimmed === "*") {
-        return;
-      }
-      try {
-        const url = new URL(trimmed);
-        if (!url.protocol.startsWith("http")) {
-          throw new Error("invalid");
+const buildRedirectSchema = (message: string) =>
+  z.object({
+    uri: z
+      .string()
+      .min(1, message)
+      .superRefine((value, ctx) => {
+        const trimmed = value.trim();
+        if (trimmed === "*") {
+          return;
         }
-      } catch {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter an absolute URL or *" });
-      }
-    }),
-});
+        try {
+          const url = new URL(trimmed);
+          if (!url.protocol.startsWith("http")) {
+            throw new Error("invalid");
+          }
+        } catch {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter an absolute URL or *" });
+        }
+      }),
+  });
+const redirectSchema = buildRedirectSchema("Enter a redirect URI");
+const postLogoutRedirectSchema = buildRedirectSchema("Enter a post-logout redirect URI");
+type RedirectFormValues = z.infer<typeof redirectSchema>;
+type RedirectFormConfig = {
+  label: string;
+  placeholder: string;
+  addAction: (input: { clientId: string; uri: string }) => Promise<ActionState>;
+  toastSuccess: string;
+  toastError: string;
+  schema: z.ZodType<RedirectFormValues>;
+};
+type RedirectDeleteConfig = {
+  deleteAction: (input: { redirectId: string }) => Promise<ActionState>;
+  toastSuccess: string;
+  toastError: string;
+};
+const redirectFormConfig: RedirectFormConfig = {
+  label: "Redirect URI",
+  placeholder: "https://app.example.com/callback or *",
+  addAction: addRedirectUriAction,
+  toastSuccess: "Redirect saved",
+  toastError: "Unable to save redirect",
+  schema: redirectSchema,
+};
+const postLogoutRedirectFormConfig: RedirectFormConfig = {
+  label: "Post-logout redirect URI",
+  placeholder: "https://app.example.com/logout or *",
+  addAction: addPostLogoutRedirectUriAction,
+  toastSuccess: "Post-logout redirect saved",
+  toastError: "Unable to save post-logout redirect",
+  schema: postLogoutRedirectSchema,
+};
+const redirectDeleteConfig: RedirectDeleteConfig = {
+  deleteAction: deleteRedirectUriAction,
+  toastSuccess: "Redirect removed",
+  toastError: "Unable to remove",
+};
+const postLogoutRedirectDeleteConfig: RedirectDeleteConfig = {
+  deleteAction: deletePostLogoutRedirectUriAction,
+  toastSuccess: "Post-logout redirect removed",
+  toastError: "Unable to remove",
+};
 const issuerSchema = z.object({ resourceId: z.union([z.literal("default"), z.string().min(1)]) });
 const strategyConfigSchema = z.object({ enabled: z.boolean(), subSource: z.enum(["entered", "generated_uuid"]) });
 const emailStrategyConfigSchema = strategyConfigSchema.extend({ emailVerifiedMode: z.enum(["true", "false", "user_choice"]) });
@@ -793,9 +839,20 @@ export function UpdateTokenConfigForm({
   );
 }
 
-export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+function AddRedirectUriForm({
+  clientId,
+  canEdit,
+  config,
+}: {
+  clientId: string;
+  canEdit: boolean;
+  config: RedirectFormConfig;
+}) {
   const router = useRouter();
-  const form = useForm<z.infer<typeof redirectSchema>>({ resolver: zodResolver(redirectSchema), defaultValues: { uri: "" } });
+  const form = useForm<RedirectFormValues>({
+    resolver: zodResolver(config.schema),
+    defaultValues: { uri: "" },
+  });
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
   const watchedField = useWatch({ control: form.control, name: "uri" }) ?? "";
@@ -806,14 +863,14 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
   const isPathWildcard =
     !isAnyWildcard && !isHostWildcard && watchedUri.endsWith("/*") && normalized.startsWith("http");
 
-  const onSubmit = (values: z.infer<typeof redirectSchema>) => {
+  const onSubmit = (values: RedirectFormValues) => {
     startTransition(async () => {
-      const result = await addRedirectUriAction({ clientId, uri: values.uri });
+      const result = await config.addAction({ clientId, uri: values.uri });
       if (result.error) {
-        toast({ variant: "destructive", title: "Unable to save redirect", description: result.error });
+        toast({ variant: "destructive", title: config.toastError, description: result.error });
         return;
       }
-      toast({ title: "Redirect saved" });
+      toast({ title: config.toastSuccess });
       form.reset();
       router.refresh();
     });
@@ -827,9 +884,9 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
           name="uri"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Redirect URI</FormLabel>
+              <FormLabel>{config.label}</FormLabel>
               <FormControl>
-                <Input placeholder="https://app.example.com/callback or *" {...field} disabled={!canEdit || pending} />
+                <Input placeholder={config.placeholder} {...field} disabled={!canEdit || pending} />
               </FormControl>
               <FormMessage />
               {isAnyWildcard ? (
@@ -857,6 +914,16 @@ export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEd
         </Button>
       </form>
     </Form>
+  );
+}
+
+export function AddRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+  return <AddRedirectUriForm clientId={clientId} canEdit={canEdit} config={redirectFormConfig} />;
+}
+
+export function AddPostLogoutRedirectForm({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
+  return (
+    <AddRedirectUriForm clientId={clientId} canEdit={canEdit} config={postLogoutRedirectFormConfig} />
   );
 }
 
@@ -1215,19 +1282,27 @@ export function UpdateAuthStrategiesForm({
   );
 }
 
-export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
+function DeleteRedirectButtonBase({
+  redirectId,
+  canEdit,
+  config,
+}: {
+  redirectId: string;
+  canEdit: boolean;
+  config: RedirectDeleteConfig;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
 
   const handleDelete = () => {
     startTransition(async () => {
-      const result = await deleteRedirectUriAction({ redirectId });
+      const result = await config.deleteAction({ redirectId });
       if (result.error) {
-        toast({ variant: "destructive", title: "Unable to remove", description: result.error });
+        toast({ variant: "destructive", title: config.toastError, description: result.error });
         return;
       }
-      toast({ title: "Redirect removed" });
+      toast({ title: config.toastSuccess });
       router.refresh();
     });
   };
@@ -1244,6 +1319,20 @@ export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: stri
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       {!pending && <span className="ml-1 text-sm">Remove</span>}
     </Button>
+  );
+}
+
+export function DeleteRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
+  return <DeleteRedirectButtonBase redirectId={redirectId} canEdit={canEdit} config={redirectDeleteConfig} />;
+}
+
+export function DeletePostLogoutRedirectButton({ redirectId, canEdit }: { redirectId: string; canEdit: boolean }) {
+  return (
+    <DeleteRedirectButtonBase
+      redirectId={redirectId}
+      canEdit={canEdit}
+      config={postLogoutRedirectDeleteConfig}
+    />
   );
 }
 

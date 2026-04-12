@@ -163,6 +163,7 @@ describe("NewClientForm proxy mode", () => {
       pkceRequired: true,
       allowedGrantTypes: ["authorization_code"],
       redirects: ["https://client.example.test/callback"],
+      postLogoutRedirects: [],
       mode: "proxy",
       proxyAuthStrategies: DEFAULT_PROXY_AUTH_STRATEGIES,
       proxyConfig: {

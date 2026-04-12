@@ -107,7 +107,7 @@ const normalizeScopeMapping = (mapping?: ProxyProviderConfigInput["scopeMapping"
 export const getClientForTenant = async (tenantId: string, clientId: string) => {
   const client = await prisma.client.findFirst({
     where: { tenantId, clientId },
-    include: { redirectUris: true, proxyConfig: true },
+    include: { redirectUris: true, postLogoutRedirectUris: true, proxyConfig: true },
   });
 
   if (!client) {
@@ -125,6 +125,7 @@ export const createClient = async (
     pkceRequired?: boolean;
     allowedGrantTypes?: string[];
     redirectUris?: string[];
+    postLogoutRedirectUris?: string[];
     allowedScopes?: string[];
     oauthClientMode?: "regular" | "proxy";
     proxyAuthStrategies?: ProxyAuthStrategies;
@@ -184,6 +185,13 @@ export const createClient = async (
       }
     }
 
+    if (data.postLogoutRedirectUris?.length) {
+      for (const raw of data.postLogoutRedirectUris) {
+        const { normalized, type } = classifyRedirect(raw);
+        await tx.postLogoutRedirectUri.create({ data: { clientId: created.id, uri: normalized, type } });
+      }
+    }
+
     if (mode === "proxy" && validatedProxyConfig) {
       const trimmedUpstreamClientId = validatedProxyConfig.upstreamClientId.trim();
       const normalizedSecret = validatedProxyConfig.upstreamClientSecret?.trim();
@@ -233,6 +241,22 @@ export const addRedirectUri = async (clientId: string, value: string) => {
   });
 };
 
+export const addPostLogoutRedirectUri = async (clientId: string, value: string) => {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) {
+    throw new DomainError("Client not found", { status: 404 });
+  }
+
+  const { normalized, type } = classifyRedirect(value);
+  return prisma.postLogoutRedirectUri.create({
+    data: {
+      clientId,
+      uri: normalized,
+      type,
+    },
+  });
+};
+
 const DEFAULT_PAGE_SIZE = 10;
 
 export const listClients = async (
@@ -257,7 +281,7 @@ export const listClients = async (
   const [clients, total] = await prisma.$transaction([
     prisma.client.findMany({
       where,
-      include: { _count: { select: { redirectUris: true } } },
+      include: { _count: { select: { redirectUris: true, postLogoutRedirectUris: true } } },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -281,6 +305,7 @@ export const getClientByIdForTenant = async (tenantId: string, clientInternalId:
     where: { id: clientInternalId, tenantId },
     include: {
       redirectUris: { orderBy: { createdAt: "asc" } },
+      postLogoutRedirectUris: { orderBy: { createdAt: "asc" } },
       tenant: { include: { defaultApiResource: true } },
       apiResource: true,
       proxyConfig: true,

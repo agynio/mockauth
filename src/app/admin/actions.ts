@@ -19,6 +19,7 @@ import {
   buildPreauthorizedAdminTransactionCookiePath,
 } from "@/server/oidc/preauthorized/constants";
 import {
+  addPostLogoutRedirectUri,
   addRedirectUri,
   createClient,
   deleteClient,
@@ -102,6 +103,7 @@ const clientSchema = z.object({
   pkceRequired: z.boolean().default(true),
   allowedGrantTypes: z.array(z.enum(grantTypeOptions)).min(1).default(["authorization_code"]),
   redirects: z.array(z.string().min(1)).optional(),
+  postLogoutRedirects: z.array(z.string().min(1)).optional(),
   scopes: z.array(z.string().min(1)).optional(),
   mode: z.enum(["regular", "proxy"]).default("regular"),
   proxyAuthStrategies: proxyAuthStrategiesSchema.optional(),
@@ -488,6 +490,7 @@ export const createClientAction = async (
       }
     }
     const redirectEntries = parsed.redirects?.filter(Boolean);
+    const postLogoutRedirectEntries = parsed.postLogoutRedirects?.filter(Boolean);
     const normalizedScopes = parsed.scopes ? normalizeScopes(parsed.scopes) : Array.from(SUPPORTED_SCOPES);
     if (!normalizedScopes.includes("openid")) {
       return { error: "Scopes must include openid" };
@@ -508,6 +511,7 @@ export const createClientAction = async (
       pkceRequired: parsed.pkceRequired,
       allowedGrantTypes: parsed.allowedGrantTypes,
       redirectUris: redirectEntries,
+      postLogoutRedirectUris: postLogoutRedirectEntries,
       allowedScopes: canonicalScopes,
       oauthClientMode: parsed.mode,
       proxyAuthStrategies,
@@ -1011,6 +1015,35 @@ export const addRedirectUriAction = async (input: z.infer<typeof redirectSchema>
   }
 };
 
+export const addPostLogoutRedirectUriAction = async (
+  input: z.infer<typeof redirectSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = redirectSchema.parse(input);
+    const client = await getClientForAdmin(parsed.clientId, adminId, ["OWNER", "WRITER"]);
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    const redirect = await addPostLogoutRedirectUri(client.id, parsed.uri);
+    revalidatePath(clientPath(client.id));
+    void emitConfigChange({
+      tenantId: client.tenantId,
+      actorId: adminId,
+      action: "create",
+      resource: "post_logout_redirect_uri",
+      resourceId: redirect.id,
+      resourceName: redirect.uri,
+      clientId: client.id,
+      message: "Post-logout redirect URI added",
+    });
+    return { success: "Post-logout redirect URI saved" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Failed to add post-logout redirect" };
+  }
+};
+
 export const prepareClientOauthTestAction = async (
   input: z.infer<typeof oauthTestSchema>,
 ): Promise<ActionState<{ authorizationUrl: string }>> => {
@@ -1343,6 +1376,40 @@ export const deleteRedirectUriAction = async (input: z.infer<typeof deleteRedire
   } catch (error) {
     console.error(error);
     return { error: "Unable to remove redirect" };
+  }
+};
+
+export const deletePostLogoutRedirectUriAction = async (
+  input: z.infer<typeof deleteRedirectSchema>,
+): Promise<ActionState> => {
+  try {
+    const adminId = await requireSession();
+    const parsed = deleteRedirectSchema.parse(input);
+    const redirect = await prisma.postLogoutRedirectUri.findUnique({
+      where: { id: parsed.redirectId },
+      select: { id: true, uri: true, clientId: true, client: { select: { tenantId: true } } },
+    });
+    if (!redirect) {
+      return { error: "Post-logout redirect not found" };
+    }
+    const membership = await assertTenantMembership(adminId, redirect.client.tenantId);
+    ensureMembershipRole(membership.role, ["OWNER", "WRITER"]);
+    await prisma.postLogoutRedirectUri.delete({ where: { id: redirect.id } });
+    revalidatePath(clientPath(redirect.clientId));
+    void emitConfigChange({
+      tenantId: redirect.client.tenantId,
+      actorId: adminId,
+      action: "delete",
+      resource: "post_logout_redirect_uri",
+      resourceId: redirect.id,
+      resourceName: redirect.uri,
+      clientId: redirect.clientId,
+      message: "Post-logout redirect URI removed",
+    });
+    return { success: "Post-logout redirect removed" };
+  } catch (error) {
+    console.error(error);
+    return { error: "Unable to remove post-logout redirect" };
   }
 };
 

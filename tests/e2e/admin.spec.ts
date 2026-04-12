@@ -71,13 +71,13 @@ test.describe("admin console", () => {
 
     await page.getByRole("link", { name: "Add client" }).click();
     await page.getByLabel("Client name").fill(clientName);
-    await page.getByLabel("Redirect URIs").fill("https://pw.example.test/callback");
+    await page.getByLabel("Redirect URIs", { exact: true }).fill("https://pw.example.test/callback");
     await page.getByRole("button", { name: "Create client" }).click();
     await page.getByRole("link", { name: "Back to list" }).click();
 
     const row = page.getByRole("row", { name: new RegExp(clientName, "i") }).last();
     await row.getByRole("link", { name: "Details →" }).click();
-    await expect(page.getByRole("heading", { name: "Redirect URIs" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Redirect URIs", exact: true })).toBeVisible();
 
     const requiredSection = page.getByTestId("oauth-required");
     await expect(requiredSection.locator("[data-field-label]").first()).toBeVisible();
@@ -105,13 +105,14 @@ test.describe("admin console", () => {
     await tenantIdField.getByRole("button", { name: "Copy Tenant ID" }).click();
     await expect(tenantIdField.getByText("Copied")).toBeVisible();
 
-    const redirectInput = page.getByLabel("Redirect URI");
+    const redirectInput = page.getByLabel("Redirect URI", { exact: true });
     await redirectInput.fill("*");
     await expect(page.getByTestId("redirect-any-warning")).toBeVisible();
     await redirectInput.fill("https://*.example.test/callback");
     await expect(page.getByTestId("redirect-wildcard-warning")).toBeVisible();
     await redirectInput.fill("https://pw.example.test/alt");
-    await page.getByRole("button", { name: /^Add$/ }).click();
+    const redirectCard = page.getByRole("heading", { name: "Redirect URIs", exact: true }).locator("..").locator("..");
+    await redirectCard.getByRole("button", { name: "Add" }).click();
     await expect(page.getByText("https://pw.example.test/alt")).toBeVisible();
 
     await page.getByRole("button", { name: "Rotate secret" }).click();

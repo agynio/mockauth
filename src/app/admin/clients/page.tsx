@@ -105,7 +105,16 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
                       <Badge variant="secondary">{client.tokenEndpointAuthMethods.join(", ")}</Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {client._count.redirectUris} redirect URI{client._count.redirectUris === 1 ? "" : "s"}
+                      <div className="space-y-1">
+                        <p>
+                          {client._count.redirectUris} redirect URI{client._count.redirectUris === 1 ? "" : "s"}
+                        </p>
+                        {client._count.postLogoutRedirectUris > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {client._count.postLogoutRedirectUris} post-logout
+                          </p>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {formatDistanceToNow(client.updatedAt, { addSuffix: true })}

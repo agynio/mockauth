@@ -23,6 +23,7 @@ const proxyClientBase = {
   allowedResponseTypes: ["code"],
   authStrategies: DEFAULT_CLIENT_AUTH_STRATEGIES,
   redirectUris: [{ id: "redirect_1", uri: "https://app.example.test/callback", type: "EXACT" }],
+  postLogoutRedirectUris: [],
   tenant: { id: "tenant_1", defaultApiResourceId: "api-default", defaultApiResource: { id: "api-default", name: "Default" } },
   apiResource: null,
   proxyConfig: {
@@ -104,6 +105,8 @@ vi.mock("../[clientId]/client-forms", () => ({
   UpdateClientReauthTtlForm: () => <div data-testid="client-reauth-form" />,
   AddRedirectForm: () => <div data-testid="add-redirect-form" />,
   DeleteRedirectButton: () => <button type="button" data-testid="delete-redirect-btn" />,
+  AddPostLogoutRedirectForm: () => <div data-testid="add-post-logout-redirect-form" />,
+  DeletePostLogoutRedirectButton: () => <button type="button" data-testid="delete-post-logout-redirect-btn" />,
   RotateSecretForm: () => <div data-testid="rotate-secret-form" />,
 }));
 

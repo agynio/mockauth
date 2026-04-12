@@ -10,7 +10,9 @@ const mockUpdateClientReauthTtlAction = vi.hoisted(() => vi.fn().mockResolvedVal
 
 vi.mock("@/app/admin/actions", () => ({
   addRedirectUriAction: vi.fn(),
+  addPostLogoutRedirectUriAction: vi.fn(),
   deleteRedirectUriAction: vi.fn(),
+  deletePostLogoutRedirectUriAction: vi.fn(),
   rotateClientSecretAction: vi.fn(),
   updateClientAuthStrategiesAction: vi.fn(),
   updateClientIssuerAction: vi.fn(),
