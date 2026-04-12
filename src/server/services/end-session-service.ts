@@ -2,8 +2,9 @@ import { DomainError } from "@/server/errors";
 import { issuerForResource } from "@/server/oidc/issuer";
 import { resolveRedirectUri } from "@/server/oidc/redirect-uri";
 import { getClientForTenant } from "@/server/services/client-service";
-import { clearSession } from "@/server/services/mock-session-service";
+import { clearSession, getSessionUser } from "@/server/services/mock-session-service";
 import { getApiResourceWithTenant } from "@/server/services/api-resource-service";
+import { revokeRefreshTokensForUser } from "@/server/services/refresh-token-service";
 
 type EndSessionParams = {
   apiResourceId: string;
@@ -91,7 +92,15 @@ export const handleEndSession = async (params: EndSessionParams, origin: string)
 
   const clearSessionCookie = Boolean(params.sessionToken);
   if (params.sessionToken) {
+    const session = await getSessionUser(tenant.id, params.sessionToken);
     await clearSession(tenant.id, params.sessionToken);
+    if (session?.user?.id) {
+      await revokeRefreshTokensForUser({
+        tenantId: tenant.id,
+        userId: session.user.id,
+        clientId: client?.id ?? null,
+      });
+    }
   }
 
   if (redirectUri) {

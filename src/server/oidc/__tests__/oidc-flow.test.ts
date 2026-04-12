@@ -11,12 +11,14 @@ import { createFreshLoginCookieValue, createReauthCookieValue } from "@/server/o
 import { handleAuthorize } from "@/server/services/authorize-service";
 import { consumeAuthorizationCode } from "@/server/services/authorization-code-service";
 import { createSession, clearSession } from "@/server/services/mock-session-service";
-import { issueTokensFromCode } from "@/server/services/token-service";
+import { issueTokensFromCode, issueTokensFromRefreshToken } from "@/server/services/token-service";
 import { getUserInfo } from "@/server/services/userinfo-service";
 
 const DEFAULT_TENANT_ID = "tenant_qa";
 const CLIENT_ID = "qa-client";
 const CLIENT_SECRET = "qa-secret";
+const REFRESH_CLIENT_ID = "qa-refresh-client";
+const REFRESH_CLIENT_SECRET = "qa-refresh-secret";
 const DEFAULT_REAUTH_TTL_SECONDS = 600;
 
 describe("OIDC flow", () => {
@@ -25,8 +27,10 @@ describe("OIDC flow", () => {
   let sessionToken: string;
   let codeVerifier: string;
   let clientInternalId: string;
+  let refreshClientInternalId: string;
   let originalStrategies: Prisma.JsonValue;
   let originalReauthTtlSeconds: number;
+  let refreshClientOriginalReauthTtlSeconds: number;
   let originalAllowedScopes: string[];
   let originalIdTokenAlg: JwtSigningAlg | null | undefined;
   let originalAccessTokenAlg: JwtSigningAlg | null | undefined;
@@ -74,6 +78,16 @@ describe("OIDC flow", () => {
       where: { id: client.id },
       data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS },
     });
+
+    const refreshClient = await prisma.client.findFirstOrThrow({
+      where: { tenantId: tenant.id, clientId: REFRESH_CLIENT_ID },
+    });
+    refreshClientInternalId = refreshClient.id;
+    refreshClientOriginalReauthTtlSeconds = refreshClient.reauthTtlSeconds;
+    await prisma.client.update({
+      where: { id: refreshClient.id },
+      data: { reauthTtlSeconds: DEFAULT_REAUTH_TTL_SECONDS },
+    });
   });
 
   beforeEach(async () => {
@@ -100,6 +114,13 @@ describe("OIDC flow", () => {
           idTokenSignedResponseAlg: originalIdTokenAlg ?? null,
           accessTokenSigningAlg: originalAccessTokenAlg ?? null,
         },
+      });
+    }
+
+    if (refreshClientInternalId) {
+      await prisma.client.update({
+        where: { id: refreshClientInternalId },
+        data: { reauthTtlSeconds: refreshClientOriginalReauthTtlSeconds },
       });
     }
   });
@@ -161,6 +182,53 @@ describe("OIDC flow", () => {
         "TOKEN_AUTHCODE_COMPLETED",
       ]),
     );
+  });
+
+  it("issues refresh tokens for offline access", async () => {
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: REFRESH_CLIENT_ID,
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid profile offline_access",
+        state: "refresh-flow",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        reauthCookie: buildReauthCookie(sessionToken, DEFAULT_REAUTH_TTL_SECONDS, REFRESH_CLIENT_ID),
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${REFRESH_CLIENT_ID}`,
+    );
+
+    expect(authorize.type).toBe("redirect");
+    const code = new URL(authorize.redirectTo).searchParams.get("code");
+    const consumed = await consumeAuthorizationCode(code!);
+    const tokenResponse = await issueTokensFromCode({
+      code: consumed,
+      codeVerifier,
+      redirectUri: "https://client.example.test/callback",
+      origin: "https://mockauth.test",
+      clientSecret: REFRESH_CLIENT_SECRET,
+    });
+    expect(tokenResponse.refresh_token).toBeTruthy();
+
+    const refreshed = await issueTokensFromRefreshToken({
+      apiResourceId,
+      clientId: REFRESH_CLIENT_ID,
+      refreshToken: tokenResponse.refresh_token!,
+      scope: "openid profile",
+      origin: "https://mockauth.test",
+      authMethod: "client_secret_post",
+      clientSecret: REFRESH_CLIENT_SECRET,
+    });
+
+    expect(refreshed.refresh_token).toBeTruthy();
+    expect(refreshed.refresh_token).not.toBe(tokenResponse.refresh_token);
+    const refreshedAccess = decodeJwt(refreshed.access_token!);
+    expect(refreshedAccess.scope).toBe("openid profile");
   });
 
   it("records security violations for PKCE mismatches", async () => {

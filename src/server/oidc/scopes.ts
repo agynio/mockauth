@@ -1,4 +1,6 @@
-export const SUPPORTED_SCOPES = ["openid", "profile", "email"] as const;
+export const SUPPORTED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
+
+export const DEFAULT_ALLOWED_SCOPES = ["openid", "profile", "email"] as const;
 
 export type SupportedScope = (typeof SUPPORTED_SCOPES)[number];
 

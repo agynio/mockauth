@@ -102,6 +102,7 @@ export const deleteTenant = async (tenantId: string) => {
     await tx.tenant.update({ where: { id: tenantId }, data: { defaultApiResourceId: null } });
     await tx.authorizationCode.deleteMany({ where: { tenantId } });
     await tx.accessToken.deleteMany({ where: { tenantId } });
+    await tx.refreshToken.deleteMany({ where: { tenantId } });
     await tx.mockSession.deleteMany({ where: { tenantId } });
     await tx.mockUser.deleteMany({ where: { tenantId } });
     await tx.redirectUri.deleteMany({ where: { client: { tenantId } } });

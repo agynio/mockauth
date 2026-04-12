@@ -9,6 +9,8 @@ const DEFAULT_TENANT_ID = "tenant_qa";
 const DEFAULT_TENANT_NAME = "QA Sandbox";
 const DEFAULT_CLIENT_ID = "qa-client";
 const DEFAULT_CLIENT_SECRET = "qa-secret";
+const REFRESH_CLIENT_ID = "qa-refresh-client";
+const REFRESH_CLIENT_SECRET = "qa-refresh-secret";
 const OWNER_EMAIL = "owner@example.test";
 const WRITER_EMAIL = "writer@example.test";
 const READER_EMAIL = "reader@example.test";
@@ -46,11 +48,32 @@ async function main() {
     },
   });
 
+  const refreshClient = await prisma.client.upsert({
+    where: { tenantId_clientId: { tenantId: tenant.id, clientId: REFRESH_CLIENT_ID } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: "QA Refresh Client",
+      clientId: REFRESH_CLIENT_ID,
+      clientSecretHash: await hashSecret(REFRESH_CLIENT_SECRET),
+      clientSecretEncrypted: encrypt(REFRESH_CLIENT_SECRET),
+      allowedGrantTypes: ["authorization_code", "refresh_token"],
+      allowedScopes: ["openid", "profile", "email", "offline_access"],
+      tokenEndpointAuthMethods: ["client_secret_post"],
+    },
+  });
+
   const redirectMeta = classifyRedirect("https://client.example.test/callback");
   await prisma.redirectUri.upsert({
     where: { clientId_uri: { clientId: client.id, uri: redirectMeta.normalized } },
     update: {},
     create: { clientId: client.id, uri: redirectMeta.normalized, type: redirectMeta.type },
+  });
+
+  await prisma.redirectUri.upsert({
+    where: { clientId_uri: { clientId: refreshClient.id, uri: redirectMeta.normalized } },
+    update: {},
+    create: { clientId: refreshClient.id, uri: redirectMeta.normalized, type: redirectMeta.type },
   });
 
   await prisma.mockUser.upsert({
