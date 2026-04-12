@@ -53,6 +53,22 @@ describe("UpdateClientScopesForm", () => {
     expect(mockToast).toHaveBeenCalledWith({ title: "Scopes updated", description: "Scopes saved" });
   });
 
+  it("preserves mixed-case scope input", async () => {
+    const user = userEvent.setup();
+    render(<UpdateClientScopesForm clientId="client_1" initialScopes={["openid"]} canEdit />);
+
+    await user.type(screen.getByTestId("scope-input"), "r_organizationSocialAnalytics");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByTestId("scope-save-button"));
+
+    await waitFor(() => {
+      expect(mockUpdateClientScopesAction).toHaveBeenCalledWith({
+        clientId: "client_1",
+        scopes: ["openid", "r_organizationSocialAnalytics"],
+      });
+    });
+  });
+
   it("shows an error when the action fails", async () => {
     const user = userEvent.setup();
     mockUpdateClientScopesAction.mockResolvedValueOnce({ error: "Unsupported scope" });

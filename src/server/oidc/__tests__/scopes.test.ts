@@ -5,12 +5,12 @@ import { isSupportedScope, isValidScopeValue, normalizeScopes, SUPPORTED_SCOPES 
 describe("OIDC scopes", () => {
   it("normalizes scope values", () => {
     const result = normalizeScopes([" OpenID ", "profile", "EMAIL", "profile", ""]);
-    expect(result).toEqual(["openid", "profile", "email"]);
+    expect(result).toEqual(["OpenID", "profile", "EMAIL"]);
   });
 
   it("preserves insertion order for unique scopes", () => {
-    const result = normalizeScopes(["email", "profile", "email", "openid"]);
-    expect(result).toEqual(["email", "profile", "openid"]);
+    const result = normalizeScopes(["email", "Profile", "email", "profile", "openid"]);
+    expect(result).toEqual(["email", "Profile", "profile", "openid"]);
   });
 
   it("detects supported scopes", () => {
@@ -24,7 +24,8 @@ describe("OIDC scopes", () => {
     expect(isValidScopeValue("openid")).toBe(true);
     expect(isValidScopeValue("tenant:admin")).toBe(true);
     expect(isValidScopeValue("invalid scope")).toBe(false);
-    expect(isValidScopeValue("UPPERCASE")).toBe(false);
+    expect(isValidScopeValue("UPPERCASE")).toBe(true);
+    expect(isValidScopeValue("r_organizationSocialAnalytics")).toBe(true);
     expect(isValidScopeValue("a".repeat(65))).toBe(false);
   });
 });

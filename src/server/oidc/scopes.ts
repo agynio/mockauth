@@ -4,13 +4,13 @@ export const DEFAULT_ALLOWED_SCOPES = ["openid", "profile", "email"] as const;
 
 export type SupportedScope = (typeof SUPPORTED_SCOPES)[number];
 
-export const SCOPE_VALUE_PATTERN = /^[a-z0-9:_-]{1,64}$/;
+export const SCOPE_VALUE_PATTERN = /^[A-Za-z0-9:_-]{1,64}$/;
 
 export const normalizeScopes = (scopes: string[]): string[] => {
   const seen = new Set<string>();
   const normalized: string[] = [];
   for (const scope of scopes) {
-    const value = scope.trim().toLowerCase();
+    const value = scope.trim();
     if (!value || seen.has(value)) {
       continue;
     }

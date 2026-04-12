@@ -504,7 +504,7 @@ export const createClientAction = async (
     }
     const invalid = normalizedScopes.filter((scope) => !isValidScopeValue(scope));
     if (invalid.length > 0) {
-      return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
+      return { error: `Scopes must match ^[A-Za-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
     const canonicalScopes = ["openid", ...normalizedScopes.filter((scope) => scope !== "openid")];
     const proxyConfigResult = parsed.mode === "proxy"
@@ -1328,7 +1328,7 @@ export const updateClientScopesAction = async (
     }
     const invalid = normalized.filter((scope) => !isValidScopeValue(scope));
     if (invalid.length > 0) {
-      return { error: `Scopes must match ^[a-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
+      return { error: `Scopes must match ^[A-Za-z0-9:_-]{1,64}$: ${invalid.join(", ")}` };
     }
     const canonical = ["openid", ...normalized.filter((scope) => scope !== "openid")];
     const updated = await updateClientAllowedScopes(client.id, canonical);

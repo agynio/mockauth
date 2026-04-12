@@ -88,11 +88,14 @@ describe("updateClientScopesAction", () => {
   it("allows custom scopes that match the required pattern", async () => {
     const result = await updateClientScopesAction({
       clientId: "client_internal",
-      scopes: ["openid", "profile", "tenant:write"],
+      scopes: ["openid", "profile", "r_organizationSocialAnalytics"],
     });
 
-    expect(result).toEqual({ success: "Scopes updated", data: { allowedScopes: ["openid", "profile", "tenant:write"] } });
-    expect(mockUpdateScopes).toHaveBeenCalledWith("client_internal", ["openid", "profile", "tenant:write"]);
+    expect(result).toEqual({
+      success: "Scopes updated",
+      data: { allowedScopes: ["openid", "profile", "r_organizationSocialAnalytics"] },
+    });
+    expect(mockUpdateScopes).toHaveBeenCalledWith("client_internal", ["openid", "profile", "r_organizationSocialAnalytics"]);
   });
 
   it("returns an error when openid is missing", async () => {
@@ -105,7 +108,7 @@ describe("updateClientScopesAction", () => {
   it("returns an error for invalid scope formats", async () => {
     const result = await updateClientScopesAction({ clientId: "client_internal", scopes: ["openid", "invalid scope"] });
 
-    expect(result).toEqual({ error: "Scopes must match ^[a-z0-9:_-]{1,64}$: invalid scope" });
+    expect(result).toEqual({ error: "Scopes must match ^[A-Za-z0-9:_-]{1,64}$: invalid scope" });
     expect(mockUpdateScopes).not.toHaveBeenCalled();
   });
 
