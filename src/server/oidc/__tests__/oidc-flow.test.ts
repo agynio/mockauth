@@ -359,6 +359,31 @@ describe("OIDC flow", () => {
     ).rejects.toThrowError("Client does not allow scopes: offline_access");
   });
 
+  it("allows mixed-case scopes in the client allowlist", async () => {
+    await prisma.client.update({
+      where: { id: clientInternalId },
+      data: { allowedScopes: ["openid", "r_organizationSocialAnalytics"] },
+    });
+    const challenge = computeS256Challenge(codeVerifier);
+    const authorize = await handleAuthorize(
+      {
+        apiResourceId,
+        clientId: CLIENT_ID,
+        redirectUri: "https://client.example.test/callback",
+        responseType: "code",
+        scope: "openid r_organizationSocialAnalytics",
+        codeChallenge: challenge,
+        codeChallengeMethod: "S256",
+        sessionToken,
+        reauthCookie: buildReauthCookie(sessionToken),
+      },
+      "https://mockauth.test",
+      `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
+    );
+
+    expect(authorize.type).toBe("redirect");
+  });
+
   it("rejects scopes disabled for the client", async () => {
     await prisma.client.update({
       where: { id: clientInternalId },

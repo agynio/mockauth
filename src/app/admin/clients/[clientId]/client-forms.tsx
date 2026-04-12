@@ -1057,12 +1057,12 @@ export function UpdateClientScopesForm({
     if (!canEdit || pending) {
       return;
     }
-    const candidate = raw.trim().toLowerCase();
+    const candidate = raw.trim();
     if (!candidate) {
       return;
     }
     if (!isValidScopeValue(candidate)) {
-      dispatch({ type: "setError", value: "Scopes must match ^[a-z0-9:_-]{1,64}$" });
+      dispatch({ type: "setError", value: "Scopes must match ^[A-Za-z0-9:_-]{1,64}$" });
       return;
     }
     dispatch({ type: "add", scope: candidate });
@@ -1110,7 +1110,7 @@ export function UpdateClientScopesForm({
         <div>
           <p className="text-sm font-semibold text-foreground">Allowed scopes</p>
           <p className="text-xs text-muted-foreground">
-            openid is required. Additional scopes must match the pattern {"^[a-z0-9:_-]{1,64}$"}.
+            openid is required. Additional scopes must match the pattern {"^[A-Za-z0-9:_-]{1,64}$"}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2" data-testid="scope-chip-list">
