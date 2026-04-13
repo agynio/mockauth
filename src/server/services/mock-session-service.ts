@@ -1,10 +1,9 @@
-import { addHours } from "date-fns";
+import { addSeconds } from "date-fns";
 
 import { $Enums } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { generateOpaqueToken, hashOpaqueToken } from "@/server/crypto/opaque-token";
-
-const SESSION_TTL_HOURS = 12;
+import { env } from "@/server/env";
 
 export const MOCK_SESSION_COOKIE = "mockauth_enduser_session";
 
@@ -22,7 +21,7 @@ export const createSession = async (
       subject: data.subject,
       emailVerifiedOverride: data.emailVerifiedOverride ?? null,
       sessionTokenHash: hashOpaqueToken(token),
-      expiresAt: addHours(new Date(), SESSION_TTL_HOURS),
+      expiresAt: addSeconds(new Date(), env.MOCKAUTH_SESSION_TTL_SECONDS),
     },
   });
 

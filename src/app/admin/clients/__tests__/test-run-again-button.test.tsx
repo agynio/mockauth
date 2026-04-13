@@ -7,7 +7,7 @@ import { TestRunAgainButton } from "../[clientId]/test/test-run-again-button";
 
 const mockPrepare = vi.hoisted(() => vi.fn().mockResolvedValue({ data: { authorizationUrl: "https://auth.example.test" } }));
 const mockToast = vi.hoisted(() => vi.fn());
-const mockPush = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/admin/actions", () => ({
   prepareClientOauthTestAction: mockPrepare,
@@ -17,15 +17,15 @@ vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+vi.mock("@/app/admin/clients/[clientId]/test/navigation", () => ({
+  navigateTo: mockNavigate,
 }));
 
 describe("TestRunAgainButton", () => {
   beforeEach(() => {
     mockPrepare.mockClear();
     mockToast.mockClear();
-    mockPush.mockClear();
+    mockNavigate.mockClear();
   });
 
   it("restarts the OAuth test using prior settings", async () => {
@@ -41,7 +41,7 @@ describe("TestRunAgainButton", () => {
         redirectUri: "https://admin.example.test/callback",
         promptLogin: false,
       });
-      expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
+      expect(mockNavigate).toHaveBeenCalledWith("https://auth.example.test");
     });
   });
 
@@ -58,7 +58,7 @@ describe("TestRunAgainButton", () => {
         title: "Unable to restart test",
         description: "Client missing",
       });
-      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 
@@ -75,7 +75,7 @@ describe("TestRunAgainButton", () => {
         title: "Unable to restart test",
         description: "Network down",
       });
-      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 
@@ -91,7 +91,7 @@ describe("TestRunAgainButton", () => {
 
     await waitFor(() => {
       expect(mockPrepare).toHaveBeenCalled();
-      expect(mockPush).toHaveBeenCalledWith("https://auth.example.test");
+      expect(mockNavigate).toHaveBeenCalledWith("https://auth.example.test");
     });
   });
 });

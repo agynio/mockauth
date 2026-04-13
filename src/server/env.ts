@@ -35,6 +35,10 @@ const envSchema = z.object({
     .optional()
     .default("false")
     .transform((value) => value === "true"),
+  MOCKAUTH_SESSION_TTL_SECONDS: z.preprocess(
+    (value) => (value === undefined ? undefined : Number(value)),
+    z.number().int().min(1).default(2592000),
+  ),
   AUDIT_LOG_RETENTION_DAYS: z.preprocess(
     (value) => (value === undefined ? undefined : Number(value)),
     z.number().int().min(1).default(90),
@@ -56,6 +60,7 @@ const buildRawEnv = () => {
     ENABLE_TEST_ROUTES: process.env.ENABLE_TEST_ROUTES,
     ALLOW_EMAIL_LINKING: process.env.ALLOW_EMAIL_LINKING,
     MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE: process.env.MOCKAUTH_ALLOW_INSECURE_TEST_COOKIE,
+    MOCKAUTH_SESSION_TTL_SECONDS: process.env.MOCKAUTH_SESSION_TTL_SECONDS,
     AUDIT_LOG_RETENTION_DAYS: process.env.AUDIT_LOG_RETENTION_DAYS,
     CRON_SECRET: process.env.CRON_SECRET,
   } satisfies Record<string, string | undefined>;

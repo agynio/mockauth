@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { env } from "@/server/env";
 import { toResponse } from "@/server/errors";
 import { findOrCreateMockUser } from "@/server/services/mock-user-service";
 import { createSession, MOCK_SESSION_COOKIE } from "@/server/services/mock-session-service";
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest, context: ApiResourceRouteContex
       httpOnly: true,
       sameSite: "lax",
       secure: isSecure,
-      maxAge: 60 * 60 * 12,
+      maxAge: env.MOCKAUTH_SESSION_TTL_SECONDS,
     });
     const reauthCookieValue = createReauthCookieValue({
       tenantId: tenant.id,

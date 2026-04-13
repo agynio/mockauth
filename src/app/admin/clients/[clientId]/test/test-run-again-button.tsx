@@ -1,12 +1,12 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { prepareClientOauthTestAction } from "@/app/admin/actions";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { navigateTo } from "@/app/admin/clients/[clientId]/test/navigation";
 
 type Props = {
   clientId: string;
@@ -20,7 +20,6 @@ type Props = {
 
 export function TestRunAgainButton({ clientId, scopes, redirectUri, variant, size, testId, children }: Props) {
   const [pending, startTransition] = useTransition();
-  const router = useRouter();
   const { toast } = useToast();
   const label = children ?? "Run again";
 
@@ -36,7 +35,7 @@ export function TestRunAgainButton({ clientId, scopes, redirectUri, variant, siz
           });
           return;
         }
-        router.push(result.data.authorizationUrl);
+        navigateTo(result.data.authorizationUrl);
       } catch (error) {
         const description = error instanceof Error ? error.message : "Unknown error";
         toast({ variant: "destructive", title: "Unable to restart test", description });
