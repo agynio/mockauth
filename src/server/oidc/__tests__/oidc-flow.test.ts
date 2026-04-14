@@ -271,7 +271,7 @@ describe("OIDC flow", () => {
     expect(violation?.details).toMatchObject({ reason: "pkce_mismatch" });
   });
 
-  it("requires an explicit login step before issuing codes", async () => {
+  it("reuses the session when prompt is absent", async () => {
     const challenge = computeS256Challenge(codeVerifier);
     const returnTo = `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`;
     const authorize = await handleAuthorize(
@@ -290,9 +290,9 @@ describe("OIDC flow", () => {
       returnTo,
     );
 
-    expect(authorize.type).toBe("login");
-    expect(authorize.redirectTo).toContain("return_to=");
-    expect(decodeURIComponent(authorize.redirectTo.split("return_to=")[1]!)).toBe(returnTo);
+    expect(authorize.type).toBe("redirect");
+    const redirectUrl = new URL(authorize.redirectTo);
+    expect(redirectUrl.searchParams.get("code")).toBeTruthy();
   });
 
   it("rejects invalid redirect_uri values", async () => {
@@ -571,7 +571,7 @@ describe("OIDC flow", () => {
     expect(authorize.type).toBe("login");
   });
 
-  it("requires login when the cookie is expired", async () => {
+  it("reuses the session when the reauth cookie is expired", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
@@ -594,7 +594,9 @@ describe("OIDC flow", () => {
         `https://mockauth.test/r/${apiResourceId}/oidc/authorize?client_id=${CLIENT_ID}`,
       );
 
-      expect(authorize.type).toBe("login");
+      expect(authorize.type).toBe("redirect");
+      const redirectUrl = new URL(authorize.redirectTo);
+      expect(redirectUrl.searchParams.get("code")).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }

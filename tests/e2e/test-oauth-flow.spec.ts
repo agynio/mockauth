@@ -57,7 +57,7 @@ test.describe("Client Test OAuth", () => {
     expect(secondState).not.toEqual(firstState);
   });
 
-  test("requires a new login even when a previous session exists", async ({ page }) => {
+  test("reuses the previous session when prompt is absent", async ({ page }) => {
     const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
     await authenticate(page, sessionToken);
 
@@ -67,7 +67,8 @@ test.describe("Client Test OAuth", () => {
 
     const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
     await page.goto(authorizationUrl);
-    await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+    await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 
   test("ignores manual reauth query parameters on subsequent authorizations", async ({ page }) => {
@@ -187,7 +188,7 @@ test.describe("Client Test OAuth", () => {
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 
-  test("fresh login handshake completes authorize once when TTL is zero", async ({ page }) => {
+  test("reuses the session when the reauth TTL is zero", async ({ page }) => {
     const sessionToken = await createTestSession(page, { tenantId: QA_TENANT_ID, role: "OWNER" });
     await authenticate(page, sessionToken);
 
@@ -203,7 +204,8 @@ test.describe("Client Test OAuth", () => {
 
     const { authorizationUrl } = await startOauthTest(page, clientId, { skipOpen: true, fromConfigPage: true });
     await page.goto(authorizationUrl);
-    await expect(page).toHaveURL(/\/r\/.*\/oidc\/login/);
+    await page.waitForURL(new RegExp(`/admin/clients/${clientId}/test/redirect`));
+    await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });
 
   test("surfaces authorization errors on the redirect page", async ({ page }) => {
@@ -237,12 +239,11 @@ test.describe("Client Test OAuth", () => {
     await expect(errorAlert).toContainText("Run again");
     await expect(page.getByTestId("test-oauth-reset")).toBeVisible();
 
-    const loginPattern = /\/r\/.*\/oidc\/login/;
+    const redirectPattern = new RegExp(`/admin/clients/${clientId}/test/redirect`);
     await Promise.all([
-      page.waitForURL(loginPattern),
+      page.waitForURL(redirectPattern),
       page.getByTestId("test-oauth-run-again").click(),
     ]);
-    await completeProviderLogin(page, clientId);
 
     await expect(page.getByTestId("test-oauth-id-token")).toBeVisible();
   });

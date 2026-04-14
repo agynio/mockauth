@@ -109,9 +109,11 @@ export const handleAuthorize = async (
     throw new DomainError("Client is not configured for this issuer", { status: 400, code: "invalid_client" });
   }
 
+  const returnToUrl = new URL(returnTo);
+  const reauthRequested = returnToUrl.searchParams.get("reauth") === "1";
   const buildLoginRedirect = (): AuthorizeResult => ({
     type: "login",
-    redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(new URL(returnTo).toString())}`,
+    redirectTo: `/r/${resource.id}/oidc/login?return_to=${encodeURIComponent(returnToUrl.toString())}`,
   });
 
   const codeChallengeMethod = params.codeChallengeMethod ?? "S256";
@@ -269,10 +271,21 @@ export const handleAuthorize = async (
       }),
   );
 
-  const reusedViaFreshLogin = Boolean(freshLoginCookieValid && session && strategyAllowed);
-  const reusedViaReauthCookie = Boolean(cookieValid && session && strategyAllowed);
+  const sessionReusable = Boolean(session && strategyAllowed);
+  const reusedViaFreshLogin = Boolean(freshLoginCookieValid && sessionReusable);
+  const reusedViaReauthCookie = Boolean(cookieValid && sessionReusable);
+  const reusedViaSession = Boolean(
+    sessionReusable &&
+      resolvedParams.prompt === undefined &&
+      !resolvedParams.freshLoginRequested &&
+      !reauthRequested,
+  );
   const hasReusableLogin =
-    resolvedParams.prompt === "login" ? reusedViaFreshLogin : reusedViaFreshLogin || reusedViaReauthCookie;
+    resolvedParams.prompt === "login"
+      ? reusedViaFreshLogin
+      : resolvedParams.prompt === "none"
+        ? reusedViaFreshLogin || reusedViaReauthCookie
+        : reusedViaFreshLogin || reusedViaReauthCookie || reusedViaSession;
 
   if (resolvedParams.prompt === "login" && !reusedViaFreshLogin) {
     return buildLoginRedirect();
