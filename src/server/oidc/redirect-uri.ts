@@ -1,11 +1,18 @@
 import { RedirectUriType } from "@/generated/prisma/client";
 import { DomainError } from "@/server/errors";
 import { allowAnyRedirects } from "@/server/oidc/redirect-policy";
+import {
+  ANY_REDIRECT_VALUE,
+  HOST_WILDCARD_PREFIX,
+  HOST_WILDCARD_REGEX,
+  PATH_WILDCARD_SUFFIX,
+  PORT_WILDCARD_SUFFIX,
+  isLoopbackHost,
+  splitPortWildcard,
+} from "@/server/oidc/redirect-uri-syntax";
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const HOST_WILDCARD_REGEX = /^https:\/\/\*\.([a-zA-Z0-9.-]+)(?<path>\/[a-zA-Z0-9\-._~!$&'()*+,;=:@\/]*)?$/;
-const ANY_REDIRECT_VALUE = "*";
-const PATH_WILDCARD_SUFFIX = "/*";
+const HTTPS_DEFAULT_PORT = 443;
+const MAX_PORT = 65535;
 
 const parseUrl = (value: string): URL => {
   try {
@@ -27,7 +34,7 @@ const ensureSchemeAllowed = (url: URL) => {
     return;
   }
 
-  if (url.protocol === "http:" && LOCAL_HOSTS.has(host)) {
+  if (url.protocol === "http:" && isLoopbackHost(host)) {
     return;
   }
 
@@ -49,18 +56,37 @@ const normalizeUrl = (url: URL) => {
   return url;
 };
 
+/** Origin of a stored entry, keeping the ":*" port wildcard when one was configured. */
+const buildOrigin = (url: URL, anyPort: boolean) => (anyPort ? `${url.origin}${PORT_WILDCARD_SUFFIX}` : url.origin);
+
+const normalizeWildcardPort = (port: string | undefined) => {
+  if (!port) {
+    return "";
+  }
+  if (port === ANY_REDIRECT_VALUE) {
+    return PORT_WILDCARD_SUFFIX;
+  }
+
+  const numeric = Number(port);
+  if (!Number.isInteger(numeric) || numeric < 1 || numeric > MAX_PORT) {
+    throw new DomainError("redirect_uri has an invalid port", { code: "invalid_redirect_uri" });
+  }
+  return numeric === HTTPS_DEFAULT_PORT ? "" : `:${numeric}`;
+};
+
 const normalizeHostWildcard = (value: string) => {
   if (value.endsWith(PATH_WILDCARD_SUFFIX)) {
     throw new DomainError("Host wildcards do not support path wildcards", { code: "invalid_redirect_uri" });
   }
   const normalizedScheme = value.replace(/^https:\/\//i, "https://");
   const match = HOST_WILDCARD_REGEX.exec(normalizedScheme);
-  if (!match || !match[1]) {
+  const host = match?.groups?.host;
+  if (!match || !host) {
     throw new DomainError("Invalid host wildcard redirect", { code: "invalid_redirect_uri" });
   }
 
   const path = match.groups?.path ?? "/";
-  return `https://*.${match[1].toLowerCase()}${path}`;
+  return `https://*.${host.toLowerCase()}${normalizeWildcardPort(match.groups?.port)}${path}`;
 };
 
 export const classifyRedirect = (value: string): { type: RedirectUriType; normalized: string } => {
@@ -75,7 +101,7 @@ export const classifyRedirect = (value: string): { type: RedirectUriType; normal
 
   const schemeNormalized = trimmed.replace(/^https:\/\//i, "https://");
 
-  if (schemeNormalized.startsWith("https://*.")) {
+  if (schemeNormalized.startsWith(HOST_WILDCARD_PREFIX)) {
     if (trimmed.includes("?")) {
       throw new DomainError("Host wildcards cannot include query parameters", { code: "invalid_redirect_uri" });
     }
@@ -85,19 +111,23 @@ export const classifyRedirect = (value: string): { type: RedirectUriType; normal
     return { type: RedirectUriType.HOST_WILDCARD, normalized: normalizeHostWildcard(trimmed) };
   }
 
-  if (trimmed.endsWith(PATH_WILDCARD_SUFFIX)) {
-    const withoutSuffix = trimmed.slice(0, -1);
-    const url = normalizeUrl(parseUrl(withoutSuffix));
+  const { value: withoutPortWildcard, anyPort } = splitPortWildcard(trimmed);
+
+  if (withoutPortWildcard.endsWith(PATH_WILDCARD_SUFFIX)) {
+    const url = normalizeUrl(parseUrl(withoutPortWildcard.slice(0, -1)));
     ensureSchemeAllowed(url);
     if (url.search) {
       throw new DomainError("Path wildcards cannot include query parameters", { code: "invalid_redirect_uri" });
     }
-    return { type: RedirectUriType.PATH_SUFFIX, normalized: `${url.origin}${url.pathname}*` };
+    return { type: RedirectUriType.PATH_SUFFIX, normalized: `${buildOrigin(url, anyPort)}${url.pathname}*` };
   }
 
-  const url = normalizeUrl(parseUrl(trimmed));
+  const url = normalizeUrl(parseUrl(withoutPortWildcard));
   ensureSchemeAllowed(url);
-  return { type: RedirectUriType.EXACT, normalized: `${url.origin}${url.pathname}${url.search}` };
+  return {
+    type: RedirectUriType.EXACT,
+    normalized: `${buildOrigin(url, anyPort)}${url.pathname}${url.search}`,
+  };
 };
 
 type RedirectRecord = {
@@ -106,9 +136,38 @@ type RedirectRecord = {
   enabled: boolean;
 };
 
+type RedirectPattern = { url: URL; anyPort: boolean };
+
+const parsePattern = (value: string): RedirectPattern | null => {
+  const { value: withoutPortWildcard, anyPort } = splitPortWildcard(value);
+  try {
+    const url = new URL(withoutPortWildcard);
+    url.hostname = url.hostname.toLowerCase();
+    return { url, anyPort };
+  } catch {
+    return null;
+  }
+};
+
+const matchAuthority = (pattern: RedirectPattern, candidate: URL): boolean =>
+  candidate.protocol === pattern.url.protocol &&
+  candidate.hostname === pattern.url.hostname &&
+  (pattern.anyPort || candidate.port === pattern.url.port);
+
+const matchWildcardPort = (port: string | undefined, candidatePort: string): boolean => {
+  if (port === ANY_REDIRECT_VALUE) {
+    return true;
+  }
+  if (!port) {
+    return candidatePort === "";
+  }
+  return candidatePort === String(Number(port));
+};
+
 const matchHostWildcard = (record: RedirectRecord, candidate: URL): boolean => {
   const match = HOST_WILDCARD_REGEX.exec(record.uri);
-  if (!match || !match[1]) {
+  const base = match?.groups?.host;
+  if (!match || !base) {
     return false;
   }
 
@@ -116,7 +175,11 @@ const matchHostWildcard = (record: RedirectRecord, candidate: URL): boolean => {
     return false;
   }
 
-  const baseLabels = match[1].toLowerCase().split(".");
+  if (!matchWildcardPort(match.groups?.port, candidate.port)) {
+    return false;
+  }
+
+  const baseLabels = base.toLowerCase().split(".");
   const candidateLabels = candidate.hostname.toLowerCase().split(".");
   if (candidateLabels.length !== baseLabels.length + 1) {
     return false;
@@ -132,16 +195,19 @@ const matchHostWildcard = (record: RedirectRecord, candidate: URL): boolean => {
 };
 
 const matchPathSuffix = (record: RedirectRecord, candidate: URL): boolean => {
-  const normalized = normalizeUrl(new URL(record.uri.slice(0, -1))); // remove the '*'
-  if (candidate.origin !== normalized.origin) {
+  const pattern = parsePattern(record.uri.slice(0, -1)); // remove the '*'
+  if (!pattern || !matchAuthority(pattern, candidate)) {
     return false;
   }
-  return candidate.pathname.startsWith(normalized.pathname);
+  return candidate.pathname.startsWith(pattern.url.pathname);
 };
 
 const matchExact = (record: RedirectRecord, candidate: URL): boolean => {
-  const normalized = `${candidate.origin}${candidate.pathname}${candidate.search}`;
-  return normalized === record.uri;
+  const pattern = parsePattern(record.uri);
+  if (!pattern || !matchAuthority(pattern, candidate)) {
+    return false;
+  }
+  return candidate.pathname === pattern.url.pathname && candidate.search === pattern.url.search;
 };
 
 export const resolveRedirectUri = (candidate: string, redirects: RedirectRecord[]): string => {

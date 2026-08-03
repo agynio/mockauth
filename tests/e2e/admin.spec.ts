@@ -110,6 +110,10 @@ test.describe("admin console", () => {
     await expect(page.getByTestId("redirect-any-warning")).toBeVisible();
     await redirectInput.fill("https://*.example.test/callback");
     await expect(page.getByTestId("redirect-wildcard-warning")).toBeVisible();
+    await redirectInput.fill("https://app.example.test:*/callback");
+    await expect(page.getByTestId("redirect-wildcard-warning")).toBeVisible();
+    await redirectInput.fill("http://localhost:*/callback");
+    await expect(page.getByTestId("redirect-wildcard-warning")).toHaveCount(0);
     await redirectInput.fill("https://pw.example.test/alt");
     const redirectCard = page.getByRole("heading", { name: "Redirect URIs", exact: true }).locator("..").locator("..");
     await redirectCard.getByRole("button", { name: "Add" }).click();

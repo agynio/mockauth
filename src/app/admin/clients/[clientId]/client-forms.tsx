@@ -62,6 +62,15 @@ import {
   type ProxyAuthStrategies,
 } from "@/server/oidc/proxy-auth-strategy";
 import { cn } from "@/lib/utils";
+import {
+  ANY_REDIRECT_VALUE,
+  HOST_WILDCARD_PREFIX,
+  PATH_WILDCARD_SUFFIX,
+  hasPortWildcard,
+  isLoopbackHost,
+  redirectHostname,
+  splitPortWildcard,
+} from "@/server/oidc/redirect-uri-syntax";
 import { isValidScopeValue, normalizeScopes } from "@/server/oidc/scopes";
 import { DEFAULT_JWT_SIGNING_ALG, SUPPORTED_JWT_SIGNING_ALGS } from "@/server/oidc/signing-alg";
 import type { JwtSigningAlg } from "@/generated/prisma/client";
@@ -74,11 +83,11 @@ const buildRedirectSchema = (message: string) =>
       .min(1, message)
       .superRefine((value, ctx) => {
         const trimmed = value.trim();
-        if (trimmed === "*") {
+        if (trimmed === ANY_REDIRECT_VALUE) {
           return;
         }
         try {
-          const url = new URL(trimmed);
+          const url = new URL(splitPortWildcard(trimmed).value);
           if (!url.protocol.startsWith("http")) {
             throw new Error("invalid");
           }
@@ -961,10 +970,17 @@ function AddRedirectUriForm({
   const watchedField = useWatch({ control: form.control, name: "uri" }) ?? "";
   const watchedUri = watchedField.trim();
   const normalized = watchedUri.toLowerCase();
-  const isAnyWildcard = watchedUri === "*";
-  const isHostWildcard = !isAnyWildcard && normalized.startsWith("https://*.");
+  const isAnyWildcard = watchedUri === ANY_REDIRECT_VALUE;
+  const isHostWildcard = !isAnyWildcard && normalized.startsWith(HOST_WILDCARD_PREFIX);
   const isPathWildcard =
-    !isAnyWildcard && !isHostWildcard && watchedUri.endsWith("/*") && normalized.startsWith("http");
+    !isAnyWildcard &&
+    !isHostWildcard &&
+    watchedUri.endsWith(PATH_WILDCARD_SUFFIX) &&
+    normalized.startsWith("http");
+  const hostname = isAnyWildcard ? null : redirectHostname(watchedUri);
+  // Loopback port wildcards are the standard native-app pattern, so they skip the QA warning.
+  const isRemotePortWildcard =
+    !isAnyWildcard && hasPortWildcard(watchedUri) && !(hostname && isLoopbackHost(hostname));
 
   const onSubmit = (values: RedirectFormValues) => {
     startTransition(async () => {
@@ -1001,11 +1017,12 @@ function AddRedirectUriForm({
                   </AlertDescription>
                 </Alert>
               ) : null}
-              {!isAnyWildcard && (isHostWildcard || isPathWildcard) ? (
+              {!isAnyWildcard && (isHostWildcard || isPathWildcard || isRemotePortWildcard) ? (
                 <Alert variant="warning" data-testid="redirect-wildcard-warning" className="mt-3">
                   <AlertTitle>Wildcard redirects are for QA</AlertTitle>
                   <AlertDescription>
-                    Host and path wildcards are intended for QA environments only and must not be used for production tenants.
+                    Host, path, and remote port wildcards are intended for QA environments only and must not be used for
+                    production tenants. Port wildcards on localhost, 127.0.0.1, or ::1 are safe for native-app flows.
                   </AlertDescription>
                 </Alert>
               ) : null}

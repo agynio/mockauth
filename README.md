@@ -124,7 +124,13 @@ updates). CI runs this script automatically before executing E2E specs.
   - Exact URL: `https://app.example.com/callback`
   - Host wildcard (single left-most label only): `https://*.example.com/callback`
   - Path wildcard (trailing `/*` suffix): `https://app.example.com/callback/*`
+  - Port wildcard (`:*` in the authority): `http://localhost:*/callback`
+- Port wildcards combine with the other shapes: `https://*.example.com:*/callback`, `http://127.0.0.1:*/callback/*`.
+- Ports are matched exactly unless the entry uses `:*`. An entry without a port only matches the scheme default, and
+  host wildcards accept an explicit port (`https://*.example.com:8443/callback`).
 - Host and path wildcards are intended for QA only. The Admin form surfaces muted warnings whenever one is entered.
+  Port wildcards on `localhost`, `127.0.0.1`, or `::1` are the standard native-app/CLI pattern and are not flagged;
+  port wildcards on remote hosts are treated as QA-only like the other wildcards.
 - A full catch-all (`*`) exists strictly for QA automation and is gated by the `MOCKAUTH_ALLOW_ANY_REDIRECT` env flag
   (disabled by default). When you type `*` in the Admin UI, a destructive warning reminds you that this must never be
   enabled in production.

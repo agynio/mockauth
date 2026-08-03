@@ -34,6 +34,26 @@ test.describe("redirect wildcard policy", () => {
     await setAllowAnyRedirect(request, false);
     await expectRedirectRejected(request, tenant, clientId, "https://anywhere.example.test/logout");
   });
+
+  test("allows any port for port wildcard redirects", async ({ request }) => {
+    await setAllowAnyRedirect(request, false);
+    const tenant = await createIsolatedTenant(request);
+    const clientId = await seedClient(request, tenant.tenantId, {
+      redirectUris: [
+        "http://localhost:*/callback",
+        "https://*.ports.test:*/callback",
+        "https://fixed.example.test:8443/callback",
+      ],
+    });
+
+    await expectRedirectAllowed(request, tenant, clientId, "http://localhost:53682/callback");
+    await expectRedirectAllowed(request, tenant, clientId, "http://localhost/callback");
+    await expectRedirectAllowed(request, tenant, clientId, "https://app.ports.test:9443/callback");
+    await expectRedirectAllowed(request, tenant, clientId, "https://fixed.example.test:8443/callback");
+
+    await expectRedirectRejected(request, tenant, clientId, "http://localhost:53682/other");
+    await expectRedirectRejected(request, tenant, clientId, "https://fixed.example.test:9443/callback");
+  });
 });
 
 const createIsolatedTenant = async (request: APIRequestContext): Promise<TenantContext> => {
